@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Maskable: Android crops this to a circle, squircle or squares depending on
+       the launcher, so the background runs to every edge and the mark stays
+       inside the safe zone (the middle 80%). The rounded-corner favicon would
+       have its corners shaved off. -->
+  <rect width="512" height="512" fill="#17171a"/>
+  <g transform="translate(256 256) scale(4.6) translate(-32 -32)">
+    <path d="M15 40c0-8.3 7.6-15 17-15s17 6.7 17 15v3H15z"
+          fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M26 43V27M38 43V27" stroke="#ffffff" stroke-width="2.5"
+          stroke-linecap="round" opacity="0.55"/>
+  </g>
+</svg>

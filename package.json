@@ -1,0 +1,30 @@
+{
+  "name": "bakery-system",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Transaction and management system for a 3-outlet bakery (hub-and-spoke).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "sync:shared": "node scripts/sync-shared.mjs",
+    "emulators": "npm run sync:shared && firebase emulators:start --only auth,firestore,functions",
+    "seed": "node scripts/seed.mjs",
+    "test": "node --test scripts/report.test.mjs scripts/search.test.mjs scripts/compile.test.mjs scripts/dashboard.test.mjs scripts/leftovers.test.mjs scripts/materials.test.mjs scripts/csv.test.mjs",
+    "test:rules": "node --test scripts/rules.test.mjs"
+  },
+  "dependencies": {
+    "firebase": "^11.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "firebase-admin": "^14.2.0",
+    "vite": "^6.0.7",
+    "vite-plugin-pwa": "^0.21.1"
+  }
+}

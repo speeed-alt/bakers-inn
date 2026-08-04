@@ -1,0 +1,436 @@
+/* A counter tool, not a brand exercise.
+   Restraint rules: one neutral palette, no colour except where colour carries
+   meaning, no shadows, no gradients. Hierarchy comes from weight, size and
+   space. Nothing tappable is under 48px — plain is not the same as small. */
+
+:root {
+  --bg: #f7f7f6;
+  --surface: #ffffff;
+  --surface-2: #f2f2f1;
+  --border: #e4e4e2;
+  --border-strong: #cfcfcc;
+  --text: #17171a;
+  --muted: #74746f;
+  --ink: #17171a;          /* primary action fill */
+  --ink-text: #ffffff;
+  --alert: #a32020;        /* only for money that does not add up */
+  --radius: 6px;
+  --tap: 48px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131314;
+    --surface: #1c1c1e;
+    --surface-2: #242427;
+    --border: #303034;
+    --border-strong: #45454a;
+    --text: #ececee;
+    --muted: #9a9a96;
+    --ink: #ececee;
+    --ink-text: #17171a;
+    --alert: #e08b8b;
+  }
+}
+
+* { box-sizing: border-box; }
+/* dvh, so the bottom tabs are not left under a phone browser's toolbar as it
+   grows and shrinks. vh first for anything that does not know dvh. */
+html, body, #root { height: 100vh; height: 100dvh; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+button { font: inherit; color: inherit; }
+h1, h2, h3 { letter-spacing: -0.01em; }
+
+/* ---- app shell ---------------------------------------------------------- */
+
+.app { display: flex; flex-direction: column; height: 100%; }
+
+.topbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 20px; min-height: 52px; flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.topbar .brand { font-weight: 600; font-size: 15px; }
+.topbar .spacer { flex: 1; }
+.topbar .who { text-align: right; line-height: 1.2; }
+.topbar .who b { display: block; font-size: 14px; font-weight: 600; }
+.topbar .who span { font-size: 12px; color: var(--muted); }
+
+.content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.page { padding: 20px; max-width: 880px; margin: 0 auto; }
+
+.tabbar {
+  display: flex; flex-shrink: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tabbar a {
+  flex: 1; text-align: center; padding: 14px 4px;
+  text-decoration: none; color: var(--muted);
+  font-size: 13px; font-weight: 500; min-height: var(--tap);
+  border-top: 2px solid transparent;
+}
+.tabbar a.active { color: var(--text); font-weight: 600; border-top-color: var(--ink); }
+
+/* ---- primitives --------------------------------------------------------- */
+
+.btn {
+  min-height: var(--tap);
+  padding: 11px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.primary { background: var(--ink); border-color: var(--ink); color: var(--ink-text); font-weight: 600; }
+.btn.primary:hover { opacity: 0.88; background: var(--ink); }
+.btn.danger { color: var(--alert); border-color: var(--border-strong); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); min-height: 36px; padding: 6px 10px; }
+.btn.ghost:hover { background: var(--surface-2); color: var(--text); }
+.btn.big { min-height: 54px; font-size: 16px; }
+.btn.block { width: 100%; }
+.btn.small { min-height: 34px; padding: 5px 10px; font-size: 13px; }
+
+input[type="text"], input[type="number"], input[type="password"], select {
+  min-height: var(--tap);
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+input:focus, select:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
+label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.field { margin-bottom: 16px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 14px;
+}
+.card h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+.card h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.row { display: flex; align-items: center; gap: 12px; }
+.row.between { justify-content: space-between; }
+.row.wrap { flex-wrap: wrap; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.bad { color: var(--alert); }
+.good { color: var(--text); }
+.mono { font-variant-numeric: tabular-nums; }
+.grow { flex: 1; }
+.center { text-align: center; }
+
+.chip {
+  display: inline-flex; align-items: center;
+  padding: 7px 14px; border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface); font-size: 13px; font-weight: 500;
+  cursor: pointer; min-height: 38px;
+}
+.chip:hover { background: var(--surface-2); }
+.chip.on { background: var(--ink); border-color: var(--ink); color: var(--ink-text); font-weight: 600; }
+
+/* ---- the till ------------------------------------------------------------
+   One entry box across the top, the bill down the left, the amount due pinned
+   bottom right. The cashier's hands stay on the keyboard: type a code, Enter. */
+
+.till { display: flex; flex-direction: column; height: 100%; }
+
+.till-entry {
+  padding: 14px 18px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.till-entry input { font-size: 16px; }
+
+.till-body {
+  flex: 1; min-height: 0; min-width: 0;
+  display: grid; grid-template-columns: 1fr 320px; gap: 16px;
+  padding: 16px 18px;
+}
+/* Grid and flex children default to min-width:auto, which lets a wide row push
+   the whole column past the screen instead of shrinking. This is what makes a
+   phone scroll sideways. */
+.till-left { min-height: 0; min-width: 0; overflow-y: auto; }
+.till-right { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+
+@media (max-width: 880px) {
+  .till-body { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
+  .till-left, .till-right { overflow: visible; }
+  .till-results { max-height: 320px; }
+}
+
+/* the bill */
+.bill { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.bill-row {
+  display: grid; grid-template-columns: 56px 1fr auto 92px;
+  gap: 12px; align-items: center;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+}
+.bill-row:last-child { border-bottom: 0; }
+.bill-head {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted);
+}
+.bill-code { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+.bill-name { font-weight: 500; }
+.bill-amount { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* the catalogue / search results */
+.till-results-label {
+  flex-shrink: 0;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.till-results {
+  flex: 1; min-height: 0; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.result {
+  display: grid; grid-template-columns: 46px 1fr auto;
+  gap: 10px; align-items: center; width: 100%;
+  padding: 11px 13px; text-align: left;
+  background: none; border: 0; border-bottom: 1px solid var(--border);
+  cursor: pointer; min-height: 46px;
+}
+.result:last-child { border-bottom: 0; }
+.result:hover { background: var(--surface-2); }
+/* the row Enter will ring up */
+.result.top { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--ink); }
+.result-code { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+.result-name { font-size: 14px; }
+.result-price { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+
+/* amount due */
+.till-total {
+  flex-shrink: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+}
+.till-total .amount { display: flex; justify-content: space-between; align-items: baseline; }
+.till-total .amount b { font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.total { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+.total b { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.stepper { display: inline-flex; align-items: center; gap: 2px; }
+.stepper button {
+  width: 38px; height: 38px; border-radius: var(--radius);
+  border: 1px solid var(--border-strong); background: var(--surface);
+  font-size: 17px; cursor: pointer; line-height: 1;
+}
+.stepper button:hover { background: var(--surface-2); }
+.stepper .qty { min-width: 32px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---- modal -------------------------------------------------------------- */
+
+.backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50;
+}
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 22px;
+  width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto;
+}
+.modal h2 { margin: 0 0 16px; font-size: 17px; font-weight: 600; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+/* ---- owner's dashboard --------------------------------------------------- */
+
+/* Figures the owner reads at a glance, divided by hairlines rather than boxes. */
+.stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
+  gap: 1px; background: var(--border);
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+}
+.stat { background: var(--surface); padding: 13px 15px; }
+.stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.stat .value { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 3px; }
+.stat .value.sub { font-size: 15px; font-weight: 500; }
+
+/* Where today's cycle has got to: one line per step. */
+.steps { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.step { background: var(--surface); padding: 11px 15px; display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; align-items: center; }
+.step .mark { font-size: 13px; color: var(--muted); text-align: center; }
+.step.done .mark { color: var(--text); }
+.step .what { font-size: 14px; }
+.step .detail { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Takings over the last week. */
+.bars { display: grid; gap: 7px; }
+.bar-row { display: grid; grid-template-columns: 88px 1fr 86px; gap: 10px; align-items: center; font-size: 13px; }
+.bar-row .day { color: var(--muted); }
+.bar-track { height: 16px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; background: var(--ink); opacity: 0.7; border-radius: 3px; }
+.bar-row.today .bar-fill { opacity: 1; }
+.bar-row .amount { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Things the owner should actually do something about. */
+.attention { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.attention-row { background: var(--surface); padding: 12px 15px; font-size: 14px; }
+.attention-row .where { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+
+/* ---- tables ------------------------------------------------------------- */
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 11px 8px; border-bottom: 1px solid var(--border); font-size: 14px; }
+tr:last-child td { border-bottom: 0; }
+th {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted);
+}
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.scroll-x { overflow-x: auto; }
+
+/* ---- status strips ------------------------------------------------------ */
+
+.strip { padding: 9px 16px; font-size: 13px; text-align: center; }
+.strip.offline { background: var(--surface-2); color: var(--muted); border-bottom: 1px solid var(--border); }
+.strip.block { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+
+/* ---- pin pad ------------------------------------------------------------ */
+
+.pinpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pinpad button {
+  min-height: 58px; font-size: 19px; font-weight: 500;
+  border-radius: var(--radius); border: 1px solid var(--border-strong);
+  background: var(--surface); cursor: pointer;
+}
+.pinpad button:hover { background: var(--surface-2); }
+.pindots { display: flex; gap: 12px; justify-content: center; margin: 20px 0; }
+.pindots i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border-strong); }
+.pindots i.on { background: var(--ink); border-color: var(--ink); }
+
+.receipt {
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-size: 12.5px; line-height: 1.5; white-space: pre-wrap;
+  background: var(--surface-2); padding: 16px; border-radius: var(--radius);
+}
+
+/* Page size and print type size are written at start-up from RECEIPT_PAPER —
+   see src/lib/paper.js. `@page { size: … }` takes no custom property, so it
+   cannot live here. */
+
+@media print {
+  /* The receipt is the only thing that goes on paper.
+     The whole application is taken out of the page — it can be, because
+     dialogs are portalled to <body> and so are not inside it. Collapsing it
+     rather than merely hiding it also stops the till's height pushing blank
+     pages out of the printer after the slip. */
+  /* The app root is `height: 100%` on screen; left alone it reserves a full
+     screen of blank roll above the slip, which on a continuous feed is paper
+     straight in the bin. */
+  html, body { height: auto; background: #fff; }
+  #root { display: none !important; }
+  .no-print, .modal h2 { display: none !important; }
+
+  .backdrop { position: static; background: none; padding: 0; display: block; }
+  .modal { max-width: none; max-height: none; padding: 0; border: 0; overflow: visible; }
+  /* font-size and width come from src/lib/paper.js, which knows the paper. */
+  .receipt {
+    margin: 0; padding: 0;
+    background: #fff; color: #000;
+    line-height: 1.4;
+  }
+
+  /* A sheet is an ordinary page rather than a till roll: full width, black on
+     white, and rows that are not allowed to break across a page boundary. */
+  .sheet { width: 100%; margin: 0; padding: 0; background: #fff; color: #000; }
+  .sheet table { width: 100%; border-collapse: collapse; }
+  .sheet th, .sheet td { border-bottom: 1px solid #bbb; padding: 5px 6px; }
+  .sheet tr, .sheet .sheet-block { break-inside: avoid; }
+  .sheet .sheet-head { border-bottom: 2px solid #000; }
+  .sheet .blank { border-bottom: 1px solid #000; }
+  .sheet .muted { color: #555; }
+}
+
+/* ---- phones -------------------------------------------------------------
+   The counter runs on a tablet, but the owner reads this on his phone and a
+   shop can be run off one at a pinch. Four columns of bill do not fit 375px —
+   crushing the item name to 50-odd pixels is not an adaptation — so the row
+   folds onto two lines instead: what it is and what it costs on top, the
+   controls beneath, where a thumb already is. */
+
+@media (max-width: 680px) {
+  .page { padding: 16px 14px; }
+  .till-body { padding: 14px; gap: 14px; }
+  .till-entry { padding: 12px 14px; }
+
+  /* A header cannot label a two-line row, and the row says it all anyway. */
+  .bill-head { display: none; }
+
+  .bill-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "code name    amount"
+      ".    stepper stepper";
+    row-gap: 8px;
+    padding: 12px 14px;
+  }
+  .bill-row > *:nth-child(1) { grid-area: code; }
+  .bill-row > *:nth-child(2) { grid-area: name; min-width: 0; }
+  .bill-row > *:nth-child(3) { grid-area: stepper; justify-self: end; }
+  .bill-row > *:nth-child(4) { grid-area: amount; }
+
+  .till-total .amount b { font-size: 26px; }
+  /* Stacked, the catalogue needs air above it so it does not read as more bill. */
+  .till-results-label { margin-top: 6px; }
+  .modal { padding: 18px; border-radius: 12px; }
+  .stat { padding: 11px 13px; }
+  .topbar { gap: 10px; padding: 0 14px; }
+  .topbar .brand { display: none; }  /* the outlet name is the useful one */
+}
+
+/* Nothing smaller than a fingertip.
+   Keyed to both a coarse pointer and a narrow screen on purpose: a laptop with
+   a touchscreen reports coarse and needs the room, while some phone browsers
+   still report a fine pointer, and a phone-width window is a phone either way.
+   Neither test alone catches both. */
+@media (pointer: coarse), (max-width: 680px) {
+  .stepper button { width: 44px; height: 44px; font-size: 19px; }
+  .stepper .qty { min-width: 40px; }
+  .btn.small { min-height: 44px; padding: 8px 14px; }
+  .btn.ghost { min-height: 44px; }
+  .btn.ghost.small { min-height: 44px; }
+  .chip { min-height: 44px; padding: 9px 15px; }
+  .result { min-height: 52px; }
+  .pinpad button { min-height: 62px; }
+}
+
+/* ---- printable sheets, as they look on screen --------------------------- */
+
+.sheet { background: var(--surface); color: var(--text); font-size: 13px; }
+.sheet .sheet-head { border-bottom: 2px solid var(--border-strong); padding-bottom: 8px; margin-bottom: 12px; }
+.sheet .sheet-head h2 { margin: 0 0 2px; font-size: 16px; }
+.sheet .sheet-head .when { color: var(--muted); font-size: 12px; }
+.sheet h3 { margin: 16px 0 6px; font-size: 13px; }
+.sheet .blank { display: inline-block; min-width: 74px; border-bottom: 1px solid var(--border-strong); }

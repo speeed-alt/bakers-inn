@@ -1,0 +1,537 @@
+import { useMemo, useState } from 'react'
+import { collection, query, where } from 'firebase/firestore'
+import { db } from '../firebase.js'
+import { useSnapshot } from '../lib/hooks.js'
+import { useAuth } from '../auth.jsx'
+import { businessDateOf, formatDate, nextDate, previousDate } from '../lib/dates.js'
+import { formatMoney, parseMoney } from '../lib/money.js'
+import { summariseDay } from '../lib/report.js'
+import { mainShare } from '../lib/compile.js'
+import { buildLeftovers, splitLeftovers, wasteValue, CARRY, RETURN, WASTE } from '../lib/leftovers.js'
+import { carryoverFrom } from '../lib/dailyReport.js'
+import { salesForDay } from '../data/sales.js'
+import { closeDay, closingDoc, isClosed, reopenDay } from '../data/closings.js'
+import { productionDoc } from '../data/production.js'
+import { sendReturn, transfersTo } from '../data/transfers.js'
+import { WASTE_REASONS } from '../config.js'
+import { Empty, Modal, Money, Stepper } from '../components/ui.jsx'
+import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
+
+const STEPS = ['Cash', 'Leftovers', "Tomorrow's order", 'Send']
+
+/**
+ * The end of the day, in one pass: count the drawer, count what is left on the
+ * shelf, order for tomorrow, send. Every figure is filled in already — the
+ * staff only correct the lines where the shop disagrees with the system.
+ */
+export default function CloseDay({ branchId, isMain }) {
+  const { profile } = useAuth()
+  const today = businessDateOf()
+  const yesterday = previousDate(today)
+
+  const yesterdaySales = useSnapshot(() => salesForDay(branchId, yesterday), [branchId, yesterday])
+  const yesterdayClosing = useSnapshot(() => closingDoc(branchId, yesterday), [branchId, yesterday])
+
+  const needsYesterday =
+    !yesterdayClosing.loading &&
+    !isClosed(yesterdayClosing.data) &&
+    (yesterdaySales.data?.length ?? 0) > 0
+
+  // Always the oldest day still owing a count, so a forgotten close is fixed
+  // simply by opening this screen.
+  const target = needsYesterday ? yesterday : today
+  const late = needsYesterday
+
+  const sales = useSnapshot(() => salesForDay(branchId, target), [branchId, target])
+  const closing = useSnapshot(() => closingDoc(branchId, target), [branchId, target])
+  const previous = useSnapshot(
+    () => closingDoc(branchId, previousDate(target)),
+    [branchId, target],
+  )
+  const products = useSnapshot(
+    () => query(collection(db, 'products'), where('active', '==', true)),
+    [],
+  )
+  const transfersIn = useSnapshot(() => transfersTo(branchId, target), [branchId, target])
+  const production = useSnapshot(() => productionDoc(target), [target])
+
+  const [step, setStep] = useState(1)
+  const [countedText, setCountedText] = useState('')
+  const [floatText, setFloatText] = useState('')
+  const [counts, setCounts] = useState({})
+  const [dispositions, setDispositions] = useState({})
+  const [reasons, setReasons] = useState({})
+
+  const summary = useMemo(() => summariseDay(sales.data ?? []), [sales.data])
+
+  // What the outlet had to sell: a delivery at a shop, its own share of the
+  // bake at the hub.
+  const received = useMemo(() => {
+    const arrived = {}
+    for (const transfer of transfersIn.data ?? []) {
+      if (transfer.status !== 'received' || transfer.direction === 'return') continue
+      for (const item of transfer.items ?? []) {
+        arrived[item.productId] =
+          (arrived[item.productId] ?? 0) + (item.qtyReceived ?? item.qtySent ?? 0)
+      }
+    }
+    if (isMain && production.data) {
+      for (const [productId, qty] of Object.entries(mainShare(production.data, branchId))) {
+        arrived[productId] = (arrived[productId] ?? 0) + qty
+      }
+    }
+    return arrived
+  }, [transfersIn.data, production.data, isMain, branchId])
+
+  const lines = useMemo(
+    () =>
+      buildLeftovers({
+        products: products.data ?? [],
+        received,
+        sold: Object.fromEntries(summary.byProduct.map((p) => [p.productId, p.qty])),
+        carriedIn: carryoverFrom(previous.data),
+      }),
+    [products.data, received, summary.byProduct, previous.data],
+  )
+
+  const stillLoading =
+    yesterdayClosing.loading || sales.loading || closing.loading || previous.loading || products.loading
+
+  if (stillLoading) {
+    return <div className="page"><p className="muted">Loading…</p></div>
+  }
+
+  if (isClosed(closing.data)) {
+    return (
+      <ClosedView
+        closing={closing.data}
+        onReopen={(reason) => reopenDay({ branchId, businessDate: target, user: profile, reason })}
+      />
+    )
+  }
+
+  // A delivery still sitting unconfirmed would make the shelf count meaningless.
+  const unconfirmed = (transfersIn.data ?? []).filter((t) => t.status === 'dispatched')
+  if (unconfirmed.length > 0) {
+    return (
+      <div className="page">
+        <div className="card">
+          <h2>Confirm today's delivery first</h2>
+          <p className="muted">
+            {unconfirmed[0].ref} has not been counted in yet. Until it is, the system does not know
+            what was on the shelf, so the leftover count would be wrong.
+          </p>
+          <a className="btn primary big" href="/stock">Go to Stock</a>
+        </div>
+      </div>
+    )
+  }
+
+  const counted = parseMoney(countedText)
+  const openingFloat = previous.data?.nextFloat ?? 0
+  const nextFloat = floatText.trim() === '' ? openingFloat : parseMoney(floatText)
+  const expected = openingFloat + summary.cashTotal
+  const difference = counted === null ? null : counted - expected
+  const noTrade = (sales.data?.length ?? 0) === 0 && lines.length === 0
+
+  const priceOf = (id) => (products.data ?? []).find((p) => p.id === id)?.price ?? 0
+  const { waste, carry, returns } = splitLeftovers(lines, counts, dispositions, reasons)
+  const binnedValue = wasteValue(waste, priceOf)
+  const needsReason = waste.filter((w) => !w.reason)
+
+  function finish() {
+    if (returns.length > 0) {
+      sendReturn({ fromBranch: branchId, businessDate: target, items: returns, user: profile })
+    }
+    closeDay({
+      branchId,
+      businessDate: target,
+      openingFloat,
+      countedCash: counted ?? 0,
+      nextFloat: nextFloat ?? openingFloat,
+      summary,
+      waste,
+      carry,
+      returns,
+      wasteValue: binnedValue,
+      closedBy: profile,
+      late,
+      noTrade,
+    })
+  }
+
+  if (noTrade) {
+    return (
+      <div className="page">
+        <div className="card">
+          <h2>Nothing happened on {formatDate(target)}</h2>
+          <p className="muted small">
+            No sales, no delivery. Close it so tomorrow can start clean.
+          </p>
+          <button className="btn primary big block" onClick={finish}>Close — no trade</button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="page">
+      {late && (
+        <div className="strip block" style={{ borderRadius: 6, marginBottom: 14 }}>
+          Closing {formatDate(target)} — this day was left open
+        </div>
+      )}
+
+      <div className="card">
+        <div className="row between">
+          <h2 style={{ margin: 0 }}>Close {formatDate(target)}</h2>
+          <span className="muted small">step {step} of {STEPS.length}</span>
+        </div>
+        <div className="row wrap" style={{ marginTop: 10 }}>
+          {STEPS.map((label, i) => (
+            <button
+              key={label}
+              className={`chip ${step === i + 1 ? 'on' : ''}`}
+              onClick={() => setStep(i + 1)}
+            >
+              {i + 1}. {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {step === 1 && (
+        <CashStep
+          summary={summary}
+          openingFloat={openingFloat}
+          expected={expected}
+          countedText={countedText}
+          setCountedText={setCountedText}
+          floatText={floatText}
+          setFloatText={setFloatText}
+          difference={difference}
+        />
+      )}
+
+      {step === 2 && (
+        <LeftoverStep
+          lines={lines}
+          counts={counts}
+          setCounts={setCounts}
+          dispositions={dispositions}
+          setDispositions={setDispositions}
+          reasons={reasons}
+          setReasons={setReasons}
+          isMain={isMain}
+          binnedValue={binnedValue}
+        />
+      )}
+
+      {step === 3 && (
+        <div className="card">
+          <h3>Order for {formatDate(nextDate(target))}</h3>
+          <TomorrowsOrder branchId={branchId} businessDate={nextDate(target)} bare />
+        </div>
+      )}
+
+      {step === 4 && (
+        <ReviewStep
+          target={target}
+          summary={summary}
+          openingFloat={openingFloat}
+          expected={expected}
+          counted={counted}
+          difference={difference}
+          waste={waste}
+          carry={carry}
+          returns={returns}
+          binnedValue={binnedValue}
+          needsReason={needsReason}
+          onClose={finish}
+        />
+      )}
+
+      <div className="grid2">
+        <button className="btn" disabled={step === 1} onClick={() => setStep((s) => s - 1)}>
+          Back
+        </button>
+        <button
+          className="btn primary"
+          disabled={step === STEPS.length || (step === 1 && counted === null)}
+          onClick={() => setStep((s) => s + 1)}
+        >
+          {step === 1 && counted === null ? 'Count the cash first' : 'Next'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function CashStep({ summary, openingFloat, expected, countedText, setCountedText, floatText, setFloatText, difference }) {
+  return (
+    <>
+      <div className="card">
+        <h3>What the system expects</h3>
+        <table>
+          <tbody>
+            <tr><td>Opening float</td><td className="num"><Money minor={openingFloat} /></td></tr>
+            <tr><td>Cash sales</td><td className="num"><Money minor={summary.cashTotal} /></td></tr>
+            <tr>
+              <td><b>Cash expected in drawer</b></td>
+              <td className="num"><b><Money minor={expected} /></b></td>
+            </tr>
+            <tr><td className="muted">Card sales</td><td className="num muted"><Money minor={summary.cardTotal} /></td></tr>
+            <tr><td className="muted">Total takings</td><td className="num muted"><Money minor={summary.salesTotal} /></td></tr>
+            {summary.voidedCount > 0 && (
+              <tr><td className="muted">Voided (not counted)</td><td className="num muted">{summary.voidedCount}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
+        <h3>Count the drawer</h3>
+        <p className="muted small">
+          Count everything in the drawer now, before you put tomorrow's float back in.
+        </p>
+        <div className="field">
+          <label>Cash counted</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoFocus
+            value={countedText}
+            onChange={(e) => setCountedText(e.target.value)}
+            placeholder="0"
+          />
+        </div>
+
+        {difference !== null && (
+          <div className="total">
+            <span className="muted">
+              {difference === 0 ? 'Exact' : difference > 0 ? 'Over' : 'Short'}
+            </span>
+            <b className={difference === 0 ? '' : 'bad'}>{formatMoney(Math.abs(difference))}</b>
+          </div>
+        )}
+
+        <div className="field">
+          <label>Float to leave for tomorrow (defaults to today's)</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={floatText}
+            onChange={(e) => setFloatText(e.target.value)}
+            placeholder={formatMoney(openingFloat, { symbol: false })}
+          />
+        </div>
+      </div>
+    </>
+  )
+}
+
+function LeftoverStep({ lines, counts, setCounts, dispositions, setDispositions, reasons, setReasons, isMain, binnedValue }) {
+  if (lines.length === 0) {
+    return (
+      <div className="card">
+        <h3>Nothing to count</h3>
+        <Empty>No stock came in and nothing sold, so there is nothing left over.</Empty>
+      </div>
+    )
+  }
+
+  // The words are the ones already printed on the shop's own closing sheet —
+  // stale, remaining stock — so nobody has to learn a second vocabulary.
+  const choices = [
+    { key: WASTE, label: 'Stale' },
+    { key: CARRY, label: 'Remaining' },
+    ...(isMain ? [] : [{ key: RETURN, label: 'Send back' }]),
+  ]
+
+  return (
+    <div className="card">
+      <h3>Closing stock</h3>
+      <p className="muted small">
+        Already filled in with what should be on the shelf. Change only the lines where the shop
+        disagrees. Things that do not keep are counted stale by default; things that do stay as
+        remaining stock.
+      </p>
+
+      <div className="bill">
+        <div className="bill-row bill-head">
+          <span>Code</span>
+          <span>Item</span>
+          <span>Remaining</span>
+          <span className="bill-amount">Sale</span>
+        </div>
+        {lines.map((line) => {
+          const qty = counts[line.productId] ?? line.expected
+          const how = dispositions[line.productId] ?? line.disposition
+          return (
+            <div className="bill-row" key={line.productId}>
+              <span className="bill-code">{line.code}</span>
+              <span>
+                <span className="bill-name">{line.productName}</span>
+                <div className="muted small">
+                  existing {line.carriedIn} · addition {line.received} · expected {line.expected}
+                </div>
+                {qty > 0 && (
+                  <div className="row wrap" style={{ marginTop: 6, gap: 6 }}>
+                    {choices.map((c) => (
+                      <button
+                        key={c.key}
+                        className={`chip ${how === c.key ? 'on' : ''}`}
+                        onClick={() => setDispositions((s) => ({ ...s, [line.productId]: c.key }))}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {qty > 0 && how === WASTE && (
+                  <div className="row wrap" style={{ marginTop: 6, gap: 6 }}>
+                    {WASTE_REASONS.map((r) => (
+                      <button
+                        key={r}
+                        className={`chip ${(reasons[line.productId] ?? 'Unsold') === r ? 'on' : ''}`}
+                        onClick={() => setReasons((s) => ({ ...s, [line.productId]: r }))}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </span>
+              <Stepper
+                value={qty}
+                onChange={(v) => setCounts((s) => ({ ...s, [line.productId]: v }))}
+              />
+              <span className="bill-amount">{line.sold}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="total" style={{ marginTop: 14 }}>
+        <span className="muted">Stale</span>
+        <b className={binnedValue > 0 ? 'bad' : ''}>{formatMoney(binnedValue)}</b>
+      </div>
+    </div>
+  )
+}
+
+function ReviewStep({ target, summary, openingFloat, expected, counted, difference, waste, carry, returns, binnedValue, needsReason, onClose }) {
+  return (
+    <>
+      <div className="card">
+        <h3>{formatDate(target)} in full</h3>
+        <table>
+          <tbody>
+            <tr><td>Takings</td><td className="num"><Money minor={summary.salesTotal} /></td></tr>
+            <tr><td className="muted">Cash</td><td className="num muted"><Money minor={summary.cashTotal} /></td></tr>
+            <tr><td className="muted">Card</td><td className="num muted"><Money minor={summary.cardTotal} /></td></tr>
+            <tr><td>Counted in drawer</td><td className="num">{counted === null ? '—' : <Money minor={counted} />}</td></tr>
+            <tr>
+              <td>{difference === 0 ? 'Exact' : difference > 0 ? 'Over' : 'Short'}</td>
+              <td className={`num ${difference ? 'bad' : ''}`}>
+                <Money minor={Math.abs(difference ?? 0)} />
+              </td>
+            </tr>
+            <tr><td>Stale</td><td className="num">{waste.reduce((s, w) => s + w.qty, 0)} items · <Money minor={binnedValue} /></td></tr>
+            <tr><td>Remaining stock</td><td className="num">{carry.reduce((s, c) => s + c.qty, 0)} items</td></tr>
+            {returns.length > 0 && (
+              <tr><td>Going back to the main outlet</td><td className="num">{returns.reduce((s, r) => s + r.qty, 0)} items</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
+        {needsReason.length > 0 ? (
+          <p className="bad small">Pick a reason for every stale line before closing.</p>
+        ) : (
+          <p className="muted small">
+            Closing sends the day to the owner. It can still be reopened if something was wrong.
+          </p>
+        )}
+        <button
+          className="btn primary big block"
+          disabled={counted === null || needsReason.length > 0}
+          onClick={onClose}
+        >
+          Close day
+        </button>
+      </div>
+    </>
+  )
+}
+
+const REOPEN_REASONS = ['Closed by mistake', 'Still trading', 'Miscounted the drawer', 'Other']
+
+function ClosedView({ closing, onReopen }) {
+  const [asking, setAsking] = useState(false)
+  const [reason, setReason] = useState(null)
+  const reopens = (closing.events ?? []).filter((e) => e.action === 'reopened').length
+
+  return (
+    <div className="page">
+      <div className="card">
+        <h2>{formatDate(closing.businessDate)} is closed</h2>
+        <p className="muted small">
+          Closed by {closing.closedByName}.
+          {reopens > 0 && ` Reopened ${reopens} time${reopens > 1 ? 's' : ''} today.`}
+        </p>
+        <table>
+          <tbody>
+            <tr><td>Takings</td><td className="num"><Money minor={closing.salesTotal} /></td></tr>
+            <tr><td>Cash</td><td className="num"><Money minor={closing.cashTotal} /></td></tr>
+            <tr><td>Card</td><td className="num"><Money minor={closing.cardTotal} /></td></tr>
+            <tr><td>Counted</td><td className="num"><Money minor={closing.countedCash} /></td></tr>
+            <tr>
+              <td>{closing.overShort === 0 ? 'Exact' : closing.overShort > 0 ? 'Over' : 'Short'}</td>
+              <td className={`num ${closing.overShort === 0 ? '' : 'bad'}`}>
+                <Money minor={Math.abs(closing.overShort)} />
+              </td>
+            </tr>
+            {closing.wasteValue > 0 && (
+              <tr><td>Binned</td><td className="num bad"><Money minor={closing.wasteValue} /></td></tr>
+            )}
+            <tr><td>Float left for tomorrow</td><td className="num"><Money minor={closing.nextFloat} /></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
+        <h3>Closed this by mistake?</h3>
+        <p className="muted small">
+          Reopening puts the till back on and lets you count again. Nothing is erased — both counts
+          stay on the record and the owner sees that it happened.
+        </p>
+        <button className="btn" onClick={() => setAsking(true)}>Reopen this day</button>
+      </div>
+
+      {asking && (
+        <Modal title={`Reopen ${formatDate(closing.businessDate)}?`} onClose={() => setAsking(false)}>
+          <p className="muted small">Why is it being reopened?</p>
+          <div className="row wrap" style={{ marginBottom: 16 }}>
+            {REOPEN_REASONS.map((r) => (
+              <button key={r} className={`chip ${reason === r ? 'on' : ''}`} onClick={() => setReason(r)}>
+                {r}
+              </button>
+            ))}
+          </div>
+          <button
+            className="btn primary big block"
+            disabled={!reason}
+            onClick={() => {
+              onReopen(reason)
+              setAsking(false)
+            }}
+          >
+            Reopen the day
+          </button>
+        </Modal>
+      )}
+    </div>
+  )
+}

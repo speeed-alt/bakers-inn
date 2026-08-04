@@ -1,0 +1,478 @@
+// Security rules are the real permission system — the UI only hides buttons.
+// These tests pin the invariants the whole design rests on.
+//
+// Needs the emulators running: npm run emulators
+import test, { after, before } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+} from '@firebase/rules-unit-testing'
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
+
+const here = dirname(fileURLToPath(import.meta.url))
+
+let env
+
+const OWNER = 'u-owner'
+const CASHIER_MAIN = 'u-maya'
+const CASHIER_B2 = 'u-sam'
+const SPECIALIST = 'u-ravi'
+
+function saleFor(branchId, cashierId) {
+  return {
+    ref: `S-${branchId}-0728-A001`,
+    branchId,
+    businessDate: '2026-07-28',
+    cashierId,
+    cashierName: 'Test',
+    payment: 'cash',
+    status: 'normal',
+    items: [{ productId: 'p1', name: 'Loaf', price: 450, qty: 1 }],
+    total: 450,
+  }
+}
+
+before(async () => {
+  env = await initializeTestEnvironment({
+    projectId: 'demo-bakery-rules',
+    firestore: {
+      rules: readFileSync(join(here, '..', 'firestore.rules'), 'utf8'),
+      host: '127.0.0.1',
+      port: 8080,
+    },
+  })
+
+  await env.clearFirestore()
+
+  // Staff records drive every rule, so they are written with rules disabled.
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore()
+    await setDoc(doc(db, 'users', OWNER), { name: 'Owner', role: 'owner', branchId: 'MAIN', active: true })
+    await setDoc(doc(db, 'users', CASHIER_MAIN), { name: 'Maya', role: 'cashier', branchId: 'MAIN', active: true })
+    await setDoc(doc(db, 'users', CASHIER_B2), { name: 'Sam', role: 'cashier', branchId: 'B2', active: true })
+    await setDoc(doc(db, 'users', SPECIALIST), { name: 'Ravi', role: 'specialist', branchId: 'MAIN', active: true })
+    await setDoc(doc(db, 'users', 'u-gone'), { name: 'Ex', role: 'cashier', branchId: 'MAIN', active: false })
+    await setDoc(doc(db, 'products', 'p1'), { name: 'Loaf', category: 'Bread', price: 450, active: true })
+    await setDoc(doc(db, 'sales', 'existing'), saleFor('MAIN', CASHIER_MAIN))
+    await setDoc(doc(db, 'sales', 'b2-sale'), saleFor('B2', CASHIER_B2))
+
+    // The daily cycle.
+    await setDoc(doc(db, 'demands', 'D-B2'), {
+      branchId: 'B2', businessDate: '2026-07-29', status: 'submitted',
+      items: [{ productId: 'p1', code: '101', productName: 'Loaf', qty: 10 }],
+    })
+    await setDoc(doc(db, 'demands', 'D-B2-locked'), {
+      branchId: 'B2', businessDate: '2026-07-28', status: 'locked', items: [],
+    })
+    await setDoc(doc(db, 'productionOrders', 'PO'), {
+      businessDate: '2026-07-29', status: 'open',
+      items: [{ productId: 'p1', code: '101', productName: 'Loaf', qtyNeeded: 30, perOutlet: { MAIN: 20, B2: 10 } }],
+      produced: {},
+    })
+    await setDoc(doc(db, 'transfers', 'T-draft'), {
+      fromBranch: 'MAIN', toBranchId: 'B2', businessDate: '2026-07-29', status: 'draft',
+      items: [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 10 }],
+    })
+    await setDoc(doc(db, 'transfers', 'T-sent'), {
+      fromBranch: 'MAIN', toBranchId: 'B2', businessDate: '2026-07-29', status: 'dispatched',
+      items: [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 10, qtySent: 8 }],
+    })
+  })
+})
+
+after(async () => {
+  await env?.cleanup()
+})
+
+// Role and outlet ride on the token, exactly as they do in the running system
+// where the syncStaffClaims function mirrors them off the /users record.
+const CLAIMS = {
+  [OWNER]: { role: 'owner', branchId: 'MAIN', active: true },
+  [CASHIER_MAIN]: { role: 'cashier', branchId: 'MAIN', active: true },
+  [CASHIER_B2]: { role: 'cashier', branchId: 'B2', active: true },
+  [SPECIALIST]: { role: 'specialist', branchId: 'MAIN', active: true },
+  'u-gone': { role: 'cashier', branchId: 'MAIN', active: false },
+}
+
+const as = (uid) => env.authenticatedContext(uid, CLAIMS[uid] ?? {}).firestore()
+
+test('a cashier can ring a sale at their own outlet', async () => {
+  const db = as(CASHIER_MAIN)
+  await assertSucceeds(setDoc(doc(db, 'sales', 'new-main'), saleFor('MAIN', CASHIER_MAIN)))
+})
+
+test('a cashier cannot ring a sale onto another outlet', async () => {
+  const db = as(CASHIER_MAIN)
+  await assertFails(setDoc(doc(db, 'sales', 'cross-branch'), saleFor('B2', CASHIER_MAIN)))
+})
+
+test('a cashier cannot ring a sale under someone else\'s name', async () => {
+  const db = as(CASHIER_MAIN)
+  await assertFails(setDoc(doc(db, 'sales', 'impersonated'), saleFor('MAIN', CASHIER_B2)))
+})
+
+test('a cashier cannot read another outlet\'s takings', async () => {
+  const db = as(CASHIER_MAIN)
+  await assertFails(getDoc(doc(db, 'sales', 'b2-sale')))
+})
+
+test('the owner can read every outlet', async () => {
+  const db = as(OWNER)
+  await assertSucceeds(getDoc(doc(db, 'sales', 'b2-sale')))
+})
+
+test('voiding is allowed — it is a whitelisted field change', async () => {
+  const db = as(CASHIER_MAIN)
+  await assertSucceeds(
+    updateDoc(doc(db, 'sales', 'existing'), {
+      status: 'voided',
+      voidReason: 'Rung by mistake',
+      voidedBy: CASHIER_MAIN,
+    }),
+  )
+})
+
+test('the takings on a sale can never be edited', async () => {
+  const db = as(CASHIER_MAIN)
+  await assertFails(updateDoc(doc(db, 'sales', 'existing'), { total: 1 }))
+})
+
+test('a sale line cannot be rewritten after the fact', async () => {
+  const db = as(CASHIER_MAIN)
+  await assertFails(
+    updateDoc(doc(db, 'sales', 'existing'), {
+      items: [{ productId: 'p1', name: 'Loaf', price: 1, qty: 1 }],
+    }),
+  )
+})
+
+test('nobody can delete a sale — not even the owner', async () => {
+  await assertFails(deleteDoc(doc(as(CASHIER_MAIN), 'sales', 'existing')))
+  await assertFails(deleteDoc(doc(as(OWNER), 'sales', 'existing')))
+})
+
+test('only the owner may change the catalog', async () => {
+  await assertFails(setDoc(doc(as(CASHIER_MAIN), 'products', 'p2'), { name: 'X', price: 100, active: true }))
+  await assertFails(setDoc(doc(as(SPECIALIST), 'products', 'p2'), { name: 'X', price: 100, active: true }))
+  await assertSucceeds(setDoc(doc(as(OWNER), 'products', 'p2'), { name: 'X', price: 100, active: true }))
+})
+
+test('a product can never be deleted, only archived', async () => {
+  await assertFails(deleteDoc(doc(as(OWNER), 'products', 'p1')))
+  await assertSucceeds(updateDoc(doc(as(OWNER), 'products', 'p1'), { active: false }))
+})
+
+test('only the owner may add or change staff', async () => {
+  await assertFails(setDoc(doc(as(CASHIER_MAIN), 'users', 'u-new'), { name: 'N', role: 'owner', branchId: 'MAIN', active: true }))
+  await assertSucceeds(setDoc(doc(as(OWNER), 'users', 'u-new'), { name: 'N', role: 'cashier', branchId: 'B2', active: true }))
+})
+
+test('a cashier cannot promote themselves to owner', async () => {
+  const db = as(CASHIER_MAIN)
+  await assertFails(updateDoc(doc(db, 'users', CASHIER_MAIN), { role: 'owner' }))
+})
+
+test('a turned-off account can do nothing', async () => {
+  const db = as('u-gone')
+  await assertFails(setDoc(doc(db, 'sales', 'from-ex-staff'), saleFor('MAIN', 'u-gone')))
+})
+
+test('a signed-out visitor can read the staff list but write nothing', async () => {
+  const db = env.unauthenticatedContext().firestore()
+  // The login screen needs the names before anyone has signed in.
+  await assertSucceeds(getDoc(doc(db, 'users', CASHIER_MAIN)))
+  await assertFails(getDoc(doc(db, 'sales', 'existing')))
+  await assertFails(setDoc(doc(db, 'sales', 'anon'), saleFor('MAIN', 'nobody')))
+})
+
+test('raw material purchases are the owner\'s alone', async () => {
+  await assertFails(getDoc(doc(as(CASHIER_MAIN), 'purchases', 'P-0728-01')))
+  await assertSucceeds(setDoc(doc(as(OWNER), 'purchases', 'P-0728-01'), { businessDate: '2026-07-28', total: 5000 }))
+})
+
+test('an outlet can reopen the day it closed by mistake', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'closings', 'C-20260728-MAIN'), {
+      branchId: 'MAIN',
+      businessDate: '2026-07-28',
+      status: 'closed',
+      countedCash: 10000,
+    })
+  })
+  // An accidental close must never leave a shop waiting on the owner to sell.
+  await assertSucceeds(
+    updateDoc(doc(as(CASHIER_MAIN), 'closings', 'C-20260728-MAIN'), {
+      status: 'reopened',
+      reopenedBy: CASHIER_MAIN,
+      reopenReason: 'Closed by mistake',
+    }),
+  )
+  await assertSucceeds(updateDoc(doc(as(OWNER), 'closings', 'C-20260728-MAIN'), { countedCash: 9900 }))
+})
+
+test('another outlet cannot touch a day that is not theirs', async () => {
+  await assertFails(
+    updateDoc(doc(as(CASHIER_B2), 'closings', 'C-20260728-MAIN'), { status: 'reopened' }),
+  )
+})
+
+test('a close cannot be moved to another outlet or another day', async () => {
+  await assertFails(
+    updateDoc(doc(as(CASHIER_MAIN), 'closings', 'C-20260728-MAIN'), { branchId: 'B2' }),
+  )
+  await assertFails(
+    updateDoc(doc(as(CASHIER_MAIN), 'closings', 'C-20260728-MAIN'), { businessDate: '2026-07-01' }),
+  )
+})
+
+test('a closed day still cannot be deleted by anyone', async () => {
+  await assertFails(deleteDoc(doc(as(CASHIER_MAIN), 'closings', 'C-20260728-MAIN')))
+  await assertFails(deleteDoc(doc(as(OWNER), 'closings', 'C-20260728-MAIN')))
+})
+
+test('collections nobody declared are closed by default', async () => {
+  await assertFails(setDoc(doc(as(OWNER), 'secretStuff', 'x'), { a: 1 }))
+})
+
+test('a signed-in account with no role assigned can do nothing', async () => {
+  // Claims not yet synced, or a stale token from before someone was set up.
+  const db = env.authenticatedContext('u-nobody', {}).firestore()
+  await assertFails(getDoc(doc(db, 'sales', 'existing')))
+  await assertFails(setDoc(doc(db, 'sales', 'x'), saleFor('MAIN', 'u-nobody')))
+})
+
+// --- queries, which are the thing rules most often break -------------------
+
+test('the owner can list every outlet at once; a cashier cannot', async () => {
+  // This is what the owner's dashboard does, and it must not need a branch
+  // filter. A cashier issuing the same unpinned query has to be refused.
+  await assertSucceeds(getDocs(query(collection(as(OWNER), 'sales'), where('businessDate', '==', '2026-07-28'))))
+  await assertFails(getDocs(query(collection(as(CASHIER_MAIN), 'sales'), where('businessDate', '==', '2026-07-28'))))
+})
+
+test('a cashier can list their own outlet by pinning it in the query', async () => {
+  await assertSucceeds(
+    getDocs(query(collection(as(CASHIER_MAIN), 'sales'), where('branchId', '==', 'MAIN'))),
+  )
+  // ...but cannot pin someone else's.
+  await assertFails(
+    getDocs(query(collection(as(CASHIER_MAIN), 'sales'), where('branchId', '==', 'B2'))),
+  )
+})
+
+test('the owner can list closings and transfers across outlets', async () => {
+  await assertSucceeds(getDocs(query(collection(as(OWNER), 'closings'), orderBy('businessDate', 'desc'))))
+  await assertSucceeds(getDocs(query(collection(as(OWNER), 'transfers'), where('businessDate', '==', '2026-07-29'))))
+})
+
+test('an outlet lists only the deliveries addressed to it', async () => {
+  await assertSucceeds(
+    getDocs(query(collection(as(CASHIER_B2), 'transfers'), where('toBranchId', '==', 'B2'))),
+  )
+  await assertFails(
+    getDocs(query(collection(as(CASHIER_B2), 'transfers'), where('toBranchId', '==', 'B3'))),
+  )
+  await assertFails(getDocs(collection(as(CASHIER_B2), 'transfers')))
+})
+
+// --- stock going back to the hub, and the compiled reports -----------------
+
+test('an outlet can send its own leftovers back to the hub', async () => {
+  await assertSucceeds(
+    setDoc(doc(as(CASHIER_B2), 'transfers', 'T-return-b2'), {
+      ref: 'T-0728-B2-R',
+      fromBranch: 'B2',
+      toBranchId: 'MAIN',
+      businessDate: '2026-07-28',
+      direction: 'return',
+      status: 'dispatched',
+      items: [{ productId: 'p1', productName: 'Loaf', qtySent: 4 }],
+    }),
+  )
+})
+
+test('an outlet cannot invent a delivery to itself, or send from somewhere else', async () => {
+  const base = {
+    ref: 'T-forged',
+    businessDate: '2026-07-28',
+    status: 'dispatched',
+    items: [],
+  }
+  // An outbound delivery is the compile's to write, never an outlet's.
+  await assertFails(
+    setDoc(doc(as(CASHIER_B2), 'transfers', 'T-forged-out'), {
+      ...base, direction: 'out', fromBranch: 'MAIN', toBranchId: 'B2',
+    }),
+  )
+  // A return has to come from the outlet actually sending it.
+  await assertFails(
+    setDoc(doc(as(CASHIER_B2), 'transfers', 'T-forged-return'), {
+      ...base, direction: 'return', fromBranch: 'B3', toBranchId: 'MAIN',
+    }),
+  )
+})
+
+test('the hub confirms a return; the outlet that sent it cannot', async () => {
+  const confirmed = {
+    status: 'received',
+    items: [{ productId: 'p1', productName: 'Loaf', qtySent: 4, qtyReceived: 4 }],
+  }
+  await assertFails(updateDoc(doc(as(CASHIER_B2), 'transfers', 'T-return-b2'), confirmed))
+  await assertSucceeds(updateDoc(doc(as(CASHIER_MAIN), 'transfers', 'T-return-b2'), confirmed))
+})
+
+test('reports are compiled and read-only — nobody writes one, not even the owner', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'dailyReports', 'R-20260728-B2'), {
+      branchId: 'B2', businessDate: '2026-07-28', salesTotal: 5000, wasteValue: 660,
+    })
+  })
+  await assertFails(setDoc(doc(as(OWNER), 'dailyReports', 'R-forged'), { branchId: 'B2' }))
+  await assertFails(updateDoc(doc(as(OWNER), 'dailyReports', 'R-20260728-B2'), { salesTotal: 1 }))
+  await assertFails(deleteDoc(doc(as(OWNER), 'dailyReports', 'R-20260728-B2')))
+})
+
+test('the owner reads every outlet’s report; a cashier only their own', async () => {
+  await assertSucceeds(getDocs(query(collection(as(OWNER), 'dailyReports'), orderBy('businessDate', 'desc'))))
+  await assertSucceeds(getDoc(doc(as(CASHIER_B2), 'dailyReports', 'R-20260728-B2')))
+  await assertFails(getDoc(doc(as(CASHIER_MAIN), 'dailyReports', 'R-20260728-B2')))
+  await assertFails(getDocs(collection(as(CASHIER_B2), 'dailyReports')))
+})
+
+test('the hub lists what it is sending out', async () => {
+  await assertSucceeds(
+    getDocs(query(collection(as(SPECIALIST), 'transfers'), where('fromBranch', '==', 'MAIN'))),
+  )
+})
+
+// --- the daily cycle -------------------------------------------------------
+
+test('an outlet places its own order but not another outlet\'s', async () => {
+  const order = (branchId) => ({
+    branchId, businessDate: '2026-07-30', status: 'submitted',
+    items: [{ productId: 'p1', code: '101', productName: 'Loaf', qty: 4 }],
+  })
+  await assertSucceeds(setDoc(doc(as(CASHIER_B2), 'demands', 'D-new-b2'), order('B2')))
+  await assertFails(setDoc(doc(as(CASHIER_B2), 'demands', 'D-new-main'), order('MAIN')))
+})
+
+test('an order that has gone to the kitchen can no longer be changed', async () => {
+  await assertFails(updateDoc(doc(as(CASHIER_B2), 'demands', 'D-B2-locked'), { status: 'submitted' }))
+  // The owner can still put a mistake right.
+  await assertSucceeds(updateDoc(doc(as(OWNER), 'demands', 'D-B2-locked'), { note: 'fixed' }))
+})
+
+test('an outlet can still edit its order before the cutoff', async () => {
+  await assertSucceeds(
+    updateDoc(doc(as(CASHIER_B2), 'demands', 'D-B2'), {
+      status: 'submitted',
+      items: [{ productId: 'p1', code: '101', productName: 'Loaf', qty: 12 }],
+    }),
+  )
+})
+
+test('nobody can type a baking list — only the scheduled compile makes one', async () => {
+  const list = { businessDate: '2026-07-30', status: 'open', items: [], produced: {} }
+  await assertFails(setDoc(doc(as(OWNER), 'productionOrders', 'PO-forged'), list))
+  await assertFails(setDoc(doc(as(SPECIALIST), 'productionOrders', 'PO-forged'), list))
+  await assertFails(setDoc(doc(as(CASHIER_MAIN), 'productionOrders', 'PO-forged'), list))
+})
+
+test('the kitchen records what it baked, and nothing else', async () => {
+  await assertSucceeds(
+    updateDoc(doc(as(SPECIALIST), 'productionOrders', 'PO'), {
+      'produced.p1': 28,
+      'producedBy.p1': SPECIALIST,
+    }),
+  )
+  await assertSucceeds(updateDoc(doc(as(SPECIALIST), 'productionOrders', 'PO'), { status: 'done' }))
+  // Rewriting what was asked for is not the kitchen's to do.
+  await assertFails(
+    updateDoc(doc(as(SPECIALIST), 'productionOrders', 'PO'), {
+      items: [{ productId: 'p1', qtyNeeded: 1, perOutlet: {} }],
+    }),
+  )
+})
+
+test('a cashier cannot touch the baking list', async () => {
+  await assertFails(updateDoc(doc(as(CASHIER_MAIN), 'productionOrders', 'PO'), { 'produced.p1': 99 }))
+})
+
+test('the hub sends a delivery; an outlet cannot send to itself', async () => {
+  await assertFails(
+    updateDoc(doc(as(CASHIER_B2), 'transfers', 'T-draft'), {
+      status: 'dispatched',
+      items: [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 10, qtySent: 10 }],
+    }),
+  )
+  await assertSucceeds(
+    updateDoc(doc(as(SPECIALIST), 'transfers', 'T-draft'), {
+      status: 'dispatched',
+      items: [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 10, qtySent: 10 }],
+    }),
+  )
+})
+
+test('the receiving outlet counts a delivery in; another outlet cannot', async () => {
+  await assertFails(
+    updateDoc(doc(as(CASHIER_MAIN), 'transfers', 'T-sent'), {
+      status: 'received',
+      items: [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 10, qtySent: 8, qtyReceived: 8 }],
+    }),
+  )
+  await assertSucceeds(
+    updateDoc(doc(as(CASHIER_B2), 'transfers', 'T-sent'), {
+      status: 'received',
+      items: [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 10, qtySent: 8, qtyReceived: 6, shortReason: 'Damaged in transit' }],
+    }),
+  )
+})
+
+test('a delivery cannot be marked received before it was ever sent', async () => {
+  // A note of its own: the shared draft has already been dispatched by the test
+  // above, and these tests deliberately share state to mirror a real day.
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'transfers', 'T-untouched'), {
+      fromBranch: 'MAIN', toBranchId: 'B2', businessDate: '2026-07-29', status: 'draft',
+      items: [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 10 }],
+    })
+  })
+  await assertFails(
+    updateDoc(doc(as(CASHIER_B2), 'transfers', 'T-untouched'), {
+      status: 'received',
+      items: [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 10, qtyReceived: 10 }],
+    }),
+  )
+})
+
+test('an outlet cannot read a delivery meant for somewhere else', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'transfers', 'T-b3'), {
+      fromBranch: 'MAIN', toBranchId: 'B3', businessDate: '2026-07-29', status: 'dispatched', items: [],
+    })
+  })
+  await assertFails(getDoc(doc(as(CASHIER_B2), 'transfers', 'T-b3')))
+  await assertSucceeds(getDoc(doc(as(OWNER), 'transfers', 'T-b3')))
+})
+
+test('no part of the cycle can ever be deleted', async () => {
+  await assertFails(deleteDoc(doc(as(OWNER), 'demands', 'D-B2')))
+  await assertFails(deleteDoc(doc(as(OWNER), 'productionOrders', 'PO')))
+  await assertFails(deleteDoc(doc(as(OWNER), 'transfers', 'T-draft')))
+})

@@ -1,0 +1,252 @@
+rules_version = '2';
+
+// Bakery system security rules.
+//
+// Two invariants that must never be weakened:
+//   1. Nothing is ever deleted, by anyone.
+//   2. Sales are append-only except for two whitelisted, stamped mutations:
+//      the void flag and the cash<->card payment fix.
+//
+// Role and branch come from the caller's own /users doc, so the owner manages
+// permissions in-app with no custom-claims machinery.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Role and outlet come from the signed-in token, not from a document.
+    //
+    // These used to read /users/{uid}. That works for fetching one document but
+    // quietly breaks queries: the read is repeated for every candidate row and
+    // soon trips Firestore's per-request document-access limit, so a query that
+    // is fine on a quiet day fails once the day gets busy. Reading the token
+    // costs nothing and behaves the same whether one row or a thousand come
+    // back. `functions/index.js` mirrors the /users doc onto the token, so the
+    // owner still manages people in the app and that record stays the truth.
+    function signedIn() {
+      return request.auth != null;
+    }
+    function active() {
+      return signedIn() && request.auth.token.active == true;
+    }
+    function role() {
+      return request.auth.token.role;
+    }
+    function myBranch() {
+      return request.auth.token.branchId;
+    }
+    function isOwner() {
+      return active() && role() == 'owner';
+    }
+    function staff() {
+      return active() && role() in ['owner', 'cashier', 'specialist'];
+    }
+    // The owner may act on any branch; everyone else only on their own.
+    function canWriteBranch(b) {
+      return active() && (role() == 'owner' || myBranch() == b);
+    }
+    function changedOnly(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    // --- Enter-once sources: owner writes, everyone reads -------------------
+
+    // Public read: the login screen lists staff names before anyone is signed
+    // in. These docs hold no secrets — PINs live in Firebase Auth, never here.
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if isOwner();
+      allow delete: if false;
+    }
+
+    match /branches/{branchId} {
+      allow read: if true;
+      allow create, update: if isOwner();
+      allow delete: if false;
+    }
+
+    match /products/{productId} {
+      allow read: if signedIn();
+      allow create, update: if isOwner();
+      allow delete: if false;
+    }
+
+    // --- Money: append-only ------------------------------------------------
+
+    match /sales/{saleId} {
+      // Order matters. The owner clause is checked first and touches no
+      // document field, so an owner's unfiltered query is provably allowed.
+      // Reaching for `resource.data` before that — even via `.get` with a
+      // default — makes the whole query unprovable and it is refused outright.
+      // Reading one sale: check the branch on the document itself.
+      allow get: if isOwner() || (active() && resource.data.branchId == myBranch());
+
+      // Querying many is a different thing, and needs separate statements.
+      //
+      // On a query Firestore does not run the rule against each row — it
+      // decides up front whether the query as written can only return allowed
+      // rows. `resource` is empty during that check, so touching
+      // `resource.data` inside a larger `||` makes the whole expression error
+      // out rather than fall through to the branch that would have passed.
+      // Written as two statements they are considered independently: the owner
+      // is allowed outright, and everyone else is allowed only when the query
+      // pins their own outlet, which Firestore matches against the constraint.
+      allow list: if isOwner();
+      allow list: if active() && resource.data.branchId == myBranch();
+
+      allow create: if staff()
+                    && canWriteBranch(request.resource.data.branchId)
+                    && request.resource.data.cashierId == request.auth.uid
+                    && request.resource.data.total is number
+                    && request.resource.data.status in ['normal', 'refund'];
+
+      // Void a sale, or correct the payment type. Nothing else may change.
+      allow update: if staff()
+                    && canWriteBranch(resource.data.branchId)
+                    && changedOnly([
+                         'status', 'voidReason', 'voidedBy', 'voidedAt',
+                         'payment', 'paymentChangedBy', 'paymentChangedAt'
+                       ]);
+
+      allow delete: if false;
+    }
+
+    // One doc per outlet per day: cash-up (and, from phase 4, the waste count).
+    match /closings/{closingId} {
+      allow get: if isOwner() || (active() && resource.data.branchId == myBranch());
+      // See the note on sales about why a query needs its own statements.
+      allow list: if isOwner();
+      allow list: if active() && resource.data.branchId == myBranch();
+
+      allow create: if staff() && canWriteBranch(request.resource.data.branchId);
+
+      // The outlet that closed a day can reopen and re-close it. An accidental
+      // tap must never leave a shop unable to sell while it waits on the owner.
+      // What it cannot do is move a close to another outlet or another day, and
+      // every close and reopen is appended to the event trail for the owner to
+      // see. Visibility rather than permission — the same bargain as voids.
+      allow update: if isOwner()
+                    || (staff()
+                        && canWriteBranch(resource.data.branchId)
+                        && request.resource.data.branchId == resource.data.branchId
+                        && request.resource.data.businessDate == resource.data.businessDate);
+
+      allow delete: if false;
+    }
+
+    // --- The daily cycle ---------------------------------------------------
+    //
+    // Each record has exactly one writer at any moment, so two people can never
+    // fight over the same field. For transfers the status is what separates
+    // them: the hub writes while the note is a draft, the receiving outlet
+    // writes only once it is on its way.
+
+    match /demands/{demandId} {
+      allow read: if staff();
+
+      // An outlet places its own order, and only until the kitchen list is made.
+      allow create: if staff()
+                    && canWriteBranch(request.resource.data.branchId)
+                    && request.resource.data.status in ['draft', 'submitted'];
+
+      allow update: if isOwner()
+                    || (staff()
+                        && canWriteBranch(resource.data.branchId)
+                        && resource.data.status != 'locked'
+                        && request.resource.data.status in ['draft', 'submitted']);
+
+      allow delete: if false;
+    }
+
+    match /productionOrders/{orderId} {
+      allow read: if staff();
+
+      // Nobody types the baking list. Only the scheduled compile writes it,
+      // and that runs with admin rights, outside these rules.
+      allow create: if false;
+
+      // The kitchen adds how many came out of the oven — kept in its own map
+      // precisely so this rule can name the fields it may touch. A rule cannot
+      // reach inside the items array to protect one field of it.
+      allow update: if isOwner()
+                    || (active() && role() == 'specialist'
+                        && changedOnly([
+                             'produced', 'producedBy', 'status',
+                             'doneBy', 'doneByName', 'doneAt', 'updatedAt'
+                           ]));
+
+      allow delete: if false;
+    }
+
+    match /transfers/{transferId} {
+      allow get: if isOwner()
+                 || (active() && resource.data.toBranchId == myBranch())
+                 || (active() && resource.data.fromBranch == myBranch());
+
+      // One statement per way of asking, for the reason explained on sales.
+      // Every transfer query must therefore pin `toBranchId` or `fromBranch`
+      // — see data/transfers.js, which is written to do exactly that.
+      allow list: if isOwner();
+      allow list: if active() && resource.data.toBranchId == myBranch();
+      allow list: if active() && resource.data.fromBranch == myBranch();
+
+      // Delivery notes going out are created pre-filled by the compile, never
+      // by hand. The one exception is stock an outlet sends back at the end of
+      // its day: that note is written by the outlet it leaves, already on its
+      // way, for the hub to confirm in the morning.
+      allow create: if staff()
+                    && request.resource.data.direction == 'return'
+                    && request.resource.data.fromBranch == myBranch()
+                    && request.resource.data.status == 'dispatched'
+                    && request.resource.data.businessDate is string;
+
+      allow update: if isOwner()
+                    // The hub sends: draft -> dispatched.
+                    || (active() && role() == 'specialist'
+                        && resource.data.fromBranch == myBranch()
+                        && resource.data.status == 'draft'
+                        && request.resource.data.status == 'dispatched')
+                    // The receiving outlet counts it in: dispatched -> received.
+                    || (staff()
+                        && resource.data.toBranchId == myBranch()
+                        && resource.data.status == 'dispatched'
+                        && request.resource.data.status == 'received');
+
+      allow delete: if false;
+    }
+
+    match /dailyReports/{reportId} {
+      allow get: if isOwner() || (active() && resource.data.branchId == myBranch());
+      allow list: if isOwner();
+      allow list: if active() && resource.data.branchId == myBranch();
+
+      // Reports are compiled, never written by hand — not even by the owner.
+      // Correcting a figure means correcting the day it came from.
+      allow create, update, delete: if false;
+    }
+
+    // --- Raw materials (phase 5) -------------------------------------------
+
+    match /rawMaterials/{materialId} {
+      allow read: if signedIn();
+      allow create, update: if isOwner();
+      allow delete: if false;
+    }
+
+    match /purchases/{purchaseId} {
+      allow read: if isOwner();
+      allow create, update: if isOwner();
+      allow delete: if false;
+    }
+
+    match /stockMovements/{movementId} {
+      allow read: if isOwner();
+      allow create: if isOwner();
+      allow update, delete: if false;
+    }
+
+    // Anything not named above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
