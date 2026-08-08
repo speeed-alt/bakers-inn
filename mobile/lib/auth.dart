@@ -134,6 +134,28 @@ class AuthController extends ChangeNotifier {
           .toList()
         ..sort((a, b) => a.name.compareTo(b.name)));
 
+  /// Just the owners.
+  ///
+  /// This app is the owner's, so its login has nobody else to offer — and with
+  /// a single owner there is nothing to choose at all, which is why the app
+  /// opens on the PIN pad rather than on a list of one name.
+  ///
+  /// Two equality filters need no composite index; Firestore serves them from
+  /// the single-field indexes it maintains anyway.
+  Stream<List<StaffOption>> owners() => _db
+      .collection('users')
+      .where('active', isEqualTo: true)
+      .where('role', isEqualTo: 'owner')
+      .snapshots()
+      .map((snap) => snap.docs
+          .map((d) => StaffOption(
+                uid: d.id,
+                name: (d.data()['name'] ?? '') as String,
+                role: (d.data()['role'] ?? '') as String,
+              ))
+          .toList()
+        ..sort((a, b) => a.name.compareTo(b.name)));
+
   /// Returns null on success, or a message plain enough to read at a counter.
   Future<String?> signIn(String uid, String pin) async {
     if (!isValidPin(pin)) return 'A PIN is four digits.';

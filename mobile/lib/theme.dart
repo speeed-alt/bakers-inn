@@ -166,6 +166,32 @@ ThemeData _base(Brightness brightness) {
       ),
     ),
     dividerTheme: DividerThemeData(color: colors.border, space: 1, thickness: 1),
+    // Material 3 gives the bar a tinted "secondary container" pill by default,
+    // which is the one flash of colour the owner asked not to have. Flattened
+    // to a hairline-topped bar whose selected item is simply darker.
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: surface,
+      surfaceTintColor: Colors.transparent,
+      indicatorColor: Colors.transparent,
+      elevation: 0,
+      height: 64,
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(
+          size: 22,
+          color: states.contains(WidgetState.selected) ? text : colors.muted,
+        ),
+      ),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => TextStyle(
+          fontSize: 12,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w600
+              : FontWeight.w400,
+          color: states.contains(WidgetState.selected) ? text : colors.muted,
+        ),
+      ),
+    ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: colors.ink,

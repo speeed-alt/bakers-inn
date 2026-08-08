@@ -127,15 +127,34 @@ document instead of double-counting takings.
 
 ## Putting it on the internet
 
-Two hosts, and the order matters.
+**It is live at https://bakers-inn-pk.web.app**, on Firebase Hosting, backed by
+the Firebase project `bakers-inn-pk` (Firestore in `asia-south1`, Mumbai — the
+closest region to Pakistan).
 
-**Vercel serves the app. Firebase is the actual system** — the database, the
-sign-ins, the security rules, and the two scheduled jobs. Deploying to Vercel
-before a Firebase project exists gives you a page that loads and then does
-nothing, because with no `VITE_FB_*` values the app looks for the emulators on
-`127.0.0.1`, which no phone on the internet can reach.
+One host, not two. Firebase is the actual system — the database, the sign-ins,
+the security rules and the scheduled jobs — and it serves the app as well, so
+there is one place to deploy and one place to look when something is wrong.
+Firebase also authorises its own hosting domains for sign-in automatically,
+which is a step that is easy to forget anywhere else and fails silently when you
+do: the login screen simply never signs anybody in.
 
-So: Firebase first.
+The owner has a second client, a Flutter app in [mobile/](mobile/). It reads and
+writes the same Firestore, and `mobile/test/port_test.dart` pins its arithmetic
+against values taken from this app so the two cannot drift.
+
+Deploying, once a Firebase project exists:
+
+```bash
+npm run build
+firebase deploy --only hosting --project bakers-inn-pk
+```
+
+Nothing else is needed for a code change. `firebase.json` carries the parts that
+bite: deep links like `/close` survive a refresh, hashed assets are cached
+forever, and **everything else is `must-revalidate`** so a tablet cannot keep
+running last month's till after a deploy.
+
+Setting up a new project from scratch, in order:
 
 **1. Create the Firebase project** (console.firebase.google.com). Enable
 Firestore and Email/Password sign-in. The scheduled compile and the nightly
@@ -159,28 +178,29 @@ bypasses `firestore.rules` completely.
 SEED_PROJECT=… GOOGLE_APPLICATION_CREDENTIALS=…/key.json PIN_OWNER=… PIN_AYESHA=… npm run seed
 ```
 
-**4. Give Vercel the six values** from `.env.example` (Project → Settings →
-Environment Variables), then deploy:
+**4. Put the six values from `.env.example` in `.env.production.local`**, then
+build and deploy:
 
 ```bash
-vercel --prod
+npm run build
+firebase deploy --only hosting --project bakers-inn-pk
 ```
 
-`vercel.json` already handles the parts that bite, and each rule in it is there
-for a reason worth knowing — Vercel's schema rejects unknown keys, so the file
-itself cannot carry comments:
+Deliberately `.env.production.local` rather than `.env.local`: Vite reads it for
+`npm run build` but not for `npm run dev`, so local development keeps running
+against the emulators and nobody has to remember to move a file before testing
+offline selling.
 
-- **The rewrite** sends every path to `index.html`, so deep links like `/close`
-  survive a refresh instead of returning a 404 from the CDN.
-- **`index.html` and `sw.js` are never cached.** A tablet holding an old shell or
-  service worker would keep running last month's till after a deploy, and nobody
-  on the counter would know. Everything under `/assets/` carries a content hash
-  in its filename, so that is cached forever.
-- **`X-Frame-Options: DENY` and `Referrer-Policy: same-origin`** keep a screen
-  showing the day's takings out of other people's frames and referrer logs.
+The header rules in `firebase.json` are worth understanding, because the obvious
+version of them is wrong. A rule on `/index.html` does not fire for a request to
+`/`, and with the SPA rewrite every deep link — `/close`, `/stock` — serves that
+same shell without matching it either. So the catch-all `**` carries
+`must-revalidate` and `/assets/**` opts back out with `immutable`; the more
+specific rule wins. Get it the other way round and tablets quietly cache the
+till for an hour.
 
-**5. Add the Vercel domain** to Firebase → Authentication → Settings →
-Authorised domains, or every sign-in will be refused.
+`vercel.json` is left in the repository for anyone who wants to host it there
+instead. It is not used.
 
 ### On phones and tablets
 

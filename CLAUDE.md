@@ -211,14 +211,24 @@ columns map exactly onto what the system tracks. Keep this language:
 |---|---|
 | Firebase | `bakers-inn-pk`, Firestore in `asia-south1` (Mumbai) |
 | Functions | pinned to `asia-south1` — a v2 Firestore trigger must live in the same region as its database, and the default is `us-central1` |
-| Vercel | `hz-studio1/bakers-inn` → https://bakers-inn-one.vercel.app |
+| Web app | Firebase Hosting → **https://bakers-inn-pk.web.app** |
+| Owner app | `mobile/`, a Flutter client. `flutter build apk --release` |
 | Admin key | `C:\Users\SPEEED\.firebase-keys\bakers-inn-pk-admin.json`, outside the repo on purpose |
+
+```bash
+npm run build && firebase deploy --only hosting --project bakers-inn-pk
+```
 
 Deploy with `--project bakers-inn-pk` (or the `prod` alias). The `.firebaserc`
 default stays `demo-bakery` so `npm run emulators` keeps working offline.
 
-New Vercel URLs must be added to Firebase's authorised domains or every sign-in
-is refused, silently:
+**Vercel is not used.** It served the app briefly; its deploy queue jammed after
+some oversized uploads and the owner asked for the app on a phone instead.
+`vercel.json` and `.vercelignore` are left in place for anyone who wants that
+route back, and nothing depends on them.
+
+Firebase authorises its own hosting domains automatically. Any *other* domain
+must be added or every sign-in is refused, silently:
 
 ```bash
 SEED_PROJECT=bakers-inn-pk GOOGLE_APPLICATION_CREDENTIALS=…/key.json node scripts/authorise-domain.mjs <domain>

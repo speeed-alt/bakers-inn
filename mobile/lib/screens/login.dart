@@ -1,30 +1,31 @@
-/// Tap your name, then four digits. No keyboard, no email address, nothing to
-/// remember beyond the PIN.
+/// Four digits, and in.
+///
+/// This app is the owner's, so there is normally nobody to choose between: it
+/// opens straight on "Hello Owner" and the keypad. A list only appears if the
+/// business has more than one owner, because then the app genuinely does not
+/// know which one is holding the phone.
 library;
 
 import 'package:flutter/material.dart';
 
 import '../auth.dart';
 import '../theme.dart';
+import '../widgets/shell.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({
-    super.key,
-    required this.auth,
-    required this.branchId,
-    required this.onChangeOutlet,
-  });
+  const LoginScreen({super.key, required this.auth});
 
   final AuthController auth;
-  final String branchId;
-  final VoidCallback onChangeOutlet;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  StaffOption? _person;
+  /// Only set once somebody has been picked from a list of several. With one
+  /// owner it stays null and the person is derived from the stream instead,
+  /// which keeps this out of setState-during-build territory.
+  StaffOption? _chosen;
   String _pin = '';
   String? _error;
   bool _busy = false;
@@ -36,9 +37,35 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: _person == null ? _chooseName() : _enterPin(),
+            child: StreamBuilder<List<StaffOption>>(
+              stream: widget.auth.owners(),
+              builder: (context, snap) {
+                if (snap.hasError) {
+                  return _note(
+                    'Could not reach the staff list',
+                    'Check the connection and try again.',
+                  );
+                }
+                if (!snap.hasData) {
+                  return const LoadingNote(text: 'Starting up…');
+                }
+
+                final owners = snap.data!;
+                if (owners.isEmpty) {
+                  return _note(
+                    'No owner is set up yet',
+                    'Run the seed against this project, then open the app again.',
+                  );
+                }
+
+                final person = _chosen ?? (owners.length == 1 ? owners.single : null);
+                return Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: person == null
+                      ? _chooseOwner(owners)
+                      : _enterPin(person, canGoBack: owners.length > 1),
+                );
+              },
             ),
           ),
         ),
@@ -46,76 +73,60 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _chooseName() {
+  Widget _note(String title, String detail) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: context.type.titleLarge),
+          const SizedBox(height: 6),
+          Text(detail, style: TextStyle(color: context.colors.muted)),
+        ],
+      ),
+    );
+  }
+
+  Widget _chooseOwner(List<StaffOption> owners) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(widget.branchId, style: context.type.titleLarge),
+        Text("The Baker's Inn", style: context.type.titleLarge),
         const SizedBox(height: 4),
-        Text(
-          'Tap your name to start.',
-          style: TextStyle(color: context.colors.muted),
-        ),
+        Text('Tap your name to start.',
+            style: TextStyle(color: context.colors.muted)),
         const SizedBox(height: 20),
-        StreamBuilder<List<StaffOption>>(
-          stream: widget.auth.staffAt(widget.branchId),
-          builder: (context, snap) {
-            if (!snap.hasData) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            final people = snap.data!;
-            if (people.isEmpty) {
-              return Text(
-                'Nobody is set up at this outlet yet.',
-                style: TextStyle(color: context.colors.muted),
-              );
-            }
-            return Column(
-              children: [
-                for (final person in people)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: OutlinedButton(
-                      onPressed: () => setState(() {
-                        _person = person;
-                        _pin = '';
-                        _error = null;
-                      }),
-                      child: Row(
-                        children: [
-                          Text(person.name),
-                          const Spacer(),
-                          Text(
-                            person.role,
-                            style: TextStyle(fontSize: 13, color: context.colors.muted),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        TextButton(
-          onPressed: widget.onChangeOutlet,
-          child: Text('This tablet is not at ${widget.branchId}'),
-        ),
+        for (final person in owners)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: OutlinedButton(
+              onPressed: () => setState(() {
+                _chosen = person;
+                _pin = '';
+                _error = null;
+              }),
+              child: Row(
+                children: [
+                  Text(person.name),
+                  const Spacer(),
+                  Text(person.role,
+                      style: TextStyle(fontSize: 13, color: context.colors.muted)),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
 
-  Widget _enterPin() {
+  Widget _enterPin(StaffOption person, {required bool canGoBack}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Hello ${_person!.name}', style: context.type.titleLarge),
+        Text('Hello ${person.name}', style: context.type.titleLarge),
         const SizedBox(height: 4),
         Text(
           _error ?? 'Enter your 4-digit PIN.',
@@ -141,8 +152,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
         const SizedBox(height: 22),
-        // A keypad rather than a text field: gloved or floury hands, and no
-        // system keyboard sliding over the screen mid-rush.
+        // A keypad rather than a text field: no system keyboard sliding over the
+        // screen, and the digits stay where the thumb last found them.
         for (final row in const [
           ['1', '2', '3'],
           ['4', '5', '6'],
@@ -160,7 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: SizedBox(
                         height: 58,
                         child: OutlinedButton(
-                          onPressed: _busy ? null : () => _press(key),
+                          onPressed: _busy ? null : () => _press(key, person),
                           child: Text(key, style: const TextStyle(fontSize: 20)),
                         ),
                       ),
@@ -169,22 +180,37 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
             ),
           ),
-        const SizedBox(height: 8),
-        TextButton(
-          onPressed: _busy ? null : () => setState(() => _person = null),
-          child: const Text('Not you? Go back'),
-        ),
+        if (_busy) ...[
+          const SizedBox(height: 10),
+          Text(
+            'Signing in…',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: context.colors.muted),
+          ),
+        ],
+        if (canGoBack)
+          TextButton(
+            onPressed: _busy ? null : () => setState(() => _chosen = null),
+            child: const Text('Not you? Go back'),
+          ),
       ],
     );
   }
 
-  Future<void> _press(String key) async {
+  Future<void> _press(String key, StaffOption person) async {
+    // ✕ clears the digits rather than going back. With one owner there is
+    // nowhere to go back to, and "start this PIN again" is what the key is for.
     if (key == '✕') {
-      setState(() => _person = null);
+      setState(() {
+        _pin = '';
+        _error = null;
+      });
       return;
     }
     if (key == '⌫') {
-      if (_pin.isNotEmpty) setState(() => _pin = _pin.substring(0, _pin.length - 1));
+      if (_pin.isNotEmpty) {
+        setState(() => _pin = _pin.substring(0, _pin.length - 1));
+      }
       return;
     }
     if (_pin.length >= 4) return;
@@ -196,10 +222,10 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     // Sign in the moment the fourth digit lands — there is no "go" button to
-    // hunt for with a queue waiting.
+    // hunt for.
     if (pin.length == 4) {
       setState(() => _busy = true);
-      final failure = await widget.auth.signIn(_person!.uid, pin);
+      final failure = await widget.auth.signIn(person.uid, pin);
       if (!mounted) return;
       setState(() {
         _busy = false;

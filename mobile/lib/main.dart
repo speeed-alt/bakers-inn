@@ -3,12 +3,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'auth.dart';
-import 'device.dart';
 import 'firebase_options.dart';
+import 'screens/catalog.dart';
 import 'screens/dashboard.dart';
 import 'screens/login.dart';
-import 'screens/setup.dart';
+import 'screens/materials.dart';
 import 'theme.dart';
+import 'widgets/shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,15 +24,13 @@ Future<void> main() async {
   );
 
   final theme = await ThemeController.load();
-  final device = await DeviceStore.load();
-  runApp(BakeryApp(theme: theme, device: device));
+  runApp(BakeryApp(theme: theme));
 }
 
 class BakeryApp extends StatelessWidget {
-  const BakeryApp({super.key, required this.theme, required this.device});
+  const BakeryApp({super.key, required this.theme});
 
   final ThemeController theme;
-  final DeviceStore device;
 
   @override
   Widget build(BuildContext context) {
@@ -43,19 +42,17 @@ class BakeryApp extends StatelessWidget {
         theme: bakeryLight,
         darkTheme: bakeryDark,
         themeMode: theme.mode,
-        home: Root(theme: theme, device: device),
+        home: Root(theme: theme),
       ),
     );
   }
 }
 
-/// Decides what this tablet should be showing: set itself up, sign somebody in,
-/// or get on with the day.
+/// Sign somebody in, or get on with the day.
 class Root extends StatefulWidget {
-  const Root({super.key, required this.theme, required this.device});
+  const Root({super.key, required this.theme});
 
   final ThemeController theme;
-  final DeviceStore device;
 
   @override
   State<Root> createState() => _RootState();
@@ -63,13 +60,6 @@ class Root extends StatefulWidget {
 
 class _RootState extends State<Root> {
   late final AuthController _auth = AuthController();
-  String? _branchId;
-
-  @override
-  void initState() {
-    super.initState();
-    _branchId = widget.device.branchId;
-  }
 
   @override
   void dispose() {
@@ -82,54 +72,45 @@ class _RootState extends State<Root> {
     return ListenableBuilder(
       listenable: _auth,
       builder: (context, _) {
-        if (_branchId == null) {
-          return SetupScreen(
-            device: widget.device,
-            onDone: (id) => setState(() => _branchId = id),
-          );
-        }
         if (_auth.loading) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(body: Center(child: LoadingNote(text: 'Starting up…')));
         }
-        if (_auth.user == null) {
-          return LoginScreen(
-            auth: _auth,
-            branchId: _branchId!,
-            onChangeOutlet: () async {
-              await widget.device.clearBranchId();
-              setState(() => _branchId = null);
-            },
-          );
-        }
-        return HomeScreen(
-          auth: _auth,
-          theme: widget.theme,
-          device: widget.device,
-          branchId: _branchId!,
-        );
+        // No tablet-setup step. That screen asks which outlet a device is in and
+        // which till it is — both meaningless on the owner's phone, which is not
+        // at a counter and never rings anything up. The owner's own record says
+        // where he belongs, and the security rules let him read every outlet.
+        if (_auth.user == null) return LoginScreen(auth: _auth);
+        return HomeScreen(auth: _auth, theme: widget.theme);
       },
     );
   }
 }
 
-/// The signed-in shell. Which screen sits inside it is decided by the role on
-/// the person's own record — the same rule as the web app.
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({
-    super.key,
-    required this.auth,
-    required this.theme,
-    required this.device,
-    required this.branchId,
-  });
+/// The signed-in shell.
+///
+/// This app is the owner's. The tills, the kitchen and the close-of-day wizard
+/// live in the browser app on the shop tablets, where they are used standing up
+/// next to the thing being counted. Anyone else who signs in here is told so
+/// plainly rather than shown a half-app.
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key, required this.auth, required this.theme});
 
   final AuthController auth;
   final ThemeController theme;
-  final DeviceStore device;
-  final String branchId;
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _tab = 0;
+
+  static const _titles = ['Dashboard', 'Materials', 'Catalog'];
 
   @override
   Widget build(BuildContext context) {
+    final auth = widget.auth;
+    final theme = widget.theme;
     final profile = auth.profile;
 
     if (profile == null) {
@@ -140,14 +121,16 @@ class HomeScreen extends StatelessWidget {
       );
     }
 
-    // Everyone except the owner is pinned to the outlet on their own record, so
-    // a sale can never be stamped with the wrong branch by signing in elsewhere.
-    if (!profile.isOwner && profile.branchId != branchId) {
+    // There is no wrong-outlet check here, unlike the web app. That guard stops
+    // a cashier stamping a sale with another shop's id — and nothing in this app
+    // writes a sale, or writes anything at all.
+    if (!profile.isOwner) {
       return _Message(
-        title: 'Wrong outlet',
+        title: 'This app is for the owner',
         detail:
-            'This tablet belongs to $branchId, but you are registered at ${profile.branchId}. '
-            'Sign in at your own outlet.',
+            'The till, the kitchen list and the end-of-day count are in the '
+            'browser app on the shop tablet — same system, same figures, and '
+            'right next to the counter where they are used.',
         onSignOut: auth.signOut,
       );
     }
@@ -159,9 +142,11 @@ class HomeScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(profile.name, style: context.type.titleMedium),
+            Text(_titles[_tab], style: context.type.titleMedium),
+            // Just the name. The till letter that used to sit here is a counter
+            // concept — this phone is not a till.
             Text(
-              '${profile.role} · $branchId · till ${device.letter}',
+              profile.name,
               style: TextStyle(fontSize: 12, color: context.colors.muted),
             ),
           ],
@@ -180,9 +165,38 @@ class HomeScreen extends StatelessWidget {
               'Sign out and back in.',
             ),
           Expanded(
-            child: profile.isOwner
-                ? DashboardScreen(auth: auth)
-                : _NotBuiltYet(role: profile.role),
+            // Kept alive across tabs: rebuilding the dashboard's nine listeners
+            // every time he glances at a price would cost a round trip each way
+            // and lose his scroll position.
+            child: IndexedStack(
+              index: _tab,
+              children: [
+                const DashboardScreen(),
+                MaterialsScreen(user: (id: profile.uid, name: profile.name)),
+                CatalogScreen(user: (id: profile.uid, name: profile.name)),
+              ],
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: (i) => setState(() => _tab = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.insights_outlined),
+            selectedIcon: Icon(Icons.insights),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.inventory_2_outlined),
+            selectedIcon: Icon(Icons.inventory_2),
+            label: 'Materials',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.menu_book_outlined),
+            selectedIcon: Icon(Icons.menu_book),
+            label: 'Catalog',
           ),
         ],
       ),
@@ -243,33 +257,3 @@ class _Message extends StatelessWidget {
   }
 }
 
-/// Honest placeholder. The till, close-day, bake and dispatch screens are still
-/// being ported; the web app serves those roles in the meantime.
-class _NotBuiltYet extends StatelessWidget {
-  const _NotBuiltYet({required this.role});
-
-  final String role;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Not in the app yet', style: context.type.titleLarge),
-            const SizedBox(height: 8),
-            Text(
-              'The $role screens are still being moved across. '
-              'Use the browser app on this tablet for now — it is the same system '
-              'and the same figures.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: context.colors.muted),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
