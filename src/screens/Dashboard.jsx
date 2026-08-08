@@ -14,7 +14,7 @@ import { materialsQuery, purchasesQuery } from '../data/materials.js'
 import { recentErrorsQuery } from '../data/errors.js'
 import { grossMargin } from '../lib/materials.js'
 import { dailySummaryCsv, downloadCsv, monthRange, purchasesCsv, salesCsv } from '../lib/csv.js'
-import { Empty, Money } from '../components/ui.jsx'
+import { Empty, Loading, Money } from '../components/ui.jsx'
 import { getDocs } from 'firebase/firestore'
 
 /**
@@ -92,6 +92,24 @@ export default function Dashboard() {
   const best = week.filter((d) => d.total > 0)
   const weekTotal = week.reduce((sum, d) => sum + d.total, 0)
   const tradingDays = best.length || 1
+
+  // Wait for the two feeds the figures are made of, and nothing else.
+  //
+  // Without this the whole page drew immediately with every total at Rs 0,
+  // which is not a missing number — it is a wrong one, and it says the shops
+  // took nothing today. The rest (materials, purchases, reports) only feed
+  // panels below the fold, so holding the takings back for them would be the
+  // slowest read deciding when the owner sees the one figure he opened this
+  // for.
+  if (sales.loading || branches.loading) {
+    return (
+      <div className="page">
+        <div className="card">
+          <Loading>Reading today's takings…</Loading>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page">

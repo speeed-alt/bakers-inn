@@ -9,7 +9,7 @@ import { basketTotal, formatMoney, parseMoney, toMinor } from '../lib/money.js'
 import { exactCodeMatch, findProducts } from '../lib/search.js'
 import { recordRefund, recordSale, salesForDay, voidSale } from '../data/sales.js'
 import { closingDoc, isClosed } from '../data/closings.js'
-import { Empty, Modal, Money, Stepper } from '../components/ui.jsx'
+import { Empty, Loading, Modal, Money, Stepper } from '../components/ui.jsx'
 import { QUICK_CASH_STEPS, VOID_REASONS } from '../config.js'
 import Receipt from '../components/Receipt.jsx'
 import { printReceipt } from '../lib/paper.js'
@@ -99,6 +99,20 @@ export default function Sell({ branchId, branchName }) {
     setPaying(false)
     setReceipt(sale)
     entry.current?.focus()
+  }
+
+  // Nothing can be rung up without a catalogue, and a till showing an empty one
+  // is worse than a till showing nothing: the cashier types a code, is told it
+  // does not exist, and starts doubting the system in front of a customer.
+  // After the first load this is instant — Firestore answers from the device.
+  if (products.loading) {
+    return (
+      <div className="page">
+        <div className="card">
+          <Loading>Reading the catalog…</Loading>
+        </div>
+      </div>
+    )
   }
 
   if (mustCloseYesterday) {

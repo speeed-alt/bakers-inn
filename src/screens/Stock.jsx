@@ -4,7 +4,7 @@ import { useAuth } from '../auth.jsx'
 import { businessDateOf, nextDate } from '../lib/dates.js'
 import { receiveTransfer, transfersTo } from '../data/transfers.js'
 import { SHORT_REASONS } from '../config.js'
-import { Stepper } from '../components/ui.jsx'
+import { Loading, Stepper } from '../components/ui.jsx'
 import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
 
 /**
@@ -27,7 +27,15 @@ function ReceiveDelivery({ branchId, businessDate }) {
   const { profile } = useAuth()
   const incoming = useSnapshot(() => transfersTo(branchId, businessDate), [branchId, businessDate])
 
-  if (incoming.loading) return null
+  // Not null. An empty space here says "nothing is coming", and a cashier who
+  // believes that stops waiting for the van.
+  if (incoming.loading) {
+    return (
+      <div className="card">
+        <Loading inline>Checking for deliveries…</Loading>
+      </div>
+    )
+  }
 
   const arriving = (incoming.data ?? []).filter((t) => t.direction !== 'return')
   const pending = arriving.filter((t) => t.status === 'dispatched')

@@ -174,6 +174,32 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
 .grow { flex: 1; }
 .center { text-align: center; }
 
+/* ---- loading -------------------------------------------------------------
+   Something has to move. Static grey text reads exactly like a screen that has
+   given up, and the honest answer is usually "this tablet is on shop wifi and
+   this is the first read of the day". */
+
+.loading-note {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 34px 16px; color: var(--muted); font-size: 14px; text-align: center;
+}
+.spinner {
+  width: 22px; height: 22px; flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--ink);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+/* Slowed rather than stopped: a still spinner would say the opposite of what a
+   spinner is for. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+}
+/* Inline, for a panel inside a screen that has already drawn. */
+.loading-note.inline { flex-direction: row; padding: 18px 15px; justify-content: flex-start; }
+.loading-note.inline .spinner { width: 16px; height: 16px; }
+
 .chip {
   display: inline-flex; align-items: center;
   padding: 7px 14px; border-radius: 999px;

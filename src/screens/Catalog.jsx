@@ -7,7 +7,7 @@ import { PRODUCT_CATEGORIES, ROLES } from '../config.js'
 import { archiveProduct, saveBranch, saveProduct, setUserActive } from '../data/catalog.js'
 import { createStaff } from '../data/staff.js'
 import { isValidPin } from '../lib/pin.js'
-import { Empty, Modal, Money } from '../components/ui.jsx'
+import { Empty, Loading, Modal, Money } from '../components/ui.jsx'
 
 const TABS = ['Products', 'People', 'Outlets']
 
@@ -36,6 +36,17 @@ function Products() {
   const list = [...(products.data ?? [])].sort(
     (a, b) => (a.category ?? '').localeCompare(b.category ?? '') || a.name.localeCompare(b.name),
   )
+
+  // An empty catalog and a catalog that has not arrived look identical, and the
+  // wrong one of those invites somebody to start adding products that already
+  // exist.
+  if (products.loading) {
+    return (
+      <div className="card">
+        <Loading>Reading the catalog…</Loading>
+      </div>
+    )
+  }
 
   return (
     <>

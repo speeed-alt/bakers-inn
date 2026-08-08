@@ -45,6 +45,20 @@ export function Empty({ children }) {
   return <p className="muted center" style={{ padding: '32px 16px' }}>{children}</p>
 }
 
-export function Loading() {
-  return <Empty>Loading…</Empty>
+/**
+ * A spinner with words next to it.
+ *
+ * Both halves matter. Without motion it reads as a screen that has stopped;
+ * without words it says nothing about which of a dozen reads is slow. Saying
+ * what is being fetched turns a suspicious pause into an explained one, which
+ * is the difference between a cashier waiting and a cashier reaching for the
+ * paper pad.
+ */
+export function Loading({ children = 'Loading…', inline = false }) {
+  return (
+    <div className={inline ? 'loading-note inline' : 'loading-note'} role="status" aria-live="polite">
+      <span className="spinner" aria-hidden="true" />
+      <span>{children}</span>
+    </div>
+  )
 }
