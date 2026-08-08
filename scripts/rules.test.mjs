@@ -471,6 +471,67 @@ test('an outlet cannot read a delivery meant for somewhere else', async () => {
   await assertSucceeds(getDoc(doc(as(OWNER), 'transfers', 'T-b3')))
 })
 
+test('an outlet can ask about a day it has not closed yet', async () => {
+  // The till asks this on every load, and for most of the day the answer is
+  // "there is no such document". That has to come back as an empty read, not a
+  // refusal: a rule touching resource.data cannot be evaluated against a
+  // document that does not exist, and the denial it produced was
+  // indistinguishable from a real permission fault.
+  await assertSucceeds(getDoc(doc(as(CASHIER_B2), 'closings', 'C-20991231-B2')))
+})
+
+test('a closing that does exist is still only for its own outlet', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'closings', 'C-20260801-B3'), {
+      branchId: 'B3', businessDate: '2026-08-01', status: 'closed', salesTotal: 100,
+    })
+  })
+  await assertFails(getDoc(doc(as(CASHIER_B2), 'closings', 'C-20260801-B3')))
+  await assertSucceeds(getDoc(doc(as(OWNER), 'closings', 'C-20260801-B3')))
+})
+
+// --- Faults reported by the tablets -----------------------------------------
+
+const faultFrom = (uid) => ({
+  message: 'Cannot read properties of undefined',
+  stack: 'at Sell.jsx:1',
+  where: 'render',
+  userId: uid,
+  branchId: 'B2',
+  businessDate: '2026-07-29',
+})
+
+test('a tablet reports its own fault', async () => {
+  await assertSucceeds(
+    setDoc(doc(as(CASHIER_B2), 'clientErrors', 'e-1'), faultFrom(CASHIER_B2)),
+  )
+})
+
+test('a fault cannot be filed in somebody else’s name', async () => {
+  // Otherwise one tablet could bury another outlet in invented faults, and the
+  // trail back to the device that is actually broken would be worthless.
+  await assertFails(
+    setDoc(doc(as(CASHIER_B2), 'clientErrors', 'e-2'), faultFrom(CASHIER_MAIN)),
+  )
+})
+
+test('someone signed out cannot report anything', async () => {
+  const db = env.unauthenticatedContext().firestore()
+  await assertFails(setDoc(doc(db, 'clientErrors', 'e-3'), faultFrom(CASHIER_B2)))
+})
+
+test('only the owner reads the fault list', async () => {
+  await assertSucceeds(getDocs(query(collection(as(OWNER), 'clientErrors'))))
+  // A stack trace names the code and the outlet. That is the owner's business.
+  await assertFails(getDocs(query(collection(as(CASHIER_B2), 'clientErrors'))))
+  await assertFails(getDoc(doc(as(CASHIER_B2), 'clientErrors', 'e-1')))
+})
+
+test('a fault report can never be edited away, not even by the owner', async () => {
+  await assertFails(updateDoc(doc(as(OWNER), 'clientErrors', 'e-1'), { message: 'never mind' }))
+  await assertFails(deleteDoc(doc(as(OWNER), 'clientErrors', 'e-1')))
+})
+
 test('no part of the cycle can ever be deleted', async () => {
   await assertFails(deleteDoc(doc(as(OWNER), 'demands', 'D-B2')))
   await assertFails(deleteDoc(doc(as(OWNER), 'productionOrders', 'PO')))

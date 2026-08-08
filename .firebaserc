@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "demo-bakery"
-  }
+    "default": "demo-bakery",
+    "prod": "bakers-inn-pk"
+  },
+  "targets": {},
+  "etags": {}
 }

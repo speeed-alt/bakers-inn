@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
-import { businessDateOf, formatDate } from '../lib/dates.js'
+import { addDays, businessDateOf, formatDate, formatTime } from '../lib/dates.js'
 import { formatMoney } from '../lib/money.js'
 import { summariseDay } from '../lib/report.js'
 import { productionProgress, shortfalls } from '../lib/compile.js'
@@ -11,6 +11,7 @@ import { reopenCount } from '../lib/closing.js'
 import { productionDoc } from '../data/production.js'
 import { demandsForDate } from '../data/demands.js'
 import { materialsQuery, purchasesQuery } from '../data/materials.js'
+import { recentErrorsQuery } from '../data/errors.js'
 import { grossMargin } from '../lib/materials.js'
 import { dailySummaryCsv, downloadCsv, monthRange, purchasesCsv, salesCsv } from '../lib/csv.js'
 import { Empty, Money } from '../components/ui.jsx'
@@ -48,6 +49,7 @@ export default function Dashboard() {
   )
   const materials = useSnapshot(() => materialsQuery(), [])
   const purchases = useSnapshot(() => purchasesQuery(limit(60)), [])
+  const faults = useSnapshot(() => recentErrorsQuery(20), [])
 
   const branchList = branches.data ?? []
   const nameOf = (id) => branchList.find((b) => b.id === id)?.name ?? id
@@ -139,6 +141,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <Faults rows={faults.data ?? []} today={today} nameOf={nameOf} />
 
       <div className="card">
         <h3>Today's round</h3>
@@ -251,6 +255,48 @@ export default function Dashboard() {
           </table>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Tablets that hit a fault recently.
+ *
+ * Only the last few days are shown, and the card disappears entirely when there
+ * is nothing to say. That is deliberate: a fault report can never be edited or
+ * deleted, so there is no way to tick one off, and a permanent list of old
+ * crashes would train the owner to ignore the whole card — which is the one
+ * outcome that would make this worse than not having it.
+ *
+ * The wording stays plain. He does not need the stack trace; he needs to know
+ * which shop to ring.
+ */
+function Faults({ rows, today, nameOf }) {
+  const since = addDays(today, -3)
+  const recent = rows.filter((r) => (r.businessDate ?? '') >= since)
+  if (recent.length === 0) return null
+
+  return (
+    <div className="card">
+      <div className="row between">
+        <h3 style={{ margin: 0 }}>Tablets reporting trouble</h3>
+        <span className="muted small">last 3 days</span>
+      </div>
+      <div className="attention">
+        {recent.slice(0, 6).map((r) => (
+          <div className="attention-row" key={r.id}>
+            {nameOf(r.branchId)} · till {r.device ?? '?'}
+            <div className="where">
+              {formatDate(r.businessDate)}
+              {r.at?.toDate && ` at ${formatTime(r.at.toDate())}`} · {r.message}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="muted small" style={{ marginBottom: 0 }}>
+        The tablet recovered on its own — no sales are lost. If the same outlet keeps appearing,
+        that screen needs looking at.
+      </p>
     </div>
   )
 }

@@ -1,0 +1,20 @@
+# Vercel builds and serves the web app only. Everything below either belongs to
+# another target or is rebuilt on the server, and uploading it makes a deploy
+# that should move 2 MB move 80.
+#
+# `mobile/` is the Flutter client: its own toolchain, its own build output, and
+# an Android project. None of it can be served by a CDN, and .dart_tool alone is
+# tens of megabytes.
+mobile/
+
+functions/
+scripts/
+dev-dist/
+
+# Rebuilt by `npm run build` during the deploy.
+dist/
+
+*.log
+firebase-debug.log
+firestore-debug.log
+.firebase/

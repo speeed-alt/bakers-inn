@@ -55,6 +55,14 @@ then sign in.
 | Hina   | cashier    | B3, Model Town    | 4444 |
 | Usman  | specialist | MAIN, Main Outlet | 5555 |
 
+**These work against the emulators only.** Seeding a real project refuses to run
+unless a PIN is supplied for each person in the environment, so that no real PIN
+is ever written into a file that git would remember:
+
+```bash
+PIN_OWNER=… PIN_AYESHA=… PIN_BILAL=… PIN_HINA=… PIN_USMAN=… SEED_PROJECT=… npm run seed
+```
+
 ### Tests
 
 ```bash
@@ -142,8 +150,14 @@ firebase deploy --only firestore:rules,firestore:indexes,functions
 ```
 
 **3. Seed the real data once** — outlets, staff, the product list — by pointing
-the seed script at the project instead of the emulator. Change the PINs in
-`scripts/seed.mjs` first; the ones in this file are for development.
+the seed script at the project instead of the emulator. This needs a
+service-account key (Project settings → Service accounts). Keep that file
+outside the repository: unlike the web config it is a genuine secret, and it
+bypasses `firestore.rules` completely.
+
+```bash
+SEED_PROJECT=… GOOGLE_APPLICATION_CREDENTIALS=…/key.json PIN_OWNER=… PIN_AYESHA=… npm run seed
+```
 
 **4. Give Vercel the six values** from `.env.example` (Project → Settings →
 Environment Variables), then deploy:
@@ -152,9 +166,18 @@ Environment Variables), then deploy:
 vercel --prod
 ```
 
-`vercel.json` already handles the parts that bite: deep links like `/close`
-survive a refresh, and neither `index.html` nor the service worker is cached,
-so a tablet cannot keep running last month's till after a deploy.
+`vercel.json` already handles the parts that bite, and each rule in it is there
+for a reason worth knowing — Vercel's schema rejects unknown keys, so the file
+itself cannot carry comments:
+
+- **The rewrite** sends every path to `index.html`, so deep links like `/close`
+  survive a refresh instead of returning a 404 from the CDN.
+- **`index.html` and `sw.js` are never cached.** A tablet holding an old shell or
+  service worker would keep running last month's till after a deploy, and nobody
+  on the counter would know. Everything under `/assets/` carries a content hash
+  in its filename, so that is cached forever.
+- **`X-Frame-Options: DENY` and `Referrer-Policy: same-origin`** keep a screen
+  showing the day's takings out of other people's frames and referrer logs.
 
 **5. Add the Vercel domain** to Firebase → Authentication → Settings →
 Authorised domains, or every sign-in will be refused.

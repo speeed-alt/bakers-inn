@@ -3,7 +3,9 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { doc } from 'firebase/firestore'
 import { db } from './firebase.js'
 import { clearDeviceBranchId, deviceBranchId, useAuth } from './auth.jsx'
-import { useOnline, useSnapshot } from './lib/hooks.js'
+import { useClockDrift, useOnline, useSnapshot } from './lib/hooks.js'
+import { describeDrift, driftMatters } from './lib/clock.js'
+import { useTheme } from './lib/theme.js'
 import { Loading } from './components/ui.jsx'
 import { deviceLetter } from './lib/ids.js'
 import Setup from './screens/Setup.jsx'
@@ -16,6 +18,34 @@ import Bake from './screens/Bake.jsx'
 import Stock from './screens/Stock.jsx'
 import Dispatch from './screens/Dispatch.jsx'
 import Materials from './screens/Materials.jsx'
+
+/**
+ * Light or dark, one tap.
+ *
+ * The icon shows the side you are going to, not the side you are on, because
+ * "press the moon to get dark" needs no explaining to anybody. The label says it
+ * in words for screen readers and for the long-press tooltip.
+ */
+function ThemeToggle() {
+  const { theme, toggle } = useTheme()
+  const goingDark = theme !== 'dark'
+  const label = goingDark ? 'Switch to dark' : 'Switch to light'
+
+  return (
+    <button className="btn ghost small no-print" onClick={toggle} title={label} aria-label={label}>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+        {goingDark ? (
+          <path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z" strokeLinejoin="round" />
+        ) : (
+          <>
+            <circle cx="12" cy="12" r="4.2" />
+            <path d="M12 2.4v2.1M12 19.5v2.1M2.4 12h2.1M19.5 12h2.1M5.2 5.2l1.5 1.5M17.3 17.3l1.5 1.5M18.8 5.2l-1.5 1.5M6.7 17.3l-1.5 1.5" />
+          </>
+        )}
+      </svg>
+    </button>
+  )
+}
 
 const NAV = {
   owner: [
@@ -109,6 +139,7 @@ export default function App() {
   const { user, profile, loading, stalled, claimsStale, signOut } = useAuth()
   const [branchId, setBranchId] = useState(deviceBranchId())
   const online = useOnline()
+  const drift = useClockDrift(online)
 
   const branch = useSnapshot(() => (branchId ? doc(db, 'branches', branchId) : null), [branchId])
 
@@ -172,6 +203,7 @@ export default function App() {
           <b>{profile.name}</b>
           <span>{profile.role}</span>
         </span>
+        <ThemeToggle />
         <button className="btn ghost small no-print" onClick={signOut}>Sign out</button>
       </header>
 
@@ -181,6 +213,13 @@ export default function App() {
         <div className="strip block no-print">
           This sign-in is out of date, so nothing you enter will save. Sign out and back in.{' '}
           <button className="btn ghost small" onClick={signOut}>Sign out</button>
+        </div>
+      )}
+
+      {driftMatters(drift) && (
+        <div className="strip block no-print">
+          This tablet's clock is {describeDrift(drift)}. Sales are being filed under the wrong time,
+          and possibly the wrong day. Fix the date and time in the tablet's settings.
         </div>
       )}
 

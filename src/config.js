@@ -28,6 +28,11 @@ export const MINOR_UNITS = 10 ** CURRENCY_DECIMALS
 // late shift that runs past midnight lands on the right day's report.
 export const DAY_ROLLOVER_HOUR = 4
 
+// How far a tablet's clock may be out before the app says so. Generous on
+// purpose: a couple of minutes of drift changes nothing, and a banner nobody
+// needs is a banner everybody learns to ignore.
+export const CLOCK_TOLERANCE_MINUTES = 5
+
 // The daily cycle. An outlet orders on the evening before the day it is for;
 // the system compiles every outlet's order into one baking list at COMPILE_HOUR
 // the next morning, before the kitchen starts.

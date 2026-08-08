@@ -5,9 +5,27 @@ dist/
 dev-dist/
 .env
 .env.local
+.env.*.local
+
+# Service-account keys. These are real secrets — unlike the Firebase web config,
+# one of these grants full admin access and bypasses firestore.rules entirely.
+# They belong outside the repo; this is only here to catch a stray download.
+*firebase-adminsdk*.json
+service-account*.json
 *.log
 .firebase/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
 .DS_Store
+
+# The Flutter client. Source is tracked; the toolchain's working directories and
+# build output are not — .dart_tool alone runs to tens of megabytes.
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins-dependencies
+mobile/android/.gradle/
+mobile/android/local.properties
+
+.vercel
+.env*

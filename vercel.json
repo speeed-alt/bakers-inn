@@ -8,7 +8,6 @@
 
   "headers": [
     {
-      "comment": "Never cache the shell or the worker. A tablet that has cached an old index.html or service worker will keep running last month's till after a deploy, and nobody on the counter would know.",
       "source": "/(index.html)?",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
     },
@@ -17,12 +16,10 @@
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
     },
     {
-      "comment": "Built assets carry a content hash in the filename, so they are safe to keep forever.",
       "source": "/assets/(.*)",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
     {
-      "comment": "The till holds takings. Keep it out of frames and off referrers.",
       "source": "/(.*)",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },

@@ -1,7 +1,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { onRequest } from 'firebase-functions/v2/https'
 import { onDocumentWritten } from 'firebase-functions/v2/firestore'
-import { logger } from 'firebase-functions'
+import { logger, setGlobalOptions } from 'firebase-functions'
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
@@ -26,6 +26,18 @@ import { COMPILE_HOUR, HISTORY_WEEKS, HUB_BRANCH_ID, TIME_ZONE } from './shared/
 // orders together into a single baking list and pre-fill a delivery note for
 // each shop. It runs on a clock rather than behind a button precisely so nobody
 // can forget to press it.
+
+// Every function runs beside the database, in Mumbai. This is not a preference:
+// a v2 Firestore trigger has to live in the same region as the database it
+// watches, and the default is us-central1, so without this line syncStaffClaims
+// and reportOnClose simply refuse to deploy. Keeping the scheduled jobs here too
+// means the whole compile talks to Firestore over a short wire rather than
+// crossing the planet twice for every read.
+//
+// maxInstances is a cost fuse, not a capacity plan. Three outlets cannot
+// generate meaningful load; what it prevents is a bad deploy or a retry storm
+// quietly scaling to hundreds of instances on a billed account overnight.
+setGlobalOptions({ region: 'asia-south1', maxInstances: 10 })
 
 initializeApp()
 const db = getFirestore()

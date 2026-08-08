@@ -5,16 +5,38 @@
 //   npm run emulators     (in one terminal)
 //   npm run seed          (in another)
 
-process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080'
-process.env.FIREBASE_AUTH_EMULATOR_HOST ||= '127.0.0.1:9099'
+// Which project to seed. A 'demo-' id means the emulators; anything else is a
+// real cloud project, and the emulator hosts must stay unset or every write
+// would go to a local emulator that isn't running.
+//
+//   npm run seed                                    the emulators
+//   SEED_PROJECT=bakers-inn-pk npm run seed         the real project
+//
+// Seeding a real project needs admin credentials, because the Admin SDK bypasses
+// the security rules. Point GOOGLE_APPLICATION_CREDENTIALS at a service-account
+// key JSON downloaded from Firebase console -> Project settings -> Service
+// accounts. That file is a genuine secret: keep it outside the repo.
+const projectId = process.env.SEED_PROJECT || process.env.GCLOUD_PROJECT || 'demo-bakery'
+const useEmulator = projectId.startsWith('demo-')
 
-import { initializeApp } from 'firebase-admin/app'
+if (useEmulator) {
+  process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080'
+  process.env.FIREBASE_AUTH_EMULATOR_HOST ||= '127.0.0.1:9099'
+} else if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  console.error(
+    `\nRefusing to seed '${projectId}': GOOGLE_APPLICATION_CREDENTIALS is not set.\n` +
+      'Download a service-account key from the Firebase console and point that\n' +
+      'variable at it, or leave SEED_PROJECT unset to seed the emulators.\n',
+  )
+  process.exit(1)
+}
+
+import { initializeApp, applicationDefault } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { getAuth } from 'firebase-admin/auth'
-import { pinPassword, staffEmail } from '../src/lib/pin.js'
+import { isValidPin, pinPassword, staffEmail } from '../src/lib/pin.js'
 
-const projectId = process.env.GCLOUD_PROJECT || 'demo-bakery'
-initializeApp({ projectId })
+initializeApp(useEmulator ? { projectId } : { projectId, credential: applicationDefault() })
 const db = getFirestore()
 const auth = getAuth()
 
@@ -24,13 +46,54 @@ const BRANCHES = [
   { id: 'B3', name: 'Model Town', isMain: false },
 ]
 
+// `devPin` is a development convenience and nothing more. It is used only
+// against the emulators, where the whole database is a throwaway on this
+// machine. A real project refuses to seed unless every PIN is supplied through
+// the environment:
+//
+//   PIN_OWNER=**** PIN_AYESHA=**** ... SEED_PROJECT=bakers-inn-pk npm run seed
+//
+// The stars are not coyness. A four-digit number written in an example here
+// reads exactly like a real one to the next person who opens the file, and this
+// file is on GitHub.
+//
+// Real PINs are never written into this file. Changing one later would not help:
+// git keeps every version of every file, so a PIN committed once stays readable
+// in the history for as long as the repository exists.
 const STAFF = [
-  { uid: 'owner', name: 'Owner', role: 'owner', branchId: 'MAIN', pin: '1111' },
-  { uid: 'ayesha', name: 'Ayesha', role: 'cashier', branchId: 'MAIN', pin: '2222' },
-  { uid: 'bilal', name: 'Bilal', role: 'cashier', branchId: 'B2', pin: '3333' },
-  { uid: 'hina', name: 'Hina', role: 'cashier', branchId: 'B3', pin: '4444' },
-  { uid: 'usman', name: 'Usman', role: 'specialist', branchId: 'MAIN', pin: '5555' },
+  { uid: 'owner', name: 'Owner', role: 'owner', branchId: 'MAIN', devPin: '1111' },
+  { uid: 'ayesha', name: 'Ayesha', role: 'cashier', branchId: 'MAIN', devPin: '2222' },
+  { uid: 'bilal', name: 'Bilal', role: 'cashier', branchId: 'B2', devPin: '3333' },
+  { uid: 'hina', name: 'Hina', role: 'cashier', branchId: 'B3', devPin: '4444' },
+  { uid: 'usman', name: 'Usman', role: 'specialist', branchId: 'MAIN', devPin: '5555' },
 ]
+
+/** The PIN to seed for one person: the environment first, dev default second. */
+function pinFor({ uid, devPin }) {
+  return process.env[`PIN_${uid.toUpperCase()}`] || (useEmulator ? devPin : undefined)
+}
+
+/**
+ * Refuse the whole seed before writing anything if any PIN is missing or
+ * malformed. Half-seeded staff would be worse than none: some people able to
+ * sign in, others not, and no obvious reason why.
+ */
+function checkPins() {
+  const problems = []
+  for (const person of STAFF) {
+    const pin = pinFor(person)
+    const variable = `PIN_${person.uid.toUpperCase()}`
+    if (!pin) problems.push(`${variable} is not set (for ${person.name})`)
+    else if (!isValidPin(pin)) problems.push(`${variable} must be exactly 4 digits`)
+  }
+  if (problems.length > 0) {
+    console.error(`\nRefusing to seed '${projectId}':\n`)
+    for (const problem of problems) console.error(`  - ${problem}`)
+    console.error('\nSupply a PIN for each person in the environment. Do not put real')
+    console.error('PINs in scripts/seed.mjs — git would keep them forever.\n')
+    process.exit(1)
+  }
+}
 
 // The real catalogue, taken from The Baker's Inn's own Daily Closing Report.
 //
@@ -101,9 +164,10 @@ const MATERIALS = [
   ['packaging', 'Boxes and Bags', 'packet', 450, 10],
 ]
 
-async function ensureStaff({ uid, name, role, branchId, pin }) {
+async function ensureStaff(person) {
+  const { uid, name, role, branchId } = person
   const email = staffEmail(uid)
-  const password = await pinPassword(uid, pin)
+  const password = await pinPassword(uid, pinFor(person))
   try {
     await auth.createUser({ uid, email, password, displayName: name })
   } catch (error) {
@@ -126,6 +190,13 @@ async function ensureStaff({ uid, name, role, branchId, pin }) {
 }
 
 async function main() {
+  console.log(
+    useEmulator
+      ? `Seeding the emulators (${projectId})\n`
+      : `Seeding the REAL project ${projectId}\n`,
+  )
+  checkPins()
+
   for (const branch of BRANCHES) {
     const { id, ...rest } = branch
     await db.collection('branches').doc(id).set(rest)
@@ -136,10 +207,15 @@ async function main() {
   console.log(`✓ ${STAFF.length} staff accounts`)
 
   // Demo data only: drop products that are no longer in the list so re-seeding
-  // never leaves stale items behind. The running system never deletes anything.
-  const keep = new Set(PRODUCTS.map(([id]) => id))
-  const existing = await db.collection('products').get()
-  for (const d of existing.docs) if (!keep.has(d.id)) await d.ref.delete()
+  // never leaves stale items behind. The running system never deletes anything,
+  // and neither does this script once it is pointed at a real project — an item
+  // the shop has stopped making is archived in the app, not erased, or its sales
+  // history loses the name and price it was sold under.
+  if (useEmulator) {
+    const keep = new Set(PRODUCTS.map(([id]) => id))
+    const existing = await db.collection('products').get()
+    for (const d of existing.docs) if (!keep.has(d.id)) await d.ref.delete()
+  }
 
   for (const [id, code, name, category, price, sellsNextDay] of PRODUCTS) {
     await db
@@ -150,25 +226,43 @@ async function main() {
   console.log(`✓ ${PRODUCTS.length} products`)
 
   for (const [id, name, unit, costPerUnit, reorderLevel] of MATERIALS) {
-    // onHand starts at zero: the first purchase or count puts real stock on the
-    // shelf, so nobody inherits a figure nobody counted.
-    await db.collection('rawMaterials').doc(id).set({
-      name, unit, costPerUnit, reorderLevel,
-      onHand: 0, receivedSinceCount: 0, spoiledSinceCount: 0, active: true,
-    })
+    const ref = db.collection('rawMaterials').doc(id)
+    // The three running counters are set once, when the material is first
+    // created, and never again. Re-running the seed must not wipe a count
+    // somebody actually made in the storeroom — so an existing material only
+    // has its description refreshed. onHand starts at zero deliberately: the
+    // first purchase or count puts real stock on the shelf, so nobody inherits
+    // a figure nobody counted.
+    const description = { name, unit, costPerUnit, reorderLevel, active: true }
+    const exists = (await ref.get()).exists
+    await ref.set(
+      exists
+        ? description
+        : { ...description, onHand: 0, receivedSinceCount: 0, spoiledSinceCount: 0 },
+      { merge: true },
+    )
   }
   console.log(`✓ ${MATERIALS.length} raw materials`)
 
+  // Against a real project the PINs came from whoever ran this, so echoing them
+  // back teaches nobody anything and only writes them into terminal history.
   console.log('\nSign in with:')
   for (const s of STAFF) {
-    console.log(`  ${s.name.padEnd(7)} ${s.role.padEnd(11)} ${s.branchId.padEnd(5)} PIN ${s.pin}`)
+    const pin = useEmulator ? `PIN ${pinFor(s)}` : 'PIN as supplied'
+    console.log(`  ${s.name.padEnd(7)} ${s.role.padEnd(11)} ${s.branchId.padEnd(5)} ${pin}`)
   }
 }
 
 main().then(
   () => process.exit(0),
   (error) => {
-    console.error('\nSeed failed. Are the emulators running? (npm run emulators)\n')
+    console.error(
+      useEmulator
+        ? '\nSeed failed. Are the emulators running? (npm run emulators)\n'
+        : `\nSeed failed against ${projectId}. Check that Firestore exists, that the\n` +
+            'service-account key in GOOGLE_APPLICATION_CREDENTIALS belongs to this\n' +
+            'project, and that Email/Password sign-in is enabled.\n',
+    )
     console.error(error)
     process.exit(1)
   },

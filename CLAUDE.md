@@ -59,8 +59,11 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 `JAVA_HOME` alone is not enough — the Firebase CLI reads `java` off `PATH`.
 
-Dev PINs: Owner 1111, Ayesha 2222, Bilal 3333, Hina 4444, Usman 5555.
-**Change them before going live.**
+Dev PINs: Owner 1111, Ayesha 2222, Bilal 3333, Hina 4444, Usman 5555. These are
+**emulator-only**. Seeding a real project refuses to run unless every PIN comes
+from the environment (`PIN_OWNER`, `PIN_AYESHA`, …), because a PIN committed once
+stays readable in git history for as long as the repository exists. Never put a
+real PIN back into `scripts/seed.mjs`.
 
 ## Traps that have already cost time
 
@@ -83,6 +86,14 @@ allow list: if active() && resource.data.branchId == myBranch();
 
 Separate `allow` statements are considered independently. Non-owner queries must
 therefore pin their branch field; the owner needs no filter.
+
+**A rule that touches `resource.data` cannot read a document that does not
+exist.** Fetching one by id returns *permission denied*, not "no such document".
+The till asks `closings/C-<date>-<branch>` on every load and for most of the day
+that document is not there yet, so it logged a denial every morning — failing
+closed, so nothing broke, but burying the console in errors indistinguishable
+from real ones. Single-document gets on natural-key ids need `resource == null
+||` in front of the field check. Collections only ever queried as lists do not.
 
 **Never read a document inside a rule.** `get(/users/$(uid))` runs once per row
 a query returns and blows Firestore's per-request limit — fine on a quiet day,
@@ -121,6 +132,23 @@ believing a screen.
 | `src/components/` | Shared UI. `TomorrowsOrder` is used by both Stock and the close wizard — do not duplicate it. |
 | `functions/` | The only server code: `syncStaffClaims`, the 05:00 compile, `reportOnClose`, the 06:00 report rebuild, and `compileNow` for testing. |
 | `firestore.rules` | The real permission system. The UI only hides buttons. |
+
+Three things added after the first deploy, each worth knowing about:
+
+- **Faults are reported, not swallowed.** `ErrorBoundary` plus the two window
+  handlers in `main.jsx` write to `clientErrors`, which the owner's dashboard
+  shows for three days. `data/errors.js` caps itself at 20 per session and
+  de-duplicates: a render loop throws hundreds of times a second, and without
+  the cap the reporter would become the outage.
+- **The tablet's clock is checked against the server** on startup and whenever
+  the connection returns (`useClockDrift`). Business dates are stamped by the
+  device, so a wrong clock files a day's takings under the wrong date and
+  nothing else would notice. It warns; it never silently corrects.
+- **Tomorrow's order is suggested from the closing reports** (`lib/suggest.js`),
+  not copied from last week. A day that ended with nothing left and nothing
+  binned measured the shelf rather than demand, so those days are nudged up 10%.
+  A product missing from a report counts as zero for that day — averaging only
+  over the days it appears would order forty every Tuesday off one good one.
 
 **Shared code is copied, not imported.** Cloud Functions deploy only their own
 directory, so `scripts/sync-shared.mjs` copies `src/config.js` and `src/lib/`
@@ -177,18 +205,47 @@ columns map exactly onto what the system tracks. Keep this language:
 - **`users` is world-readable** — the login screen lists names before anyone has
   signed in. No secrets live there; PINs are in Firebase Auth.
 
+## Where it is deployed
+
+| | |
+|---|---|
+| Firebase | `bakers-inn-pk`, Firestore in `asia-south1` (Mumbai) |
+| Functions | pinned to `asia-south1` — a v2 Firestore trigger must live in the same region as its database, and the default is `us-central1` |
+| Vercel | `hz-studio1/bakers-inn` → https://bakers-inn-one.vercel.app |
+| Admin key | `C:\Users\SPEEED\.firebase-keys\bakers-inn-pk-admin.json`, outside the repo on purpose |
+
+Deploy with `--project bakers-inn-pk` (or the `prod` alias). The `.firebaserc`
+default stays `demo-bakery` so `npm run emulators` keeps working offline.
+
+New Vercel URLs must be added to Firebase's authorised domains or every sign-in
+is refused, silently:
+
+```bash
+SEED_PROJECT=bakers-inn-pk GOOGLE_APPLICATION_CREDENTIALS=…/key.json node scripts/authorise-domain.mjs <domain>
+```
+
 ## Known gaps
+
+- **Blaze is not enabled**, so the Cloud Functions are not deployed. Until they
+  are there is no 05:00 baking list — the rules forbid any client from creating
+  a `productionOrders` document — no daily reports, and `syncStaffClaims` is not
+  running, so anyone added through the app signs in with no permissions. Once
+  billing is on: `firebase deploy --only functions --project bakers-inn-pk`, then
+  turn on backups, which also need billing:
+
+  ```bash
+  firebase firestore:databases:update "(default)" --delete-protection ENABLED --point-in-time-recovery ENABLED --project bakers-inn-pk
+  ```
 
 - **No PIN reset.** PINs are never stored, so a forgotten one cannot be looked up
   or reset. Fixing it needs a callable Cloud Function using the Admin SDK.
-- **Order quantities are not yet suggested** from sold+wasted history; tomorrow's
-  order simply repeats the last same weekday.
-- **Not deployed.** Vercel serves only the static app; Firebase is the backend.
-  Without `VITE_FB_*` the app points at `127.0.0.1` and is dead on the internet.
-  Firebase project first — see the README.
 - **Branch names are placeholders** (Main Outlet / Gulberg / Model Town).
 - **`sellsNextDay` was my judgement, not the owner's.** It decides what counts as
   stale at close and is worth confirming with him.
+- **The order suggestion ignores stock already on the shelf.** It answers "how
+  much does this weekday need", not "how much more do we need". For items that
+  carry over it will read slightly high until the carry is subtracted — the
+  close wizard knows that figure by the time the order is placed.
 
 ## Before you finish
 

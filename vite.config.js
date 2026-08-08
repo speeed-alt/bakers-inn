@@ -30,5 +30,27 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        // Split the dependencies away from the app.
+        //
+        // As one file, every deploy made all three outlets re-download the
+        // Firebase SDK — the great majority of the bundle — over mobile data,
+        // to receive a change to a screen. Split out, the libraries keep their
+        // content hash across releases and stay in the browser cache, so a
+        // normal deploy ships only the app chunk. The libraries change when
+        // they are actually upgraded, which is a handful of times a year.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (/node_modules[\\/](@firebase|firebase|idb)[\\/]/.test(id)) return 'firebase'
+          if (/node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) {
+            return 'react'
+          }
+          return undefined
+        },
+      },
+    },
+  },
   server: { port: 5173 },
 })

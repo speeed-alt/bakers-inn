@@ -112,7 +112,21 @@ service cloud.firestore {
 
     // One doc per outlet per day: cash-up (and, from phase 4, the waste count).
     match /closings/{closingId} {
-      allow get: if isOwner() || (active() && resource.data.branchId == myBranch());
+      // `resource == null` is not decoration. This document is fetched by id —
+      // 'C-20260808-B2' — and for most of the day it does not exist yet. A rule
+      // that reaches for resource.data cannot be evaluated against a document
+      // that is not there, so the read is refused rather than answered "no such
+      // document", and the till logs a permission error every single morning
+      // while it asks whether the day has been closed. It failed closed, so
+      // nothing broke; it just buried the console in denials that look exactly
+      // like the real ones.
+      //
+      // The cost of allowing it: a cashier can tell whether another outlet has
+      // closed a given day, because "does not exist" now answers where it used
+      // to refuse. In a three-shop bakery whose staff already read every
+      // outlet's orders, that is not a secret worth a daily false alarm.
+      allow get: if isOwner()
+                 || (active() && (resource == null || resource.data.branchId == myBranch()));
       // See the note on sales about why a query needs its own statements.
       allow list: if isOwner();
       allow list: if active() && resource.data.branchId == myBranch();
@@ -241,6 +255,26 @@ service cloud.firestore {
     match /stockMovements/{movementId} {
       allow read: if isOwner();
       allow create: if isOwner();
+      allow update, delete: if false;
+    }
+
+    // --- Faults reported by the tablets ------------------------------------
+
+    match /clientErrors/{errorId} {
+      // Only the owner reads these. A stack trace names the code and the outlet,
+      // which is his business and nobody else's.
+      allow get: if isOwner();
+      allow list: if isOwner();
+
+      // Any signed-in member of staff may report a fault on their own behalf.
+      // Pinning userId to the caller keeps one tablet from filing reports in
+      // somebody else's name, and means a flood can always be traced back.
+      allow create: if staff()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.message is string;
+
+      // A fault report is a fact about something that happened. Editing one
+      // away would be editing the record of the thing going wrong.
       allow update, delete: if false;
     }
 
