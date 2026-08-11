@@ -40,7 +40,11 @@ const db = getFirestore()
 
 const CLEAR = process.argv.includes('--clear')
 const TODAY = businessDateOf()
-const HISTORY_DAYS = 10
+
+// A whole month, not a week. Wages and rent are monthly costs, and setting a
+// month of them against ten days of takings makes a healthy bakery look like it
+// is losing money — which is an artefact of the demo, not a finding.
+const HISTORY_DAYS = 30
 
 // A steady, deterministic shuffle. Real randomness would make two runs
 // disagree, and a demo that changes every time is impossible to talk about.
@@ -306,6 +310,70 @@ async function todayRun() {
     ])
   }
 
+  // Wages and bills, so the profit figure is a real one rather than takings
+  // less flour. These are what turn a gross margin into a profit.
+  const month = TODAY.slice(0, 7)
+  const wages = [
+    ['ayesha', 'Ayesha', 'MAIN', 45000],
+    ['bilal', 'Bilal', 'B2', 42000],
+    ['hina', 'Hina', 'B3', 42000],
+    ['usman', 'Usman', 'MAIN', 58000],
+  ]
+  for (const [personId, personName, branchId, amount] of wages) {
+    writes.push([
+      'expenses',
+      `SAL-${month.replace('-', '')}-${personId}`,
+      {
+        ...demo,
+        type: 'salary',
+        category: 'Salary',
+        personId,
+        personName,
+        branchId,
+        month,
+        businessDate: TODAY,
+        amount,
+        updatedBy: 'owner',
+        updatedByName: 'Owner',
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+    ])
+  }
+
+  // Sized so the three shops together run at a believable margin. The first
+  // pass put rent and power at a third of takings, which left the whole
+  // business breaking even — a fair description of my arithmetic and a libel on
+  // the bakery, same as the waste figures were.
+  const bills = [
+    ['MAIN', 'Electricity', 22000],
+    ['MAIN', 'Gas', 9000],
+    ['MAIN', 'Rent', 35000],
+    ['B2', 'Electricity', 18000],
+    ['B2', 'Rent', 30000],
+    ['B3', 'Electricity', 14000],
+    ['B3', 'Rent', 25000],
+    [null, 'Internet', 6000],
+  ]
+  for (const [branchId, category, amount] of bills) {
+    const slug = category.toLowerCase()
+    writes.push([
+      'expenses',
+      `UTL-${month.replace('-', '')}-${branchId ?? 'ALL'}-${slug}`,
+      {
+        ...demo,
+        type: 'utility',
+        category,
+        branchId,
+        month,
+        businessDate: TODAY,
+        amount,
+        updatedBy: 'owner',
+        updatedByName: 'Owner',
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+    ])
+  }
+
   // Materials: a delivery this week and a count, so usage and days-left work.
   // Sized to land materials near a third of a week's takings, which is roughly
   // what a bakery this size spends. The first pass bought nearly half and made
@@ -317,31 +385,35 @@ async function todayRun() {
     ['eggs', 'Eggs', 'dozen', 350, 20],
     ['cooking-oil', 'Cooking Oil', 'litre', 560, 12],
   ]
-  const bought = addDays(TODAY, -6)
   const counted = addDays(TODAY, -1)
 
-  writes.push([
-    'purchases',
-    `P-${compactDate(bought)}-DEMO`,
-    {
-      ...demo,
-      ref: `P-${compactDate(bought)}-DEMO`,
-      businessDate: bought,
-      supplier: 'Al-Karam Traders',
-      items: materials.map(([id, name, unit, cost, qty]) => ({
-        materialId: id,
-        materialName: name,
-        unit,
-        qty,
-        unitCost: cost,
-        lineTotal: qty * cost,
-      })),
-      total: materials.reduce((sum, [, , , cost, qty]) => sum + cost * qty, 0),
-      createdBy: 'owner',
-      createdByName: 'Owner',
-      createdAt: FieldValue.serverTimestamp(),
-    },
-  ])
+  // A delivery a week, so a month of ingredients sits against a month of
+  // takings. One weekly delivery would have understated the cost fourfold.
+  for (let week = 0; week < 4; week += 1) {
+    const bought = addDays(TODAY, -1 - week * 7)
+    writes.push([
+      'purchases',
+      `P-${compactDate(bought)}-DEMO`,
+      {
+        ...demo,
+        ref: `P-${compactDate(bought)}-DEMO`,
+        businessDate: bought,
+        supplier: 'Al-Karam Traders',
+        items: materials.map(([id, name, unit, cost, qty]) => ({
+          materialId: id,
+          materialName: name,
+          unit,
+          qty,
+          unitCost: cost,
+          lineTotal: qty * cost,
+        })),
+        total: materials.reduce((sum, [, , , cost, qty]) => sum + cost * qty, 0),
+        createdBy: 'owner',
+        createdByName: 'Owner',
+        createdAt: FieldValue.serverTimestamp(),
+      },
+    ])
+  }
 
   for (const [id, name, unit, cost, qty] of materials) {
     // Counted five days later at about two thirds — that gap is what teaches

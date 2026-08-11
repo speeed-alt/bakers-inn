@@ -20,6 +20,7 @@ import Stock from './screens/Stock.jsx'
 import Dispatch from './screens/Dispatch.jsx'
 import Materials from './screens/Materials.jsx'
 import StockReport from './screens/StockReport.jsx'
+import MoneyScreen from './screens/Money.jsx'
 
 /**
  * Light or dark, one tap.
@@ -53,6 +54,7 @@ const NAV = {
   owner: [
     { to: '/dashboard', label: 'Dashboard' },
     { to: '/stock-report', label: 'Stock' },
+    { to: '/money', label: 'Money' },
     { to: '/materials', label: 'Materials' },
     { to: '/catalog', label: 'Catalog' },
   ],
@@ -82,6 +84,7 @@ const ALLOWED = {
   '/catalog': ['owner'],
   '/materials': ['owner'],
   '/stock-report': ['owner'],
+  '/money': ['owner'],
 }
 
 function Only({ path, role, children }) {
@@ -305,6 +308,14 @@ export default function App() {
             element={
               <Only path="/stock-report" role={profile.role}>
                 <StockReport />
+              </Only>
+            }
+          />
+          <Route
+            path="/money"
+            element={
+              <Only path="/money" role={profile.role}>
+                <MoneyScreen />
               </Only>
             }
           />

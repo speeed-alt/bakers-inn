@@ -267,6 +267,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Bills and wages. The owner's alone, like purchases — and for a stronger
+    // reason: a salary sheet says what every member of staff is paid, and three
+    // cashiers who can read each other's pay is a problem no software fixes.
+    match /expenses/{expenseId} {
+      allow read: if isOwner();
+      allow create, update: if isOwner();
+
+      // Never deleted. A month's profit was worked out from these, and removing
+      // one would leave that figure unexplainable. A bill entered wrongly is
+      // corrected by entering it again — the id is a natural key, so it lands
+      // on the same document.
+      allow delete: if false;
+    }
+
     match /stockMovements/{movementId} {
       allow read: if isOwner();
       allow create: if isOwner();

@@ -64,4 +64,17 @@ export const VOID_REASONS = ['Rung by mistake', 'Customer changed mind', 'Wrong 
 
 export const ROLES = ['owner', 'cashier', 'specialist']
 
+// What the business spends besides ingredients. Salaries are their own kind
+// because they are per person and per month rather than per bill.
+export const UTILITY_CATEGORIES = [
+  'Electricity',
+  'Gas',
+  'Water',
+  'Internet',
+  'Rent',
+  'Repairs',
+  'Transport',
+  'Other',
+]
+
 export const PRODUCT_CATEGORIES = ['Bread', 'Bakery', 'Cakes', 'Savoury', 'Other']
