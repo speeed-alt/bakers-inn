@@ -199,7 +199,7 @@ service cloud.firestore {
       allow update: if isOwner()
                     || (active() && role() == 'specialist'
                         && changedOnly([
-                             'produced', 'producedBy', 'status',
+                             'produced', 'producedBy', 'status', 'extras',
                              'doneBy', 'doneByName', 'doneAt', 'updatedAt'
                            ]));
 

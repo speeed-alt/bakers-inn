@@ -123,6 +123,27 @@ export function compileDemands({ branches = [], demands = [], fallbacks = {}, ex
  * baking — if finishing required meeting every number, a short day could never
  * be closed off and the vans would never leave.
  */
+/**
+ * What the kitchen baked beyond the list.
+ *
+ * Kept out of `productionProgress` on purpose: progress answers "is the list
+ * done?", and a tray of extra donuts does not help finish an order for bread.
+ * Counting them there would let a kitchen look finished while a line was still
+ * empty.
+ *
+ * Entries set back to zero are dropped — that is how an extra is taken back,
+ * since nothing in this system is deleted.
+ */
+export function extrasList(order) {
+  return Object.values(order?.extras ?? {})
+    .filter((e) => (e?.qty ?? 0) > 0)
+    .sort((a, b) => (a.productName ?? '').localeCompare(b.productName ?? ''))
+}
+
+export function extrasTotal(order) {
+  return extrasList(order).reduce((sum, e) => sum + (e.qty ?? 0), 0)
+}
+
 export function productionProgress(order) {
   const items = order?.items ?? []
   const produced = order?.produced ?? {}

@@ -20,6 +20,41 @@ export function recordProduced({ businessDate, productId, qty, user }) {
   }).catch((error) => console.error('[bakery] produced count failed to sync', error))
 }
 
+/**
+ * Something baked that nobody ordered.
+ *
+ * A tray of donuts nobody asked for, a second bake because the first sold out
+ * by ten. It goes on today's list as an extra rather than being edited into the
+ * compiled items — the items are what the outlets asked for and that record has
+ * to stay true, otherwise tomorrow's suggestion learns from a demand that was
+ * never made.
+ *
+ * Keyed by product so a second helping lands on the same entry instead of
+ * making two, and so the security rules can name one field.
+ */
+export function addExtra({ businessDate, product, qty, user }) {
+  return updateDoc(productionDoc(businessDate), {
+    [`extras.${product.id}`]: {
+      productId: product.id,
+      code: product.code ?? '',
+      productName: product.name,
+      qty,
+      by: user.id,
+      byName: user.name,
+      at: Timestamp.fromDate(new Date()),
+    },
+    updatedAt: Timestamp.fromDate(new Date()),
+  })
+}
+
+/** Nothing is deleted; an extra entered by mistake is set back to none. */
+export function removeExtra({ businessDate, productId }) {
+  return updateDoc(productionDoc(businessDate), {
+    [`extras.${productId}.qty`]: 0,
+    updatedAt: Timestamp.fromDate(new Date()),
+  })
+}
+
 export function markOrderDone({ businessDate, user }) {
   updateDoc(productionDoc(businessDate), {
     status: 'done',

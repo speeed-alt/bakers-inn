@@ -1,11 +1,21 @@
 import { useState } from 'react'
+import { collection } from 'firebase/firestore'
+import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
 import { useAuth } from '../auth.jsx'
 import { businessDateOf, formatDate } from '../lib/dates.js'
-import { productionProgress } from '../lib/compile.js'
-import { markOrderDone, productionDoc, recordProduced, reopenOrder } from '../data/production.js'
+import { extrasList, extrasTotal, productionProgress } from '../lib/compile.js'
+import {
+  addExtra,
+  markOrderDone,
+  productionDoc,
+  recordProduced,
+  removeExtra,
+  reopenOrder,
+} from '../data/production.js'
 import { demandsForDate } from '../data/demands.js'
-import { Empty, Stepper } from '../components/ui.jsx'
+import { byCategoryThenName } from '../lib/search.js'
+import { Empty, Loading, Stepper } from '../components/ui.jsx'
 
 /**
  * Today's baking list. Nobody wrote it — it is the three outlets' orders added
@@ -19,10 +29,13 @@ export default function Bake() {
 
   const order = useSnapshot(() => productionDoc(today), [today])
   const demands = useSnapshot(() => demandsForDate(today), [today])
+  const products = useSnapshot(() => collection(db, 'products'), [])
 
   const [draft, setDraft] = useState({})
 
-  if (order.loading) return <div className="page"><p className="muted">Loading…</p></div>
+  if (order.loading) {
+    return <div className="page"><div className="card"><Loading>Reading today's baking list…</Loading></div></div>
+  }
 
   if (!order.data) {
     const waiting = demands.data ?? []
@@ -116,6 +129,13 @@ export default function Bake() {
         })}
       </div>
 
+      <Extras
+        order={po}
+        today={today}
+        user={profile}
+        products={products.data ?? []}
+      />
+
       <div className="card" style={{ marginTop: 14 }}>
         {po.status === 'done' ? (
           <>
@@ -132,7 +152,12 @@ export default function Bake() {
           <>
             <div className="total">
               <span className="muted">Baked so far</span>
-              <b>{progress.made} of {progress.needed}</b>
+              <b>
+                {progress.made} of {progress.needed}
+                {extrasTotal(po) > 0 && (
+                  <span className="muted small"> + {extrasTotal(po)} extra</span>
+                )}
+              </b>
             </div>
             <button
               className="btn primary big block"
@@ -145,6 +170,103 @@ export default function Bake() {
             </button>
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Things baked that nobody ordered.
+ *
+ * A second bake because the bread went by ten, a tray of donuts made because
+ * the oven was free. These are kept apart from the compiled list rather than
+ * added into it: the list is what the outlets asked for, and if extras were
+ * folded in, tomorrow's suggested order would learn from a demand that was
+ * never made.
+ *
+ * Anything added here shows up on the Dispatch screen, where whoever is loading
+ * the van decides which outlet it goes to. Nobody rations it behind their back.
+ */
+function Extras({ order, today, user, products }) {
+  const [productId, setProductId] = useState('')
+  const [qty, setQty] = useState(1)
+  const [busy, setBusy] = useState(false)
+
+  const extras = extrasList(order)
+  const onList = new Set((order.items ?? []).map((i) => i.productId))
+  // Something already on the list is recorded against its own line, not added
+  // twice — otherwise the same bake would be counted in two places.
+  const choices = products
+    .filter((p) => p.active !== false && !onList.has(p.id))
+    .sort(byCategoryThenName)
+
+  async function add() {
+    const product = choices.find((p) => p.id === productId)
+    if (!product || qty <= 0) return
+    setBusy(true)
+    try {
+      await addExtra({ businessDate: today, product, qty, user })
+      setProductId('')
+      setQty(1)
+    } catch (error) {
+      console.error('[bakery] extra failed to save', error)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <div className="row between">
+        <h3 style={{ margin: 0 }}>Also baked</h3>
+        {extras.length > 0 && (
+          <span className="muted small">{extrasTotal(order)} extra</span>
+        )}
+      </div>
+      <p className="muted small">
+        Anything made beyond the list — a second bake, or something nobody ordered. It goes out on
+        Dispatch, where whoever loads the van decides which outlet gets it.
+      </p>
+
+      {extras.length > 0 && (
+        <div className="bill" style={{ marginBottom: 12 }}>
+          {extras.map((e) => (
+            <div className="bill-row" key={e.productId}>
+              <span className="bill-code">{e.code}</span>
+              <span>
+                <span className="bill-name">{e.productName}</span>
+                <div className="muted small">added by {e.byName}</div>
+              </span>
+              <button
+                className="btn ghost small"
+                onClick={() => removeExtra({ businessDate: today, productId: e.productId })}
+              >
+                Remove
+              </button>
+              <span className="bill-amount">{e.qty}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="row wrap" style={{ gap: 8 }}>
+        <select
+          value={productId}
+          onChange={(e) => setProductId(e.target.value)}
+          style={{ flex: 1, minWidth: 180 }}
+          aria-label="Something else baked"
+        >
+          <option value="">Choose what was baked…</option>
+          {choices.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.code} · {p.name}
+            </option>
+          ))}
+        </select>
+        <Stepper value={qty} onChange={setQty} label="how many extra" />
+        <button className="btn primary" disabled={!productId || busy} onClick={add}>
+          {busy ? 'Adding…' : 'Add'}
+        </button>
       </div>
     </div>
   )

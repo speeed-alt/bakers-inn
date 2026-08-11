@@ -4,7 +4,7 @@ import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
 import { useAuth } from '../auth.jsx'
 import { businessDateOf, formatDate, formatTime } from '../lib/dates.js'
-import { shortfalls } from '../lib/compile.js'
+import { extrasList, shortfalls } from '../lib/compile.js'
 import { productionDoc } from '../data/production.js'
 import { dispatchTransfer, receiveTransfer, transfersFrom, transfersTo } from '../data/transfers.js'
 import { Empty, Stepper } from '../components/ui.jsx'
@@ -131,6 +131,7 @@ export default function Dispatch({ branchId }) {
           transfer={transfer}
           outletName={nameOf(transfer.toBranchId)}
           user={profile}
+          extras={extrasList(po)}
         />
       ))}
 
@@ -173,13 +174,42 @@ export default function Dispatch({ branchId }) {
   )
 }
 
-function DispatchCard({ transfer, outletName, user }) {
+function DispatchCard({ transfer, outletName, user, extras = [] }) {
   // Pre-filled with what the outlet ordered: a normal day is one tap.
   const [sending, setSending] = useState(() =>
     Object.fromEntries(transfer.items.map((i) => [i.productId, i.qtyDemanded])),
   )
+  // Extras this outlet is getting a share of. Nothing is pre-filled — a tray of
+  // spare donuts is not owed to anybody, and splitting it evenly behind the
+  // dispatcher's back is exactly the sort of quiet decision this system avoids.
+  const [added, setAdded] = useState({})
 
   const adjusted = transfer.items.filter((i) => sending[i.productId] !== i.qtyDemanded)
+  const onNote = new Set(transfer.items.map((i) => i.productId))
+  const offerable = extras.filter((e) => !onNote.has(e.productId))
+  const addedLines = Object.entries(added).filter(([, n]) => n > 0)
+
+  function send() {
+    // An extra becomes a real line on the note, ordered zero and sent what was
+    // decided here, so the outlet counting it in sees the same shape as
+    // everything else and a short delivery still needs a reason.
+    const extraItems = addedLines.map(([productId, qty]) => {
+      const extra = extras.find((e) => e.productId === productId)
+      return {
+        productId,
+        code: extra?.code ?? '',
+        productName: extra?.productName ?? productId,
+        qtyDemanded: 0,
+        qtySent: qty,
+        extra: true,
+      }
+    })
+    dispatchTransfer({
+      transfer: { ...transfer, items: [...transfer.items, ...extraItems] },
+      sent: sending,
+      user,
+    })
+  }
 
   return (
     <div className="card">
@@ -208,12 +238,39 @@ function DispatchCard({ transfer, outletName, user }) {
         ))}
       </div>
 
-      <button
-        className="btn primary big block"
-        onClick={() => dispatchTransfer({ transfer, sent: sending, user })}
-      >
-        {adjusted.length
-          ? `Send — ${adjusted.length} line${adjusted.length > 1 ? 's' : ''} adjusted`
+      {offerable.length > 0 && (
+        <>
+          <h3>Also baked today</h3>
+          <p className="muted small">
+            Nobody ordered these. Send this outlet as much or as little as you like — whatever is
+            left stays at the hub.
+          </p>
+          <div className="bill" style={{ marginBottom: 12 }}>
+            {offerable.map((e) => (
+              <div className="bill-row" key={e.productId}>
+                <span className="bill-code">{e.code}</span>
+                <span className="bill-name">{e.productName}</span>
+                <Stepper
+                  value={added[e.productId] ?? 0}
+                  max={e.qty}
+                  onChange={(v) => setAdded((c) => ({ ...c, [e.productId]: v }))}
+                  label={`extra ${e.productName} for ${outletName}`}
+                />
+                <span className="bill-amount muted">{e.qty} made</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <button className="btn primary big block" onClick={send}>
+        {adjusted.length || addedLines.length
+          ? `Send — ${[
+              adjusted.length && `${adjusted.length} adjusted`,
+              addedLines.length && `${addedLines.length} extra`,
+            ]
+              .filter(Boolean)
+              .join(', ')}`
           : 'Send everything ordered'}
       </button>
     </div>
