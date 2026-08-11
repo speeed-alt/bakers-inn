@@ -3,7 +3,10 @@ import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
 import { addDays, businessDateOf, formatDate, formatTime } from '../lib/dates.js'
-import { formatMoney } from '../lib/money.js'
+import { formatMoney, parseMoney } from '../lib/money.js'
+import { useAuth } from '../auth.jsx'
+import { dailyRateProducts, ratesNotSet, ratesOf } from '../lib/rates.js'
+import { rateDoc, saveRates } from '../data/rates.js'
 import { summariseDay } from '../lib/report.js'
 import { productionProgress, shortfalls } from '../lib/compile.js'
 import { buildWeek, DAYS_SHOWN, findProblems, summariseWaste } from '../lib/dashboard.js'
@@ -47,6 +50,7 @@ export default function Dashboard() {
     () => query(collection(db, 'dailyReports'), orderBy('businessDate', 'desc'), limit(40)),
     [],
   )
+  const products = useSnapshot(() => collection(db, 'products'), [])
   const materials = useSnapshot(() => materialsQuery(), [])
   const purchases = useSnapshot(() => purchasesQuery(limit(60)), [])
   const faults = useSnapshot(() => recentErrorsQuery(20), [])
@@ -159,6 +163,8 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <TodaysRates today={today} products={products.data ?? []} />
 
       <Faults rows={faults.data ?? []} today={today} nameOf={nameOf} />
 
@@ -315,6 +321,112 @@ function Faults({ rows, today, nameOf }) {
         The tablet recovered on its own — no sales are lost. If the same outlet keeps appearing,
         that screen needs looking at.
       </p>
+    </div>
+  )
+}
+
+/**
+ * This morning's rates for the things that are priced fresh.
+ *
+ * One card, all three outlets. The whole point of a rate is that it is decided
+ * once and applies everywhere — an owner who has to set the egg price in three
+ * places will eventually set it in two.
+ *
+ * The card disappears entirely when no product is flagged as daily-rate, so a
+ * shop that prices nothing this way never sees it.
+ */
+function TodaysRates({ today, products }) {
+  const { profile } = useAuth()
+  const rates = useSnapshot(() => rateDoc(today), [today])
+  const prices = ratesOf(rates.data)
+  const items = dailyRateProducts(products)
+
+  const [draft, setDraft] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  if (items.length === 0) return null
+  if (rates.loading) {
+    return <div className="card"><Loading inline>Reading today's rates…</Loading></div>
+  }
+
+  // Seeded from today's sheet where it exists, and from each product's last
+  // known rate where it does not — so the owner is confirming yesterday's
+  // figures rather than typing every one from nothing.
+  const values =
+    draft ??
+    Object.fromEntries(
+      items.map((p) => [
+        p.id,
+        formatMoney(Number.isFinite(prices[p.id]) ? prices[p.id] : p.price ?? 0, { symbol: false }),
+      ]),
+    )
+
+  const missing = ratesNotSet(items, prices)
+  const parsed = Object.fromEntries(
+    Object.entries(values).map(([id, text]) => [id, parseMoney(text)]),
+  )
+  const valid = Object.values(parsed).every((v) => v !== null && v >= 0)
+
+  async function save() {
+    setBusy(true)
+    setSaved(false)
+    try {
+      await saveRates({
+        businessDate: today,
+        prices: parsed,
+        user: { id: profile.id, name: profile.name },
+      })
+      setDraft(null)
+      setSaved(true)
+    } catch (error) {
+      console.error('[bakery] rates failed to save', error)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="row between">
+        <h3 style={{ margin: 0 }}>Today's rates</h3>
+        <span className="muted small">
+          {missing.length === 0 ? 'set for today' : `${missing.length} still to set`}
+        </span>
+      </div>
+      <p className="muted small">
+        The items whose price moves with what they cost this morning. Set here once and every till
+        charges it. Sales already rung keep what they were rung at.
+      </p>
+      <div className="bill">
+        {items.map((p) => (
+          <div className="bill-row" key={p.id}>
+            <span className="bill-code">{p.code}</span>
+            <span>
+              <span className="bill-name">{p.name}</span>
+              {p.soldByWeight && <span className="muted small"> · per {p.unit || 'kg'}</span>}
+            </span>
+            <input
+              type="text"
+              inputMode="decimal"
+              className="rate-input"
+              aria-label={`rate for ${p.name}`}
+              value={values[p.id] ?? ''}
+              onChange={(e) => setDraft({ ...values, [p.id]: e.target.value })}
+              onFocus={(e) => e.target.select()}
+            />
+            <span className="bill-amount muted small">
+              {Number.isFinite(prices[p.id]) ? 'set' : 'last known'}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="row" style={{ marginTop: 12 }}>
+        <button className="btn primary" disabled={!valid || busy} onClick={save}>
+          {busy ? 'Saving…' : "Set today's rates"}
+        </button>
+        {saved && <span className="muted small">Saved — every till has it.</span>}
+      </div>
     </div>
   )
 }

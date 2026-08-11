@@ -3,6 +3,7 @@ import { collection } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
 import { formatMoney, parseMoney } from '../lib/money.js'
+import { DEFAULT_WEIGHT_UNIT } from '../lib/quantity.js'
 import { PRODUCT_CATEGORIES, ROLES } from '../config.js'
 import { archiveProduct, saveBranch, saveProduct, setUserActive } from '../data/catalog.js'
 import { createStaff } from '../data/staff.js'
@@ -84,7 +85,11 @@ function Products() {
                   <td>{p.name}</td>
                   <td className="muted small">{p.category}</td>
                   <td className="num"><Money minor={p.price} /></td>
-                  <td className="small muted">{p.sellsNextDay ? 'keeps' : 'same day'}</td>
+                  <td className="small muted">
+                    {p.sellsNextDay ? 'keeps' : 'same day'}
+                    {p.soldByWeight && ` · per ${p.unit || DEFAULT_WEIGHT_UNIT}`}
+                    {p.dailyRate && ' · daily rate'}
+                  </td>
                   <td className="num">
                     <button className="btn ghost small" onClick={() => setEditing(p)}>Edit</button>
                     <button
@@ -116,6 +121,8 @@ function ProductModal({ product, others, onClose }) {
     product.price != null ? formatMoney(product.price, { symbol: false }) : '',
   )
   const [keeps, setKeeps] = useState(product.sellsNextDay ?? false)
+  const [daily, setDaily] = useState(product.dailyRate ?? false)
+  const [weighed, setWeighed] = useState(product.soldByWeight ?? false)
   const [busy, setBusy] = useState(false)
 
   const minor = parseMoney(price)
@@ -134,6 +141,9 @@ function ProductModal({ product, others, onClose }) {
         category,
         price: minor,
         sellsNextDay: keeps,
+        dailyRate: daily,
+        soldByWeight: weighed,
+        unit: weighed ? DEFAULT_WEIGHT_UNIT : null,
       })
       onClose()
     } finally {
@@ -168,7 +178,26 @@ function ProductModal({ product, others, onClose }) {
         </select>
       </div>
       <div className="field">
-        <label>Price</label>
+        <label>Is it counted, or weighed?</label>
+        <div className="row wrap">
+          <button className={`chip ${!weighed ? 'on' : ''}`} onClick={() => setWeighed(false)}>
+            Counted — each
+          </button>
+          <button className={`chip ${weighed ? 'on' : ''}`} onClick={() => setWeighed(true)}>
+            Weighed — per {DEFAULT_WEIGHT_UNIT}
+          </button>
+        </div>
+        <p className="muted small">
+          A weighed item is priced per {DEFAULT_WEIGHT_UNIT} and the cashier types what the customer
+          asked for — 4.5, or 450g. Everything else is sold one at a time.
+        </p>
+      </div>
+      <div className="field">
+        <label>
+          {weighed
+            ? `Price per ${DEFAULT_WEIGHT_UNIT}${daily ? ' — this morning’s rate' : ''}`
+            : daily ? 'Price — this morning’s rate' : 'Price'}
+        </label>
         <input
           type="text"
           inputMode="decimal"
@@ -176,6 +205,22 @@ function ProductModal({ product, others, onClose }) {
           onChange={(e) => setPrice(e.target.value)}
           placeholder="0"
         />
+      </div>
+      <div className="field">
+        <label>Does its price change from day to day?</label>
+        <div className="row wrap">
+          <button className={`chip ${!daily ? 'on' : ''}`} onClick={() => setDaily(false)}>
+            No — one price
+          </button>
+          <button className={`chip ${daily ? 'on' : ''}`} onClick={() => setDaily(true)}>
+            Yes — set it each morning
+          </button>
+        </div>
+        <p className="muted small">
+          For the things that are bought fresh and priced fresh — eggs, and bread when flour moves.
+          These appear together on the dashboard each morning so all three outlets are priced in one
+          go. Until a rate is entered the till charges the last one, so nobody stops selling.
+        </p>
       </div>
       <div className="field">
         <label>Does it still sell the next day?</label>

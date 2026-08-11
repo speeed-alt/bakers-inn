@@ -32,8 +32,22 @@ export function toMinor(major) {
   return Math.round(major * MINOR_UNITS)
 }
 
+/**
+ * What one line comes to.
+ *
+ * Rounded, and that rounding is load-bearing. Counted items give whole rupees
+ * on their own — three loaves at 220 is 660 however you multiply it — but a
+ * weighed line does not: 4.55 kg of biscuits at Rs 1,399 is 6,365.45, and a
+ * fractional rupee has nowhere to live in a system whose amounts are integers.
+ * Left unrounded it would reach a document, and every total built on it would
+ * be a hair out for as long as that sale existed.
+ *
+ * Rounding each line rather than the basket is deliberate: the line total is
+ * what the customer sees on the slip, and the sum has to be the sum of the
+ * numbers printed in front of them.
+ */
 export function lineTotal(line) {
-  return line.price * line.qty
+  return Math.round((line.price ?? 0) * (line.qty ?? 0))
 }
 
 export function basketTotal(lines) {

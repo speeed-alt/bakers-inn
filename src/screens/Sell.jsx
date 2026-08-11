@@ -5,10 +5,20 @@ import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
 import { useAuth } from '../auth.jsx'
 import { businessDateOf, formatDate, formatTime, previousDate } from '../lib/dates.js'
-import { basketTotal, formatMoney, parseMoney, toMinor } from '../lib/money.js'
+import { basketTotal, formatMoney, lineTotal, parseMoney, toMinor } from '../lib/money.js'
 import { exactCodeMatch, findProducts } from '../lib/search.js'
 import { recordRefund, recordSale, salesForDay, voidSale } from '../data/sales.js'
 import { closingDoc, isClosed } from '../data/closings.js'
+import { priceOf, ratesNotSet, ratesOf } from '../lib/rates.js'
+import { rateDoc } from '../data/rates.js'
+import {
+  formatQuantity,
+  isWeighed,
+  parseQuantity,
+  roundQuantity,
+  stepFor,
+  unitOf,
+} from '../lib/quantity.js'
 import { Empty, Loading, Modal, Money, Stepper } from '../components/ui.jsx'
 import { QUICK_CASH_STEPS, VOID_REASONS } from '../config.js'
 import Receipt from '../components/Receipt.jsx'
@@ -36,7 +46,13 @@ export default function Sell({ branchId, branchName }) {
   const [notFound, setNotFound] = useState('')
   const entry = useRef(null)
 
+  // This morning's rates for the items that are priced fresh. A missing sheet
+  // is not an error — the till falls back to each product's last known rate and
+  // says so in a strip, rather than refusing to sell.
+  const todayRates = useSnapshot(() => rateDoc(today), [today])
+  const prices = ratesOf(todayRates.data)
   const catalogue = products.data ?? []
+  const unpriced = ratesNotSet(catalogue, prices)
   // An empty box lists the whole catalogue, so the same panel is both the
   // search result and the price list a new cashier reads codes off.
   const results = useMemo(() => findProducts(catalogue, text), [catalogue, text])
@@ -50,13 +66,32 @@ export default function Sell({ branchId, branchName }) {
     (yesterdaySales.data?.length ?? 0) > 0
 
   function addProduct(p) {
+    // The price is resolved once, here, and copied onto the line. Whatever
+    // happens to a rate later, this sale keeps what the customer was charged.
+    const price = priceOf(p, prices)
+    const weighed = isWeighed(p)
+
     setLines((cur) => {
       const at = cur.findIndex((l) => l.productId === p.id)
       if (at === -1) {
-        return [...cur, { productId: p.id, code: p.code ?? '', name: p.name, price: p.price, qty: 1 }]
+        return [
+          ...cur,
+          {
+            productId: p.id,
+            code: p.code ?? '',
+            name: p.name,
+            price,
+            // A weighed item starts at a quarter rather than one: a whole kilo
+            // is a big default to have to correct, and the cashier is about to
+            // type the real figure anyway.
+            qty: weighed ? stepFor(p) : 1,
+            soldByWeight: weighed || null,
+            unit: weighed ? unitOf(p) : null,
+          },
+        ]
       }
       const next = [...cur]
-      next[at] = { ...next[at], qty: next[at].qty + 1 }
+      next[at] = { ...next[at], qty: roundQuantity(next[at].qty + (weighed ? stepFor(p) : 1), p) }
       return next
     })
     setText('')
@@ -154,6 +189,14 @@ export default function Sell({ branchId, branchName }) {
 
   return (
     <div className="till">
+      {/* Not a blocker. The till charges the last rate it knows and keeps
+          trading; this is here so nobody finds out at closing time. */}
+      {unpriced.length > 0 && (
+        <div className="strip block no-print">
+          Today's rate is not set for {unpriced.map((p) => p.name).join(', ')} — selling at
+          yesterday's until the owner sets it.
+        </div>
+      )}
       <div className="till-entry">
         <input
           ref={entry}
@@ -196,7 +239,10 @@ export default function Sell({ branchId, branchName }) {
               >
                 <span className="result-code">{p.code}</span>
                 <span className="result-name">{p.name}</span>
-                <span className="result-price">{formatMoney(p.price, { symbol: false })}</span>
+                <span className="result-price">
+                  {formatMoney(priceOf(p, prices), { symbol: false })}
+                  {isWeighed(p) && <span className="muted">/{unitOf(p)}</span>}
+                </span>
               </button>
             ))}
           </div>
@@ -273,10 +319,25 @@ function Bill({ lines, onQty }) {
           <span className="bill-code">{l.code}</span>
           <span>
             <span className="bill-name">{l.name}</span>
-            <span className="muted small"> · {formatMoney(l.price, { symbol: false })} each</span>
+            <span className="muted small">
+              {' · '}
+              {formatMoney(l.price, { symbol: false })} {l.soldByWeight ? `per ${l.unit}` : 'each'}
+            </span>
           </span>
-          <Stepper value={l.qty} onChange={(q) => onQty(l.productId, q)} />
-          <span className="bill-amount">{formatMoney(l.price * l.qty, { symbol: false })}</span>
+          {/* The line carries its own kind, so the stepper takes a quarter kilo
+              at a time for biscuits and one at a time for loaves without the
+              bill having to look the product up again. */}
+          <Stepper
+            value={l.qty}
+            onChange={(q) => onQty(l.productId, q)}
+            label={`quantity of ${l.name}`}
+            step={stepFor(l)}
+            parse={(raw) => parseQuantity(raw, l)}
+            format={(n) => (l.soldByWeight ? String(Number(Number(n ?? 0).toFixed(3))) : String(Math.round(n ?? 0)))}
+          />
+          <span className="bill-amount">
+            {formatMoney(lineTotal(l), { symbol: false })}
+          </span>
         </div>
       ))}
     </div>

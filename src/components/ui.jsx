@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { formatMoney } from '../lib/money.js'
 
@@ -27,16 +27,78 @@ export function Modal({ title, onClose, children, wide = false }) {
   )
 }
 
-export function Stepper({ value, onChange, min = 0, max = 9999 }) {
+/**
+ * A quantity: type it, or nudge it.
+ *
+ * The number is an input, not a label. Ordering forty loaves by tapping + forty
+ * times is the kind of thing that makes people keep using paper, and it was the
+ * owner's first complaint about this screen. The arrows stay for one or two
+ * more, which is genuinely faster than reaching for a keyboard.
+ *
+ * The field holds its own text while being edited so that clearing it does not
+ * snap to 0 under the cursor. Whatever is left when focus goes — including
+ * nothing — settles back to a real number.
+ */
+export function Stepper({
+  value,
+  onChange,
+  min = 0,
+  max = 9999,
+  label,
+  // A weighed line steps by a quarter kilo and accepts "450g"; a counted one
+  // steps by one and accepts digits. Both arrive as props so this component
+  // never has to know which kind of product it is showing.
+  step = 1,
+  parse,
+  format,
+}) {
+  const [text, setText] = useState(null)
+  const clamp = (n) => Math.min(max, Math.max(min, n))
+  const read = parse ?? ((raw) => {
+    const n = Number.parseInt(raw, 10)
+    return Number.isFinite(n) ? n : null
+  })
+  const show = format ?? ((n) => String(Math.round(n ?? 0)))
+  const shown = text ?? show(value)
+
+  function nudge(by) {
+    // Re-rounded through the formatter so a quarter-kilo step cannot drift into
+    // 4.750000000000001 after a few taps.
+    const next = clamp((Number(value) || 0) + by)
+    const parsed = read(String(Number(next.toFixed(3))))
+    onChange(parsed ?? next)
+    setText(null)
+  }
+
+  function commit(raw) {
+    const parsed = read(raw)
+    // Unreadable input leaves the line as it was rather than silently zeroing
+    // it — a mistyped weight should not become a free bag of biscuits.
+    onChange(parsed === null ? value : clamp(parsed))
+    setText(null)
+  }
+
   return (
     <div className="stepper">
-      <button type="button" aria-label="one less" onClick={() => onChange(Math.max(min, value - 1))}>
-        –
-      </button>
-      <span className="qty">{value}</span>
-      <button type="button" aria-label="one more" onClick={() => onChange(Math.min(max, value + 1))}>
-        +
-      </button>
+      <button type="button" aria-label="less" onClick={() => nudge(-step)}>–</button>
+      <input
+        className="qty"
+        type="text"
+        inputMode={step < 1 ? 'decimal' : 'numeric'}
+        aria-label={label ?? 'quantity'}
+        value={shown}
+        onChange={(e) => setText(e.target.value)}
+        // Select all on focus: the next thing typed replaces the quantity
+        // rather than landing beside it and making 4 into 42.
+        onFocus={(e) => e.target.select()}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.target.blur()
+          if (e.key === 'ArrowUp') { e.preventDefault(); nudge(step) }
+          if (e.key === 'ArrowDown') { e.preventDefault(); nudge(-step) }
+        }}
+      />
+      <button type="button" aria-label="more" onClick={() => nudge(step)}>+</button>
     </div>
   )
 }

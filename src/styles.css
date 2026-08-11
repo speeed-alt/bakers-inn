@@ -295,6 +295,16 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
 .total { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
 .total b { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
+/* The morning rate boxes. Sized like the stepper they sit in line with, so the
+   rates card reads as the same kind of row as the bill above it. */
+.rate-input {
+  width: 88px; min-height: 38px; padding: 6px 8px;
+  text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font-size: 15px;
+}
+.rate-input:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
+
 .stepper { display: inline-flex; align-items: center; gap: 2px; }
 .stepper button {
   width: 38px; height: 38px; border-radius: var(--radius);
@@ -302,7 +312,21 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
   font-size: 17px; cursor: pointer; line-height: 1;
 }
 .stepper button:hover { background: var(--surface-2); }
-.stepper .qty { min-width: 32px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* A typed field, styled to read as the label it replaced. Wide enough for four
+   digits so a big order does not scroll inside the box. */
+.stepper .qty {
+  width: 52px; min-height: 38px; padding: 4px;
+  text-align: center; font-weight: 600; font-variant-numeric: tabular-nums;
+  border: 1px solid transparent; border-radius: var(--radius);
+  background: transparent; color: var(--text); font-size: 15px;
+  -moz-appearance: textfield;
+}
+.stepper .qty:hover { border-color: var(--border); }
+.stepper .qty:focus {
+  outline: none;
+  border-color: var(--ink);
+  background: var(--surface);
+}
 
 /* ---- modal -------------------------------------------------------------- */
 
@@ -493,7 +517,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
    Neither test alone catches both. */
 @media (pointer: coarse), (max-width: 680px) {
   .stepper button { width: 44px; height: 44px; font-size: 19px; }
-  .stepper .qty { min-width: 40px; }
+  /* The quantity is now typed into, so it has to be as tappable as the arrows
+     beside it — and visibly a field, since on a touchscreen there is no hover
+     to reveal its border. */
+  .stepper .qty {
+    width: 58px; min-height: 44px; font-size: 16px;
+    border-color: var(--border);
+  }
   .btn.small { min-height: 44px; padding: 8px 14px; }
   .btn.ghost { min-height: 44px; }
   .btn.ghost.small { min-height: 44px; }

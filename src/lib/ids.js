@@ -91,6 +91,15 @@ export function transferDocId(businessDate, branchId, seq = 1) {
   return `T-${compactDate(businessDate)}-${branchId}${suffix}`
 }
 
+/**
+ * One rate sheet per day, for the whole business. A natural key again: the
+ * morning's rates are a single fact, so setting them twice lands on the same
+ * document instead of leaving two disagreeing answers.
+ */
+export function rateDocId(businessDate) {
+  return `RATE-${compactDate(businessDate)}`
+}
+
 export function reportDocId(businessDate, branchId) {
   return `R-${compactDate(businessDate)}-${branchId}`
 }

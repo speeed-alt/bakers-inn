@@ -1,5 +1,6 @@
 import { BUSINESS_NAME, RECEIPT_WIDTH } from '../config.js'
-import { formatMoney } from './money.js'
+import { formatMoney, lineTotal } from './money.js'
+import { formatQuantity } from './quantity.js'
 import { formatDate, formatTime } from './dates.js'
 
 // A till roll is a fixed number of monospace characters wide, so every line is
@@ -39,14 +40,23 @@ export function wrap(text, width = RECEIPT_WIDTH) {
 }
 
 export function itemLines(item, width = RECEIPT_WIDTH) {
-  const amount = formatMoney(item.price * item.qty, { symbol: false })
-  const label = `${item.qty} x ${item.name}`
-  if (label.length + 1 + amount.length <= width) return [row(label, amount, width)]
+  const amount = formatMoney(lineTotal(item), { symbol: false })
+  // A weighed line always shows its rate, even when it would fit on one line.
+  // "4.5 kg x Biscuits ....... 6300" invites the question "at what?", and a
+  // customer who cannot check the arithmetic on a weighed item is being asked
+  // to take it on trust.
+  const qty = formatQuantity(item.qty, item)
 
-  // Too long for one line: give the name its own line(s), then the sum below.
+  if (!item.soldByWeight) {
+    const label = `${qty} x ${item.name}`
+    if (label.length + 1 + amount.length <= width) return [row(label, amount, width)]
+  }
+
+  // Name on its own line(s), then the working underneath.
+  const rate = `${formatMoney(item.price, { symbol: false })}${item.soldByWeight ? `/${item.unit}` : ''}`
   return [
     ...wrap(item.name, width),
-    row(`  ${item.qty} x ${formatMoney(item.price, { symbol: false })}`, amount, width),
+    row(`  ${qty} x ${rate}`, amount, width),
   ]
 }
 

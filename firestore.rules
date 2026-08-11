@@ -70,6 +70,21 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // One rate sheet per day for the whole business: the price of the things
+    // that are bought fresh and priced fresh — eggs, bread when flour moves.
+    //
+    // Everyone signed in reads it, because every till needs it to charge
+    // correctly. Only the owner writes it: a rate is a decision about margin,
+    // not a counter operation.
+    match /dailyRates/{rateId} {
+      allow read: if signedIn();
+      allow create, update: if isOwner();
+
+      // Never deleted. A day's rates are what the takings for that day were
+      // built on, and removing the sheet would leave those figures unexplained.
+      allow delete: if false;
+    }
+
     // --- Money: append-only ------------------------------------------------
 
     match /sales/{saleId} {
