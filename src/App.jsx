@@ -6,6 +6,7 @@ import { clearDeviceBranchId, deviceBranchId, useAuth } from './auth.jsx'
 import { useClockDrift, useOnline, useSnapshot } from './lib/hooks.js'
 import { describeDrift, driftMatters } from './lib/clock.js'
 import { useTheme } from './lib/theme.js'
+import { installUpdate, useUpdateWaiting } from './lib/updates.js'
 import { Loading } from './components/ui.jsx'
 import { deviceLetter } from './lib/ids.js'
 import Setup from './screens/Setup.jsx'
@@ -140,6 +141,7 @@ export default function App() {
   const [branchId, setBranchId] = useState(deviceBranchId())
   const online = useOnline()
   const drift = useClockDrift(online)
+  const updateWaiting = useUpdateWaiting()
 
   const branch = useSnapshot(() => (branchId ? doc(db, 'branches', branchId) : null), [branchId])
 
@@ -208,6 +210,19 @@ export default function App() {
       </header>
 
       {!online && <div className="strip offline">Offline — sales are saved and will sync automatically</div>}
+
+      {/* Downloaded and waiting, never applied on its own: this reloads the
+          screen, and doing that unasked would throw away a bill somebody is
+          halfway through. */}
+      {updateWaiting && (
+        <div className="strip block no-print">
+          A new version is ready.{' '}
+          <button className="btn ghost small" onClick={installUpdate}>
+            Update now
+          </button>
+          <span className="muted small"> — finish the sale you are on first.</span>
+        </div>
+      )}
 
       {claimsStale && (
         <div className="strip block no-print">

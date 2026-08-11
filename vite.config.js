@@ -6,7 +6,18 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt', not 'autoUpdate', and registered by hand in src/lib/updates.js.
+      //
+      // autoUpdate installs a new worker silently, but the page already open
+      // keeps the old code until it is loaded twice — which is why a deploy
+      // appeared not to have happened. The obvious fix, reloading the moment a
+      // new version lands, is worse: on a till that would throw away a bill a
+      // cashier is halfway through ringing up, with a customer waiting.
+      //
+      // So the new version is fetched and held, and the app offers it. The
+      // cashier takes it between customers.
+      registerType: 'prompt',
+      injectRegister: null,
       includeAssets: ['favicon.svg'],
       manifest: {
         name: "The Baker's Inn",

@@ -7,6 +7,7 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { reportClientError } from './data/errors.js'
 import { applyPaperSettings } from './lib/paper.js'
 import { startTheme } from './lib/theme.js'
+import { startUpdates } from './lib/updates.js'
 import './styles.css'
 
 // Sizes the printed slip to the paper named in config.js, so printing works at
@@ -17,6 +18,10 @@ applyPaperSettings()
 // on its way in. With nothing stored this does nothing at all — the stylesheet
 // is already following the device on its own.
 startTheme()
+
+// Registers the service worker and starts watching for new versions. Nothing is
+// applied without being asked — see src/lib/updates.js.
+startUpdates()
 
 // The error boundary below only catches faults thrown while React renders.
 // These two cover the rest — a listener that throws, a promise nobody awaited —
