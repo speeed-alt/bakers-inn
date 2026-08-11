@@ -4,7 +4,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { expectedCash, overShort, summariseDay } from '../src/lib/report.js'
 import { formatMoney, parseMoney, basketTotal } from '../src/lib/money.js'
-import { itemLines, receiptText, row, wrap } from '../src/lib/receipt.js'
+import { itemCount, itemHeader, itemLines, receiptText, row, wrap } from '../src/lib/receipt.js'
 import { RECEIPT_WIDTH } from '../src/config.js'
 import { fontSizeFor } from '../src/lib/paper.js'
 
@@ -76,15 +76,16 @@ test('typed amounts parse, including ones with separators', () => {
 
 // Till entry-box matching is covered in search.test.mjs.
 
-test('a receipt line never loses the end of a product name', () => {
-  const line = itemLines({ name: 'Birthday Cake (1 lb)', price: 1800, qty: 1 })
+test('a short name keeps its figures on the same line, in their columns', () => {
+  const line = itemLines({ name: 'Bread Small', price: 120, qty: 30 })
   assert.equal(line.length, 1)
-  assert.match(line[0], /Birthday Cake \(1 lb\)/)
-  assert.match(line[0], /1,800$/)
+  assert.match(line[0], /^Bread Small/)
+  // Rate, quantity, then amount — the order the printed bills here use.
+  assert.match(line[0], /120\s+30\s+3,600$/)
   assert.equal(line[0].length, RECEIPT_WIDTH)
 })
 
-test('a name too wide for the roll wraps instead of truncating', () => {
+test('a name too wide for its column wraps instead of truncating', () => {
   const name = 'Chocolate Fudge Celebration Cake Extra Large'
   const lines = itemLines({ name, price: 4500, qty: 2 })
   assert.ok(lines.length > 1, 'should spill onto more than one line')
@@ -92,7 +93,53 @@ test('a name too wide for the roll wraps instead of truncating', () => {
   const joined = lines.join(' ')
   for (const word of name.split(' ')) assert.ok(joined.includes(word), `lost "${word}"`)
   for (const l of lines) assert.ok(l.length <= RECEIPT_WIDTH, `too wide: "${l}"`)
-  assert.match(lines.at(-1), /2 x 4,500\s+9,000$/)
+  // The figures still land in their columns underneath.
+  assert.match(lines.at(-1), /4,500\s+2\s+9,000$/)
+})
+
+test('a weighed line shows its rate, its weight, and what that came to', () => {
+  const line = itemLines({
+    name: 'Biscuits',
+    price: 1400,
+    qty: 4.5,
+    soldByWeight: true,
+    unit: 'kg',
+  })
+  assert.equal(line.length, 1)
+  assert.match(line[0], /^Biscuits \(kg\)/)
+  assert.match(line[0], /1,400\s+4\.5\s+6,300$/)
+  assert.equal(line[0].length, RECEIPT_WIDTH)
+})
+
+test('a heavy weighed line still fits the roll', () => {
+  // "12.5 kg" in the quantity column was what pushed a line past the edge.
+  const lines = itemLines({
+    name: 'Biscuits',
+    price: 1400,
+    qty: 12.5,
+    soldByWeight: true,
+    unit: 'kg',
+  })
+  for (const l of lines) assert.ok(l.length <= RECEIPT_WIDTH, `too wide: "${l}"`)
+  assert.match(lines.at(-1), /17,500$/)
+})
+
+test('the header names the columns the figures land in', () => {
+  const header = itemHeader()
+  assert.equal(header.length, RECEIPT_WIDTH)
+  assert.match(header, /^Item/)
+  assert.match(header, /Rate\s+Qty\s+Amount$/)
+})
+
+test('items counts what was bought, not how many lines it took', () => {
+  assert.equal(itemCount([{ qty: 9 }, { qty: 9 }, { qty: 30 }, { qty: 15 }]), 63)
+  assert.equal(itemCount([]), 0)
+})
+
+test('a weighed line counts as one thing, not as its weight', () => {
+  // 63 loaves plus 4.5 kg of biscuits is 64 things, not 67.5 of anything.
+  const items = [{ qty: 63 }, { qty: 4.5, soldByWeight: true }]
+  assert.equal(itemCount(items), 64)
 })
 
 test('wrapping breaks a single unbroken word rather than overflowing', () => {
@@ -128,7 +175,11 @@ test('a full receipt fits the roll and shows the money', () => {
   for (const l of text.split('\n')) assert.ok(l.length <= RECEIPT_WIDTH, `too wide: "${l}"`)
   assert.match(text, /TOTAL\s+Rs 3,030/)
   assert.match(text, /Change\s+1,970/)
-  assert.match(text, /Served by Ayesha/)
+  assert.match(text, /Cashier: Ayesha/)
+  assert.match(text, /Items: 2/)
+  // The figure spelled out, which is what stops a pen changing it.
+  // Wrapped across lines on a narrow roll, so match across the break.
+  assert.match(text, /RUPEES\s+THREE\s+THOUSAND\s+THIRTY\s+ONLY/)
 })
 
 test('type size makes the slip span the paper, whatever the paper is', () => {
