@@ -44,14 +44,23 @@ export function receivedAt({ branchId, isMain = false, transfers = [], productio
   return arrived
 }
 
-/** Quantities sold today, keyed by product. */
+/**
+ * Quantities sold today, keyed by product.
+ *
+ * The field is `items`, matching what `recordSale` writes and what
+ * `summariseDay` reads. Reading anything else here would silently report that
+ * nothing had sold all day, which looks like a quiet shop rather than a bug.
+ *
+ * A voided sale did not sell anything. A refund keeps its negative quantity,
+ * so subtracting happens by simply adding it up.
+ */
 export function soldAt(sales = [], branchId = null) {
   const sold = {}
   for (const sale of sales) {
     if (branchId && sale.branchId !== branchId) continue
     if (sale.status === 'voided') continue
-    for (const line of sale.lines ?? []) {
-      sold[line.productId] = (sold[line.productId] ?? 0) + (Number(line.qty) || 0)
+    for (const item of sale.items ?? []) {
+      sold[item.productId] = (sold[item.productId] ?? 0) + (Number(item.qty) || 0)
     }
   }
   return sold
@@ -180,6 +189,21 @@ export function byProduct(report) {
       // Everything the outlets had to sell today: yesterday's leftovers plus
       // today's deliveries.
       available: row.carriedIn + row.received,
+      // Sold more than was ever recorded as arriving.
+      //
+      // The shelf is clamped at zero, because there is no such thing as minus
+      // three loaves — but that clamp then makes the totals look like they do
+      // not add up, and a figure that does not add up is the fastest way to
+      // lose somebody's trust in the whole screen. So the difference is named.
+      //
+      // Measured per outlet, not on the row: the clamp happens per outlet per
+      // product, so one shop overselling while another sits on stock cancels
+      // out at this level and the gap goes unreported. That is exactly the case
+      // that produced a total nobody could reconcile.
+      unaccounted: Object.values(row.perOutlet).reduce(
+        (sum, at) => sum + Math.max(0, at.sold - (at.carriedIn + at.received)),
+        0,
+      ),
       // What is left is worth what it would sell for. Stock that does not keep
       // is worth that only until closing time, which is the point of showing it.
       worth: row.left * (row.price ?? 0),
@@ -197,7 +221,8 @@ export function stockTotals(rows = []) {
       left: totals.left + row.left,
       worth: totals.worth + row.worth,
       soldValue: totals.soldValue + row.soldValue,
+      unaccounted: totals.unaccounted + (row.unaccounted ?? 0),
     }),
-    { available: 0, sold: 0, left: 0, worth: 0, soldValue: 0 },
+    { available: 0, sold: 0, left: 0, worth: 0, soldValue: 0, unaccounted: 0 },
   )
 }

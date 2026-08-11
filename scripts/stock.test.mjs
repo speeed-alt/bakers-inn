@@ -83,9 +83,9 @@ test('before anything is recorded as baked, the hub has nothing', () => {
 
 test('a voided sale did not sell anything', () => {
   const sales = [
-    { branchId: 'B2', status: 'normal', lines: [{ productId: 'bread-large', qty: 3 }] },
-    { branchId: 'B2', status: 'voided', lines: [{ productId: 'bread-large', qty: 9 }] },
-    { branchId: 'MAIN', status: 'normal', lines: [{ productId: 'bread-large', qty: 5 }] },
+    { branchId: 'B2', status: 'normal', items: [{ productId: 'bread-large', qty: 3 }] },
+    { branchId: 'B2', status: 'voided', items: [{ productId: 'bread-large', qty: 9 }] },
+    { branchId: 'MAIN', status: 'normal', items: [{ productId: 'bread-large', qty: 5 }] },
   ]
   assert.deepEqual(soldAt(sales, 'B2'), { 'bread-large': 3 })
 })
@@ -101,7 +101,7 @@ test("one outlet's shelf is what came in less what went out", () => {
         items: [{ productId: 'bread-large', qtySent: 40, qtyReceived: 40 }],
       },
     ],
-    sales: [{ branchId: 'B2', status: 'normal', lines: [{ productId: 'bread-large', qty: 15 }] }],
+    sales: [{ branchId: 'B2', status: 'normal', items: [{ productId: 'bread-large', qty: 15 }] }],
     previousClosing: { carry: [{ productId: 'rusk', qty: 6 }] },
   })
 
@@ -124,7 +124,7 @@ test('selling more than arrived shows nothing left, not minus two loaves', () =>
     products,
     branch: branches[1],
     transfers: [],
-    sales: [{ branchId: 'B2', status: 'normal', lines: [{ productId: 'bread-large', qty: 2 }] }],
+    sales: [{ branchId: 'B2', status: 'normal', items: [{ productId: 'bread-large', qty: 2 }] }],
   })
   assert.equal(shelf.lines.find((l) => l.productId === 'bread-large').expected, 0)
 })
@@ -197,7 +197,7 @@ test('each row carries what came in, what sold, what is left, and what it is wor
       },
     ],
     sales: [
-      { branchId: 'B2', status: 'normal', lines: [{ productId: 'bread-large', qty: 15 }] },
+      { branchId: 'B2', status: 'normal', items: [{ productId: 'bread-large', qty: 15 }] },
     ],
     closings: [
       { branchId: 'B2', businessDate: '2026-08-11', carry: [{ productId: 'bread-large', qty: 5 }] },
@@ -227,7 +227,7 @@ test('an outlet with none because it sold out reads differently from one that go
         items: [{ productId: 'bread-large', qtySent: 10, qtyReceived: 10 }],
       },
     ],
-    sales: [{ branchId: 'B2', status: 'normal', lines: [{ productId: 'bread-large', qty: 10 }] }],
+    sales: [{ branchId: 'B2', status: 'normal', items: [{ productId: 'bread-large', qty: 10 }] }],
     closings: [],
     businessDate: '2026-08-12',
     previousDate: '2026-08-11',
@@ -243,8 +243,8 @@ test('an outlet with none because it sold out reads differently from one that go
 
 test('the totals add up the rows', () => {
   const rows = [
-    { available: 45, sold: 15, left: 30, worth: 6600, soldValue: 3300 },
-    { available: 10, sold: 4, left: 6, worth: 900, soldValue: 600 },
+    { available: 45, sold: 15, left: 30, worth: 6600, soldValue: 3300, unaccounted: 0 },
+    { available: 10, sold: 4, left: 6, worth: 900, soldValue: 600, unaccounted: 0 },
   ]
   assert.deepEqual(stockTotals(rows), {
     available: 55,
@@ -252,6 +252,7 @@ test('the totals add up the rows', () => {
     left: 36,
     worth: 7500,
     soldValue: 3900,
+    unaccounted: 0,
   })
   assert.deepEqual(stockTotals([]), {
     available: 0,
@@ -259,5 +260,55 @@ test('the totals add up the rows', () => {
     left: 0,
     worth: 0,
     soldValue: 0,
+    unaccounted: 0,
   })
+})
+
+test('selling more than arrived is named rather than swallowed by the clamp', () => {
+  const report = stockReport({
+    products,
+    branches,
+    transfers: [],
+    // Nothing was ever delivered, yet three loaves were sold. Per line the
+    // shelf clamps at zero — there is no minus-three bread — but that would
+    // leave the totals not adding up, which reads as broken arithmetic.
+    sales: [{ branchId: 'B2', status: 'normal', items: [{ productId: 'bread-large', qty: 3 }] }],
+    closings: [],
+    businessDate: '2026-08-12',
+    previousDate: '2026-08-11',
+  })
+
+  const bread = byProduct(report).find((r) => r.productId === 'bread-large')
+  assert.equal(bread.available, 0)
+  assert.equal(bread.sold, 3)
+  assert.equal(bread.left, 0)
+  assert.equal(bread.unaccounted, 3)
+  assert.equal(stockTotals(byProduct(report)).unaccounted, 3)
+})
+
+test('one shop overselling is not cancelled out by another sitting on stock', () => {
+  // Gulberg sells four it never received; the hub has forty untouched. Measured
+  // on the row those cancel and the gap vanishes — leaving totals that cannot
+  // be reconciled and no explanation on screen. It has to be counted per outlet.
+  const report = stockReport({
+    products,
+    branches,
+    transfers: [
+      {
+        toBranchId: 'MAIN',
+        status: 'received',
+        items: [{ productId: 'bread-large', qtySent: 40, qtyReceived: 40 }],
+      },
+    ],
+    sales: [{ branchId: 'B2', status: 'normal', items: [{ productId: 'bread-large', qty: 4 }] }],
+    closings: [],
+    businessDate: '2026-08-12',
+    previousDate: '2026-08-11',
+  })
+
+  const rows = byProduct(report)
+  const totals = stockTotals(rows)
+  assert.equal(totals.unaccounted, 4)
+  // And with it named, the top line reconciles: had − sold + unaccounted = left.
+  assert.equal(totals.available - totals.sold + totals.unaccounted, totals.left)
 })

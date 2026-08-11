@@ -112,7 +112,21 @@ export default function StockReport() {
                 : '—'}
             </div>
           </div>
+          {totals.unaccounted > 0 && (
+            <div className="stat">
+              <div className="label">Not accounted for</div>
+              <div className="value sub bad">{totals.unaccounted}</div>
+            </div>
+          )}
         </div>
+        {totals.unaccounted > 0 && (
+          <p className="muted small" style={{ marginTop: 10, marginBottom: 0 }}>
+            {totals.unaccounted} sold that never showed up as delivered — so{' '}
+            {totals.available} less {totals.sold} does not come to {totals.left}. Usually stock
+            reached a shop without the delivery being counted in. Worth asking about rather than
+            worth hiding.
+          </p>
+        )}
         <div className="steps" style={{ marginTop: 12 }}>
           {outlets.map((o) => (
             <div className="step" key={o.branchId}>

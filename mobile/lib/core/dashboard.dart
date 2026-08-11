@@ -84,7 +84,10 @@ DaySummary summariseDay(List<Map<String, dynamic>> sales) {
     if (sale['payment'] == 'cash') cashTotal += total;
     if (sale['payment'] == 'card') cardTotal += total;
 
-    for (final raw in (sale['lines'] as List?) ?? const []) {
+    // `items`, matching what the web app's recordSale writes. Reading anything
+    // else here would report that nothing had sold all day, which reads as a
+    // quiet shop rather than as a bug.
+    for (final raw in (sale['items'] as List?) ?? const []) {
       final line = (raw as Map).cast<String, dynamic>();
       final id = (line['productId'] ?? '') as String;
       final qty = ((line['qty'] as num?) ?? 0).round();
