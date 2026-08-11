@@ -19,6 +19,7 @@ import Bake from './screens/Bake.jsx'
 import Stock from './screens/Stock.jsx'
 import Dispatch from './screens/Dispatch.jsx'
 import Materials from './screens/Materials.jsx'
+import StockReport from './screens/StockReport.jsx'
 
 /**
  * Light or dark, one tap.
@@ -51,6 +52,7 @@ function ThemeToggle() {
 const NAV = {
   owner: [
     { to: '/dashboard', label: 'Dashboard' },
+    { to: '/stock-report', label: 'Stock' },
     { to: '/materials', label: 'Materials' },
     { to: '/catalog', label: 'Catalog' },
   ],
@@ -79,6 +81,7 @@ const ALLOWED = {
   '/dashboard': ['owner'],
   '/catalog': ['owner'],
   '/materials': ['owner'],
+  '/stock-report': ['owner'],
 }
 
 function Only({ path, role, children }) {
@@ -294,6 +297,14 @@ export default function App() {
             element={
               <Only path="/materials" role={profile.role}>
                 <Materials />
+              </Only>
+            }
+          />
+          <Route
+            path="/stock-report"
+            element={
+              <Only path="/stock-report" role={profile.role}>
+                <StockReport />
               </Only>
             }
           />
