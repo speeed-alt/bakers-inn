@@ -4,6 +4,7 @@ import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
 import { formatMoney, parseMoney } from '../lib/money.js'
 import { DEFAULT_WEIGHT_UNIT } from '../lib/quantity.js'
+import { mergeSuggestions, planMerge } from '../lib/grouping.js'
 import { PRODUCT_CATEGORIES, ROLES } from '../config.js'
 import { archiveProduct, saveBranch, saveProduct, setUserActive } from '../data/catalog.js'
 import { createStaff } from '../data/staff.js'
@@ -51,6 +52,8 @@ function Products() {
 
   return (
     <>
+      <MergeByPrice products={list} />
+
       <div className="card">
         <div className="row between">
           <h2 style={{ margin: 0 }}>Products</h2>
@@ -89,6 +92,7 @@ function Products() {
                     {p.sellsNextDay ? 'keeps' : 'same day'}
                     {p.soldByWeight && ` · per ${p.unit || DEFAULT_WEIGHT_UNIT}`}
                     {p.dailyRate && ' · daily rate'}
+                    {p.variants?.length > 1 && ` · ${p.variants.length} names`}
                   </td>
                   <td className="num">
                     <button className="btn ghost small" onClick={() => setEditing(p)}>Edit</button>
@@ -110,6 +114,119 @@ function Products() {
         <ProductModal product={editing} others={list} onClose={() => setEditing(null)} />
       )}
     </>
+  )
+}
+
+/**
+ * Give one id to everything in a category at the same price.
+ *
+ * Five cakes at Rs 2,000 become one code, one stock line and one order row —
+ * with the five names kept underneath, so the cashier still picks which cake
+ * and the customer's slip still says Lotus.
+ *
+ * The card only appears when there is something to merge, and it says what is
+ * lost before it does anything. That cost is real: once they share an id the
+ * system can count ten cakes sold but can no longer say which ten.
+ */
+function MergeByPrice({ products }) {
+  const groups = mergeSuggestions(products)
+  const [open, setOpen] = useState(null)
+
+  if (groups.length === 0) return null
+
+  return (
+    <div className="card">
+      <div className="row between">
+        <h3 style={{ margin: 0 }}>Same category, same price</h3>
+        <span className="muted small">{groups.length} could share a code</span>
+      </div>
+      <p className="muted small">
+        Give these one code so the till has fewer numbers to remember. The names stay — the cashier
+        picks which one and the receipt says it.
+      </p>
+      <div className="attention">
+        {groups.map((group) => (
+          <div className="attention-row" key={group.key}>
+            <div className="row between">
+              <span>
+                {group.category} · <Money minor={group.price} />
+                <div className="where">{group.variants.join(', ')}</div>
+              </span>
+              <button className="btn small" onClick={() => setOpen(group)}>
+                Merge {group.members.length}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {open && <MergeModal group={open} onClose={() => setOpen(null)} />}
+    </div>
+  )
+}
+
+function MergeModal({ group, onClose }) {
+  const [name, setName] = useState(group.suggestedName)
+  const [code, setCode] = useState(group.keepCode)
+  const [busy, setBusy] = useState(false)
+  const plan = planMerge(group, { name: name.trim(), code: code.trim() })
+
+  async function merge() {
+    setBusy(true)
+    try {
+      await saveProduct(plan.keep.id, {
+        code: plan.keep.code,
+        name: plan.keep.name,
+        category: plan.keep.category,
+        price: plan.keep.price,
+        sellsNextDay: plan.keep.sellsNextDay,
+        variants: plan.keep.variants,
+      })
+      // Archived, never deleted: every sale ever rung against these still has
+      // to make sense, and they carry their own name and price anyway.
+      for (const gone of plan.archive) await archiveProduct(gone.id, true)
+      onClose()
+    } catch (error) {
+      console.error('[bakery] merge failed', error)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title={`Merge ${group.members.length} items`} onClose={onClose}>
+      <div className="field">
+        <label>Code the cashier types</label>
+        <input type="text" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} />
+      </div>
+      <div className="field">
+        <label>Name on the till</label>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+
+      <h3>What the cashier will pick between</h3>
+      <div className="bill" style={{ marginBottom: 12 }}>
+        {plan.keep.variants.map((variant) => (
+          <div className="bill-row" key={variant}>
+            <span className="bill-code" />
+            <span className="bill-name">{variant}</span>
+            <span />
+            <span className="bill-amount"><Money minor={group.price} /></span>
+          </div>
+        ))}
+      </div>
+
+      <p className="muted small">
+        <b>What you gain:</b> one code, one stock line and one order row instead of{' '}
+        {group.members.length}.
+        <br />
+        <b>What you lose:</b> the system will know that ten of these sold, but not which ten. Sales
+        already rung keep their own names, so nothing that has happened changes.
+      </p>
+
+      <button className="btn primary big block" disabled={busy || !code.trim() || !name.trim()} onClick={merge}>
+        {busy ? 'Merging…' : `Give all ${group.members.length} the code ${code.trim()}`}
+      </button>
+    </Modal>
   )
 }
 

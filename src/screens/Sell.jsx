@@ -10,6 +10,7 @@ import { exactCodeMatch, findProducts } from '../lib/search.js'
 import { recordRefund, recordSale, salesForDay, voidSale } from '../data/sales.js'
 import { closingDoc, isClosed } from '../data/closings.js'
 import { priceOf, ratesNotSet, ratesOf } from '../lib/rates.js'
+import { lineNameFor, variantsOf } from '../lib/grouping.js'
 import { rateDoc } from '../data/rates.js'
 import {
   formatQuantity,
@@ -44,6 +45,7 @@ export default function Sell({ branchId, branchName }) {
   const [receipt, setReceipt] = useState(null)
   const [voidTarget, setVoidTarget] = useState(null)
   const [notFound, setNotFound] = useState('')
+  const [picking, setPicking] = useState(null)
   const entry = useRef(null)
 
   // This morning's rates for the items that are priced fresh. A missing sheet
@@ -65,21 +67,34 @@ export default function Sell({ branchId, branchName }) {
     !isClosed(yesterdayClosing.data) &&
     (yesterdaySales.data?.length ?? 0) > 0
 
-  function addProduct(p) {
+  function addProduct(p, variant = null) {
+    // Several names can share one id — five cakes at the same price are one
+    // stock line and one code. Which one the customer asked for still has to be
+    // chosen, so the slip says Lotus rather than "cakes at 2,000".
+    const choices = variantsOf(p)
+    if (choices.length > 0 && !variant) {
+      setPicking(p)
+      return
+    }
+
     // The price is resolved once, here, and copied onto the line. Whatever
     // happens to a rate later, this sale keeps what the customer was charged.
     const price = priceOf(p, prices)
     const weighed = isWeighed(p)
+    const lineName = lineNameFor(p, variant)
 
     setLines((cur) => {
-      const at = cur.findIndex((l) => l.productId === p.id)
+      // Two variants of one product are two lines, not one — a customer buying
+      // a Lotus and a VIP should see both on the slip. They still share an id,
+      // so stock and the reports treat them as the same thing.
+      const at = cur.findIndex((l) => l.productId === p.id && l.name === lineName)
       if (at === -1) {
         return [
           ...cur,
           {
             productId: p.id,
             code: p.code ?? '',
-            name: p.name,
+            name: lineName,
             price,
             // A weighed item starts at a quarter rather than one: a whole kilo
             // is a big default to have to correct, and the cashier is about to
@@ -99,11 +114,14 @@ export default function Sell({ branchId, branchName }) {
     entry.current?.focus()
   }
 
-  function setQty(productId, qty) {
+  // By position, not by product id. Two variants of one merged product share an
+  // id, so keying on it would change both lines at once — put two Lotus on the
+  // bill and the VIP beside it would silently become two as well.
+  function setQty(index, qty) {
     setLines((cur) =>
       qty <= 0
-        ? cur.filter((l) => l.productId !== productId)
-        : cur.map((l) => (l.productId === productId ? { ...l, qty } : l)),
+        ? cur.filter((_, i) => i !== index)
+        : cur.map((l, i) => (i === index ? { ...l, qty } : l)),
     )
   }
 
@@ -268,6 +286,29 @@ export default function Sell({ branchId, branchName }) {
         </div>
       </div>
 
+      {picking && (
+        <Modal title={picking.name} onClose={() => setPicking(null)}>
+          <p className="muted small">
+            These share a code and a price. Which one is it? The slip will say the name you pick.
+          </p>
+          <div className="grid2">
+            {variantsOf(picking).map((variant) => (
+              <button
+                key={variant}
+                className="btn big"
+                onClick={() => {
+                  const product = picking
+                  setPicking(null)
+                  addProduct(product, variant)
+                }}
+              >
+                {variant}
+              </button>
+            ))}
+          </div>
+        </Modal>
+      )}
+
       {paying && (
         <PaymentModal total={total} onClose={() => setPaying(false)} onTake={takePayment} />
       )}
@@ -314,8 +355,8 @@ function Bill({ lines, onQty }) {
         <span className="bill-amount">Amount</span>
       </div>
       {lines.length === 0 && <Empty>Type a code or name above to start the bill</Empty>}
-      {lines.map((l) => (
-        <div className="bill-row" key={l.productId}>
+      {lines.map((l, index) => (
+        <div className="bill-row" key={`${l.productId}::${l.name}`}>
           <span className="bill-code">{l.code}</span>
           <span>
             <span className="bill-name">{l.name}</span>
@@ -329,7 +370,7 @@ function Bill({ lines, onQty }) {
               bill having to look the product up again. */}
           <Stepper
             value={l.qty}
-            onChange={(q) => onQty(l.productId, q)}
+            onChange={(q) => onQty(index, q)}
             label={`quantity of ${l.name}`}
             step={stepFor(l)}
             parse={(raw) => parseQuantity(raw, l)}
