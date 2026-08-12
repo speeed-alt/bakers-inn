@@ -25,7 +25,7 @@ import {
   recordPurchase,
   saveMaterial,
 } from '../data/materials.js'
-import { Empty, Modal, Money } from '../components/ui.jsx'
+import { Empty, Loading, Modal, Money } from '../components/ui.jsx'
 import StockSheet from '../components/StockSheet.jsx'
 
 /**
@@ -57,7 +57,9 @@ export default function Materials() {
   const live = list.filter((m) => m.active !== false)
   const short = lowStock(live)
 
-  if (materials.loading) return <div className="page"><p className="muted">Loading…</p></div>
+  if (materials.loading) {
+    return <div className="page"><Loading>Loading raw materials…</Loading></div>
+  }
 
   return (
     <div className="page">
@@ -110,8 +112,11 @@ export default function Materials() {
               <tr>
                 <th>Material</th>
                 <th className="num">On hand</th>
-                <th className="num">Used / day</th>
-                <th className="num">Days left</th>
+                {/* Dropped under 680px rather than left to force a sideways
+                    scroll before reaching Adjust/Edit — their values still
+                    live in the muted line under the material's name. */}
+                <th className="num hide-narrow">Used / day</th>
+                <th className="num hide-narrow">Days left</th>
                 <th />
               </tr>
             </thead>
@@ -119,18 +124,25 @@ export default function Materials() {
               {list.map((m) => {
                 const days = daysOfStock(m)
                 return (
-                  <tr key={m.id} style={m.active === false ? { opacity: 0.45 } : undefined}>
+                  <tr key={m.id} className={m.active === false ? 'row-archived' : undefined}>
                     <td>
                       <b>{m.name}</b>
-                      {isLow(m) && m.active !== false && <span className="bad small"> · low</span>}
+                      {/* Not --alert: the dedicated "Running low" card above
+                          already flags this without red, and that colour is
+                          reserved for money that does not add up. */}
+                      {isLow(m) && m.active !== false && <span className="muted small"> · low</span>}
                       <div className="muted small">
-                        {formatMoney(m.costPerUnit ?? 0)} per {m.unit}
+                        <Money minor={m.costPerUnit ?? 0} /> per {m.unit}
                         {m.reorderLevel ? ` · reorder at ${m.reorderLevel}` : ''}
+                        {/* Folded in here so the figure survives even where the
+                            dedicated columns are hidden below 680px. */}
+                        {m.usagePerDay ? ` · ${m.usagePerDay} ${m.unit}/day` : ''}
+                        {days !== null ? ` · ${Math.floor(days)} days left` : ''}
                       </div>
                     </td>
                     <td className="num">{m.onHand ?? 0} {m.unit}</td>
-                    <td className="num muted">{m.usagePerDay ? `${m.usagePerDay}` : '—'}</td>
-                    <td className="num">{days === null ? '—' : Math.floor(days)}</td>
+                    <td className="num muted hide-narrow">{m.usagePerDay ? `${m.usagePerDay}` : '—'}</td>
+                    <td className="num hide-narrow">{days === null ? '—' : Math.floor(days)}</td>
                     <td className="num">
                       <button className="btn ghost small" onClick={() => setMoving(m)}>Adjust</button>
                       <button className="btn ghost small" onClick={() => setEditing(m)}>Edit</button>
@@ -145,22 +157,33 @@ export default function Materials() {
 
       <div className="card">
         <h3>Recent purchases</h3>
-        {(purchases.data ?? []).length === 0 && <Empty>Nothing bought yet.</Empty>}
-        <table>
-          <tbody>
-            {(purchases.data ?? []).map((p) => (
-              <tr key={p.id}>
-                <td>
-                  <b>{formatDate(p.businessDate)}</b>
-                  <div className="muted small">
-                    {(p.items ?? []).map((i) => `${i.materialName} ${i.qty}${i.unit}`).join(' · ')}
-                  </div>
-                </td>
-                <td className="num"><Money minor={p.total} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {purchases.loading ? (
+          // Without this guard, a still-loading list and a genuinely empty one
+          // looked identical — "Nothing bought yet" on a slow connection reads
+          // as a fact about the shop rather than as a read still in flight.
+          <Loading inline>Loading recent purchases…</Loading>
+        ) : (purchases.data ?? []).length === 0 ? (
+          <Empty>Nothing bought yet.</Empty>
+        ) : (
+          <table>
+            <thead>
+              <tr><th>Purchase</th><th className="num">Total</th></tr>
+            </thead>
+            <tbody>
+              {(purchases.data ?? []).map((p) => (
+                <tr key={p.id}>
+                  <td>
+                    <b>{formatDate(p.businessDate)}</b>
+                    <div className="muted small">
+                      {(p.items ?? []).map((i) => `${i.materialName} ${i.qty}${i.unit}`).join(' · ')}
+                    </div>
+                  </td>
+                  <td className="num"><Money minor={p.total} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {buying && (

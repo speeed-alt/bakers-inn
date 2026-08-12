@@ -32,6 +32,9 @@ function ReceiveDelivery({ branchId, businessDate }) {
   if (incoming.loading) {
     return (
       <div className="card">
+        {/* Rendered in the loading state too, so the card does not visibly
+            shift once the delivery data actually arrives. */}
+        <h3>Delivery</h3>
         <Loading inline>Checking for deliveries…</Loading>
       </div>
     )

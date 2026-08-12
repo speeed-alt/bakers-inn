@@ -219,7 +219,10 @@ export default function StockReport() {
           appearing behind a receipt — so anything left in the app tree prints
           as a blank page. It did. */}
       {sheet && (
-        <Modal title="Stock sheet" onClose={() => setSheet(false)} wide>
+        // No title prop here: StockSheet supplies its own heading through
+        // .sheet-head, and passing one too stacked two headings with nothing
+        // between them.
+        <Modal onClose={() => setSheet(false)} wide>
           <StockSheet report={report} rows={rows} />
           <div className="grid2 no-print" style={{ marginTop: 16 }}>
             <button className="btn" onClick={printSheet}>Print</button>
@@ -251,38 +254,43 @@ function StockSheet({ report, rows }) {
         </p>
       </div>
 
-      <table>
-        <thead>
-          <tr className="sheet-head">
-            <th>Code</th>
-            <th>Item</th>
-            <th className="num">Had</th>
-            <th className="num">Sold</th>
-            {outlets.map((o) => (
-              <th className="num" key={o.branchId}>{o.branchName}</th>
-            ))}
-            <th className="num">Left</th>
-            <th className="num">Counted</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.productId}>
-              <td>{row.code}</td>
-              <td>{row.productName}</td>
-              <td className="num">{row.available}</td>
-              <td className="num">{row.sold}</td>
+      {/* Print ignores this — @media print already forces the sheet to full
+          page width. It is the on-screen preview, in a fixed-width modal on
+          the owner's phone, that needs somewhere for a wide table to go. */}
+      <div className="scroll-x">
+        <table>
+          <thead>
+            <tr className="sheet-head">
+              <th>Code</th>
+              <th>Item</th>
+              <th className="num">Had</th>
+              <th className="num">Sold</th>
               {outlets.map((o) => (
-                <td className="num" key={o.branchId}>
-                  {row.perOutlet[o.branchId]?.left ?? '–'}
-                </td>
+                <th className="num" key={o.branchId}>{o.branchName}</th>
               ))}
-              <td className="num">{row.left}</td>
-              <td className="num"><span className="blank" /></td>
+              <th className="num">Left</th>
+              <th className="num">Counted</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.productId}>
+                <td>{row.code}</td>
+                <td>{row.productName}</td>
+                <td className="num">{row.available}</td>
+                <td className="num">{row.sold}</td>
+                {outlets.map((o) => (
+                  <td className="num" key={o.branchId}>
+                    {row.perOutlet[o.branchId]?.left ?? '–'}
+                  </td>
+                ))}
+                <td className="num">{row.left}</td>
+                <td className="num"><span className="blank" /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <div className="sheet-block">
         <p>

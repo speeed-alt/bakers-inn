@@ -16,7 +16,7 @@ export default function Login({ branchId, branchName, onChangeOutlet }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  if (users.loading) return <Loading />
+  if (users.loading) return <Loading>Reading staff…</Loading>
 
   // The owner can sign in on any tablet; everyone else appears at their own outlet.
   const staff = (users.data ?? [])
@@ -49,7 +49,7 @@ export default function Login({ branchId, branchName, onChangeOutlet }) {
 
   if (!picked) {
     return (
-      <div className="page">
+      <div className="page narrow">
         <div className="card">
           <h2>{branchName ?? branchId}</h2>
           <p className="muted small">
@@ -84,7 +84,7 @@ export default function Login({ branchId, branchName, onChangeOutlet }) {
   }
 
   return (
-    <div className="page" style={{ maxWidth: 360 }}>
+    <div className="page narrow">
       <div className="card">
         <h2>Hello {picked.name}</h2>
         <p className="muted small">Enter your 4-digit PIN.</p>

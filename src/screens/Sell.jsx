@@ -25,6 +25,18 @@ import { QUICK_CASH_STEPS, VOID_REASONS } from '../config.js'
 import Receipt from '../components/Receipt.jsx'
 import { printReceipt } from '../lib/paper.js'
 
+/**
+ * Named, not counted: "eggs and bread" is worth reading before the cashier
+ * starts typing. With no cap a morning where several rates are unset can wrap
+ * onto multiple lines in the fixed-height entry area, pushing the box the
+ * cashier is about to type into further down the screen.
+ */
+function unpricedList(products, max = 3) {
+  const names = products.map((p) => p.name)
+  if (names.length <= max) return names.join(', ')
+  return `${names.slice(0, max).join(', ')} and ${names.length - max} more`
+}
+
 export default function Sell({ branchId, branchName }) {
   const { profile } = useAuth()
   const today = businessDateOf()
@@ -168,6 +180,20 @@ export default function Sell({ branchId, branchName }) {
     )
   }
 
+  // Without this, the whole interactive till — entry box, bill, Pay — could
+  // render before the app has confirmed today is not already closed. A
+  // cashier who starts a bill in that window would watch it vanish under
+  // "Today is closed" mid-entry, with a customer standing there.
+  if (todayClosing.loading) {
+    return (
+      <div className="page">
+        <div className="card">
+          <Loading>Checking today's status…</Loading>
+        </div>
+      </div>
+    )
+  }
+
   if (mustCloseYesterday) {
     return (
       <div className="page">
@@ -211,8 +237,8 @@ export default function Sell({ branchId, branchName }) {
           trading; this is here so nobody finds out at closing time. */}
       {unpriced.length > 0 && (
         <div className="strip block no-print">
-          Today's rate is not set for {unpriced.map((p) => p.name).join(', ')} — selling at
-          yesterday's until the owner sets it.
+          Today's rate is not set for {unpricedList(unpriced)} — selling at yesterday's until the
+          owner sets it.
         </div>
       )}
       <div className="till-entry">
@@ -229,7 +255,10 @@ export default function Sell({ branchId, branchName }) {
           placeholder="Type item code or name, then press Enter"
           aria-label="Add an item by code or name"
         />
-        {notFound && <p className="bad small" style={{ margin: '8px 2px 0' }}>{notFound}</p>}
+        {/* Plain text, not --alert: a mistyped code is not the money-does-not-
+            add-up condition that colour is reserved for, and using it here
+            would dilute the one signal the design relies on for that. */}
+        {notFound && <p className="small" style={{ margin: '8px 2px 0' }}>{notFound}</p>}
       </div>
 
       <div className="till-body">
@@ -271,7 +300,19 @@ export default function Sell({ branchId, branchName }) {
               <b>{formatMoney(total)}</b>
             </div>
             <div className="grid2" style={{ marginTop: 12 }}>
-              <button className="btn" disabled={!lines.length} onClick={() => setLines([])}>
+              {/* Ghost, not a matching filled button: Clear and Pay sitting at
+                  equal visual weight side by side invites a mis-tap that
+                  silently throws away a whole bill with no undo. Confirmation
+                  only kicks in once there is real work to lose — a single item
+                  is cheap enough to just clear. */}
+              <button
+                className="btn ghost"
+                disabled={!lines.length}
+                onClick={() => {
+                  if (lines.length > 1 && !window.confirm('Clear the whole bill?')) return
+                  setLines([])
+                }}
+              >
                 Clear
               </button>
               <button
@@ -306,6 +347,13 @@ export default function Sell({ branchId, branchName }) {
               </button>
             ))}
           </div>
+          <button
+            className="btn ghost block"
+            style={{ marginTop: 12 }}
+            onClick={() => setPicking(null)}
+          >
+            Cancel
+          </button>
         </Modal>
       )}
 
@@ -403,7 +451,7 @@ function RecentSales({ sales, onVoid, onReprint }) {
           </thead>
           <tbody>
             {sales.slice(0, 10).map((s) => (
-              <tr key={s.id} style={s.status === 'voided' ? { opacity: 0.5 } : undefined}>
+              <tr key={s.id} className={s.status === 'voided' ? 'sale-voided' : undefined}>
                 <td className="mono small">{s.ref}</td>
                 <td className="small">{formatTime(s.localAt?.toDate?.())}</td>
                 <td className="small">
@@ -450,6 +498,9 @@ function PaymentModal({ total, onClose, onTake }) {
           <button className="btn big primary" onClick={() => setMethod('cash')}>Cash</button>
           <button className="btn big" onClick={() => setMethod('card')}>Card</button>
         </div>
+        <button className="btn ghost block" style={{ marginTop: 12 }} onClick={onClose}>
+          Cancel
+        </button>
       </Modal>
     )
   }
@@ -541,6 +592,10 @@ function VoidModal({ sale, onClose, onVoid, onRefund }) {
 
       <button className="btn block" onClick={onRefund}>
         Refund instead ({formatMoney(sale.total)} back)
+      </button>
+
+      <button className="btn ghost block" style={{ marginTop: 12 }} onClick={onClose}>
+        Cancel
       </button>
     </Modal>
   )

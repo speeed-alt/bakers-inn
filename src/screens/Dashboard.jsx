@@ -115,6 +115,20 @@ export default function Dashboard() {
     )
   }
 
+  // A denied or failed read used to fall through the ?? [] / ?? 0 defaults
+  // exactly like a quiet morning — Rs 0 takings looks identical whether
+  // nothing sold or the read never landed. Said out loud instead.
+  if (sales.error || branches.error) {
+    return (
+      <div className="page">
+        <div className="card">
+          <h2>Could not read today's figures</h2>
+          <p className="muted">Check the connection and reload.</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="page">
       <div className="card">
@@ -136,7 +150,10 @@ export default function Dashboard() {
             <div className="value sub">{formatMoney(overall.cardTotal)}</div>
           </div>
           <div className="stat">
-            <div className="label">Sales</div>
+            {/* Not "Sales": next to a column of rupee figures headed
+                "Takings", the word read like another money stat rather than a
+                count of transactions. */}
+            <div className="label">Transactions</div>
             <div className="value sub">{overall.txCount}</div>
           </div>
           <div className="stat">
@@ -164,10 +181,11 @@ export default function Dashboard() {
         </div>
       )}
 
-      <TodaysRates today={today} products={products.data ?? []} />
-
-      <Faults rows={faults.data ?? []} today={today} nameOf={nameOf} />
-
+      {/* Cycle-state and the two exception cards sit together here, restoring
+          the order this file's own top comment documents: takings, then the
+          state of today's cycle, then what needs him. A price-entry form
+          (TodaysRates) used to sit between "Needs a look" and "Tablets
+          reporting trouble", splitting the two attention-style cards apart. */}
       <div className="card">
         <h3>Today's round</h3>
         <TodaysRound
@@ -179,17 +197,22 @@ export default function Dashboard() {
         />
       </div>
 
+      <TodaysRates today={today} products={products.data ?? []} />
+
+      <Faults rows={faults.data ?? []} today={today} nameOf={nameOf} />
+
       <div className="card">
         <h3>Last {DAYS_SHOWN} days</h3>
         <Week week={week} />
       </div>
 
-      <Waste reports={reports.data ?? []} />
+      <Waste reports={reports.data ?? []} loading={reports.loading} />
 
       <Margin
         week={week}
         reports={reports.data ?? []}
         purchases={purchases.data ?? []}
+        loading={reports.loading || purchases.loading}
       />
 
       <Accountant today={today} />
@@ -198,27 +221,39 @@ export default function Dashboard() {
       <div className="card">
         <h3>By outlet today</h3>
         <table>
+          <thead>
+            <tr>
+              <th>Outlet</th>
+              <th className="num">Sales</th>
+              <th className="num">Cash</th>
+              <th className="num">Card</th>
+              <th className="num">Total</th>
+            </tr>
+          </thead>
           <tbody>
             {perBranch.map(({ branchId, summary }) => (
               <tr key={branchId}>
                 <td>
                   <b>{nameOf(branchId)}</b>
-                  <div className="muted small">
-                    {summary.txCount} sales · cash <Money minor={summary.cashTotal} /> · card{' '}
-                    <Money minor={summary.cardTotal} />
-                    {summary.voidedCount > 0 && ` · ${summary.voidedCount} voided`}
-                  </div>
+                  {summary.voidedCount > 0 && (
+                    <div className="muted small">{summary.voidedCount} voided</div>
+                  )}
                 </td>
-                <td className="num"><Money minor={summary.salesTotal} /></td>
+                <td className="num">{summary.txCount}</td>
+                <td className="num muted"><Money minor={summary.cashTotal} /></td>
+                <td className="num muted"><Money minor={summary.cardTotal} /></td>
+                <td className="num"><b><Money minor={summary.salesTotal} /></b></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {overall.byProduct.length > 0 && (
-        <div className="card">
-          <h3>Best sellers today</h3>
+      <div className="card">
+        <h3>Best sellers today</h3>
+        {overall.byProduct.length === 0 ? (
+          <Empty>Nothing rung up yet today.</Empty>
+        ) : (
           <table>
             <thead>
               <tr>
@@ -237,12 +272,16 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="card">
         <h3>Recent closes</h3>
-        {(closings.data ?? []).length === 0 && <Empty>No days closed yet.</Empty>}
+        {closings.loading ? (
+          <Loading inline>Reading recent closes…</Loading>
+        ) : (closings.data ?? []).length === 0 ? (
+          <Empty>No days closed yet.</Empty>
+        ) : (
         <div className="scroll-x">
           <table>
             <thead>
@@ -278,6 +317,7 @@ export default function Dashboard() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   )
@@ -404,7 +444,15 @@ function TodaysRates({ today, products }) {
             <span className="bill-code">{p.code}</span>
             <span>
               <span className="bill-name">{p.name}</span>
-              {p.soldByWeight && <span className="muted small"> · per {p.unit || 'kg'}</span>}
+              {/* Folded in here rather than in the amount column: on the
+                  mobile bill-row layout that column sits where every other
+                  screen puts a money figure, and a status word there instead
+                  of a rate reads as a mistake at a glance. */}
+              <span className="muted small">
+                {p.soldByWeight ? ` · per ${p.unit || 'kg'}` : ''}
+                {' · '}
+                {Number.isFinite(prices[p.id]) ? 'set for today' : 'last known'}
+              </span>
             </span>
             <input
               type="text"
@@ -415,9 +463,6 @@ function TodaysRates({ today, products }) {
               onChange={(e) => setDraft({ ...values, [p.id]: e.target.value })}
               onFocus={(e) => e.target.select()}
             />
-            <span className="bill-amount muted small">
-              {Number.isFinite(prices[p.id]) ? 'set' : 'last known'}
-            </span>
           </div>
         ))}
       </div>
@@ -493,7 +538,11 @@ function TodaysRound({ branches, demands, order, transfers, nameOf }) {
   )
 }
 
-function Margin({ week, reports, purchases }) {
+function Margin({ week, reports, purchases, loading }) {
+  if (loading) {
+    return <div className="card"><Loading inline>Working out gross margin…</Loading></div>
+  }
+
   const from = week[0]?.date
   const to = week.at(-1)?.date
   const inWindow = (date) => date >= from && date <= to
@@ -540,11 +589,13 @@ function Margin({ week, reports, purchases }) {
 function Accountant({ today }) {
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(null)
+  const [failed, setFailed] = useState(false)
   const { from, to } = monthRange(today)
 
   async function exportMonth() {
     setBusy(true)
     setDone(null)
+    setFailed(false)
     try {
       const between = (field) => [
         where(field, '>=', from),
@@ -562,7 +613,7 @@ function Accountant({ today }) {
       setDone(`${sales.size} sales, ${purchases.size} purchases, ${reports.size} days`)
     } catch (error) {
       console.error('[bakery] export failed', error)
-      setDone('Could not build the export — check the connection and try again.')
+      setFailed(true)
     } finally {
       setBusy(false)
     }
@@ -579,11 +630,23 @@ function Accountant({ today }) {
         {busy ? 'Building…' : 'Download this month'}
       </button>
       {done && <p className="muted small" style={{ marginBottom: 0 }}>{done}</p>}
+      {failed && (
+        // Distinct from the success message, not by colour but by weight —
+        // the same reasoning as the claims-stale banner: this one needs to be
+        // noticed, not just read.
+        <p className="small" style={{ marginBottom: 0, fontWeight: 600 }}>
+          Export failed — check the connection and try again.
+        </p>
+      )}
     </div>
   )
 }
 
-function Waste({ reports }) {
+function Waste({ reports, loading }) {
+  if (loading) {
+    return <div className="card"><Loading inline>Reading waste and sell-through…</Loading></div>
+  }
+
   // Every report here is a finished day — one is only written when an outlet
   // closes — so today's counts as soon as the first shop shuts, which is
   // exactly when the owner wants to see what went in the bin.
@@ -612,10 +675,11 @@ function Waste({ reports }) {
 
       <div className="stats" style={{ margin: '12px 0' }}>
         <div className="stat">
+          {/* Plain, not --alert: expected, budgeted-for waste is not the same
+              fact as money that does not reconcile, which is what that colour
+              is reserved for. */}
           <div className="label">Thrown out</div>
-          <div className={`value ${waste.wasteValue > 0 ? 'bad' : ''}`}>
-            {formatMoney(waste.wasteValue)}
-          </div>
+          <div className="value">{formatMoney(waste.wasteValue)}</div>
         </div>
         <div className="stat">
           <div className="label">Waste rate</div>
@@ -649,7 +713,7 @@ function Waste({ reports }) {
                 <tr key={w.productId}>
                   <td>{w.productName}</td>
                   <td className="num">{w.qty}</td>
-                  <td className="num bad"><Money minor={w.value} /></td>
+                  <td className="num"><Money minor={w.value} /></td>
                 </tr>
               ))}
             </tbody>

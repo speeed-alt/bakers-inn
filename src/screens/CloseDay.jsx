@@ -14,7 +14,7 @@ import { closeDay, closingDoc, isClosed, reopenDay } from '../data/closings.js'
 import { productionDoc } from '../data/production.js'
 import { sendReturn, transfersTo } from '../data/transfers.js'
 import { WASTE_REASONS } from '../config.js'
-import { Empty, Modal, Money, Stepper } from '../components/ui.jsx'
+import { Empty, Loading, Modal, Money, Stepper } from '../components/ui.jsx'
 import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
 
 const STEPS = ['Cash', 'Leftovers', "Tomorrow's order", 'Send']
@@ -61,6 +61,11 @@ export default function CloseDay({ branchId, isMain }) {
   const [counts, setCounts] = useState({})
   const [dispositions, setDispositions] = useState({})
   const [reasons, setReasons] = useState({})
+  // Whether tomorrow's order has actually been sent during this visit to the
+  // wizard, not merely reached. Nothing else in the UI caught a cashier
+  // clicking through step 3 without pressing Send — the kitchen would simply
+  // find no order at 5am, with no warning anywhere before then.
+  const [orderSent, setOrderSent] = useState(false)
 
   const summary = useMemo(() => summariseDay(sales.data ?? []), [sales.data])
 
@@ -98,7 +103,7 @@ export default function CloseDay({ branchId, isMain }) {
     yesterdayClosing.loading || sales.loading || closing.loading || previous.loading || products.loading
 
   if (stillLoading) {
-    return <div className="page"><p className="muted">Loading…</p></div>
+    return <div className="page"><Loading>Loading today's figures…</Loading></div>
   }
 
   if (isClosed(closing.data)) {
@@ -192,9 +197,16 @@ export default function CloseDay({ branchId, isMain }) {
             <button
               key={label}
               className={`chip ${step === i + 1 ? 'on' : ''}`}
+              // Cannot jump ahead of a cash count that has not happened yet —
+              // a cashier who taps straight to step 4 used to be able to reach
+              // "Close day" having never counted the drawer at all.
+              disabled={i > 0 && counted === null}
               onClick={() => setStep(i + 1)}
             >
-              {i + 1}. {label}
+              {/* A passed step shows a check rather than its number — useful
+                  when a customer interrupts the wizard halfway through and
+                  whoever comes back to it needs to see what is already done. */}
+              {i + 1 < step ? '✓' : i + 1}. {label}
             </button>
           ))}
         </div>
@@ -230,7 +242,12 @@ export default function CloseDay({ branchId, isMain }) {
       {step === 3 && (
         <div className="card">
           <h3>Order for {formatDate(nextDate(target))}</h3>
-          <TomorrowsOrder branchId={branchId} businessDate={nextDate(target)} bare />
+          <TomorrowsOrder
+            branchId={branchId}
+            businessDate={nextDate(target)}
+            bare
+            onSubmitted={() => setOrderSent(true)}
+          />
         </div>
       )}
 
@@ -246,23 +263,41 @@ export default function CloseDay({ branchId, isMain }) {
           carry={carry}
           returns={returns}
           binnedValue={binnedValue}
+          nextFloat={nextFloat}
           needsReason={needsReason}
           onClose={finish}
         />
       )}
 
-      <div className="grid2">
-        <button className="btn" disabled={step === 1} onClick={() => setStep((s) => s - 1)}>
+      {/* On the last step this Next would be permanently disabled sitting
+          right beneath ReviewStep's own working "Close day" button — a dead
+          control adds noise exactly where the wizard most needs one
+          unambiguous action. Back is still useful there, Next is not. */}
+      {step < STEPS.length ? (
+        <div className="grid2">
+          <button className="btn" disabled={step === 1} onClick={() => setStep((s) => s - 1)}>
+            Back
+          </button>
+          <button
+            // Demoted to a plain button while step 3 is not actually done yet,
+            // so it never stands beside "Send order" at equal weight claiming
+            // to be the way forward on its own.
+            className={`btn ${(step === 1 && counted === null) || (step === 3 && !orderSent) ? '' : 'primary'}`}
+            disabled={step === 1 ? counted === null : step === 3 && !orderSent}
+            onClick={() => setStep((s) => s + 1)}
+          >
+            {step === 1 && counted === null
+              ? 'Count the cash first'
+              : step === 3 && !orderSent
+                ? 'Send the order first'
+                : 'Next'}
+          </button>
+        </div>
+      ) : (
+        <button className="btn" onClick={() => setStep((s) => s - 1)}>
           Back
         </button>
-        <button
-          className="btn primary"
-          disabled={step === STEPS.length || (step === 1 && counted === null)}
-          onClick={() => setStep((s) => s + 1)}
-        >
-          {step === 1 && counted === null ? 'Count the cash first' : 'Next'}
-        </button>
-      </div>
+      )}
     </div>
   )
 }
@@ -311,7 +346,7 @@ function CashStep({ summary, openingFloat, expected, countedText, setCountedText
             <span className="muted">
               {difference === 0 ? 'Exact' : difference > 0 ? 'Over' : 'Short'}
             </span>
-            <b className={difference === 0 ? '' : 'bad'}>{formatMoney(Math.abs(difference))}</b>
+            <b className={difference === 0 ? '' : 'bad'}><Money minor={Math.abs(difference)} /></b>
           </div>
         )}
 
@@ -362,13 +397,18 @@ function LeftoverStep({ lines, counts, setCounts, dispositions, setDispositions,
           <span>Code</span>
           <span>Item</span>
           <span>Remaining</span>
-          <span className="bill-amount">Sale</span>
+          <span className="bill-amount">Sold</span>
         </div>
         {lines.map((line) => {
           const qty = counts[line.productId] ?? line.expected
           const how = dispositions[line.productId] ?? line.disposition
           return (
-            <div className="bill-row" key={line.productId}>
+            // "top", not the default centering: this is the one .bill-row that
+            // can grow to several lines (name, detail, disposition chips,
+            // waste-reason chips), and centering left the Stepper — the
+            // control that actually matters here — floating mid-row instead
+            // of level with the product name.
+            <div className="bill-row top" key={line.productId}>
               <span className="bill-code">{line.code}</span>
               <span>
                 <span className="bill-name">{line.productName}</span>
@@ -414,13 +454,13 @@ function LeftoverStep({ lines, counts, setCounts, dispositions, setDispositions,
 
       <div className="total" style={{ marginTop: 14 }}>
         <span className="muted">Stale</span>
-        <b className={binnedValue > 0 ? 'bad' : ''}>{formatMoney(binnedValue)}</b>
+        <b className={binnedValue > 0 ? 'bad' : ''}><Money minor={binnedValue} /></b>
       </div>
     </div>
   )
 }
 
-function ReviewStep({ target, summary, openingFloat, expected, counted, difference, waste, carry, returns, binnedValue, needsReason, onClose }) {
+function ReviewStep({ target, summary, openingFloat, expected, counted, difference, waste, carry, returns, binnedValue, nextFloat, needsReason, onClose }) {
   return (
     <>
       <div className="card">
@@ -432,9 +472,21 @@ function ReviewStep({ target, summary, openingFloat, expected, counted, differen
             <tr><td className="muted">Card</td><td className="num muted"><Money minor={summary.cardTotal} /></td></tr>
             <tr><td>Counted in drawer</td><td className="num">{counted === null ? '—' : <Money minor={counted} />}</td></tr>
             <tr>
-              <td>{difference === 0 ? 'Exact' : difference > 0 ? 'Over' : 'Short'}</td>
+              {/* Not counted yet is a different fact from "counted, and it was
+                  exact" — falling through to "Short — Rs 0" here used to say
+                  the drawer had been checked and was fine, when really nobody
+                  had counted it at all. */}
+              <td>
+                {difference === null
+                  ? 'Not counted yet'
+                  : difference === 0
+                    ? 'Exact'
+                    : difference > 0
+                      ? 'Over'
+                      : 'Short'}
+              </td>
               <td className={`num ${difference ? 'bad' : ''}`}>
-                <Money minor={Math.abs(difference ?? 0)} />
+                {difference === null ? '—' : <Money minor={Math.abs(difference)} />}
               </td>
             </tr>
             <tr><td>Stale</td><td className="num">{waste.reduce((s, w) => s + w.qty, 0)} items · <Money minor={binnedValue} /></td></tr>
@@ -442,6 +494,11 @@ function ReviewStep({ target, summary, openingFloat, expected, counted, differen
             {returns.length > 0 && (
               <tr><td>Going back to the main outlet</td><td className="num">{returns.reduce((s, r) => s + r.qty, 0)} items</td></tr>
             )}
+            {/* The float is the last thing a cashier hand-types before this
+                screen, and this is the last chance to catch a mistyped one
+                before the day is actually closed — previously it only showed
+                up afterwards, in ClosedView. */}
+            <tr><td>Float left for tomorrow</td><td className="num"><Money minor={nextFloat} /></td></tr>
           </tbody>
         </table>
       </div>

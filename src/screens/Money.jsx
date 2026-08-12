@@ -170,37 +170,41 @@ export default function MoneyScreen() {
           <h3 style={{ margin: 0 }}>By outlet</h3>
           <span className="muted small">before ingredients</span>
         </div>
-        <div className="scroll-x">
-          <table>
-            <thead>
-              <tr>
-                <th>Outlet</th>
-                <th className="num">Takings</th>
-                <th className="num">Binned</th>
-                <th className="num">Wages</th>
-                <th className="num">Bills</th>
-                <th className="num">Left over</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pnl.perBranch.map((row) => (
-                <tr key={row.branchId}>
-                  <td>
-                    {row.branchName}
-                    <div className="muted small">{row.days} day{row.days === 1 ? '' : 's'} closed</div>
-                  </td>
-                  <td className="num"><Money minor={row.takings} /></td>
-                  <td className="num muted">−<Money minor={row.waste} /></td>
-                  <td className="num muted">−<Money minor={row.salaries} /></td>
-                  <td className="num muted">−<Money minor={row.utilities} /></td>
-                  <td className={`num ${row.contribution < 0 ? 'bad' : ''}`}>
-                    <b><Money minor={row.contribution} /></b>
-                  </td>
+        {pnl.perBranch.length === 0 ? (
+          <Empty>No outlets to show yet.</Empty>
+        ) : (
+          <div className="scroll-x">
+            <table>
+              <thead>
+                <tr>
+                  <th>Outlet</th>
+                  <th className="num">Takings</th>
+                  <th className="num">Binned</th>
+                  <th className="num">Wages</th>
+                  <th className="num">Bills</th>
+                  <th className="num">Left over</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {pnl.perBranch.map((row) => (
+                  <tr key={row.branchId}>
+                    <td>
+                      {row.branchName}
+                      <div className="muted small">{row.days} day{row.days === 1 ? '' : 's'} closed</div>
+                    </td>
+                    <td className="num"><Money minor={row.takings} /></td>
+                    <td className="num muted">−<Money minor={row.waste} /></td>
+                    <td className="num muted">−<Money minor={row.salaries} /></td>
+                    <td className="num muted">−<Money minor={row.utilities} /></td>
+                    <td className={`num ${row.contribution < 0 ? 'bad' : ''}`}>
+                      <b><Money minor={row.contribution} /></b>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
         <p className="muted small" style={{ marginBottom: 0 }}>
           <b>Not profit.</b> Ingredients are missing from these — flour is bought once at the hub and
           baked into bread for all three shops, and without recipes there is no honest way to say
@@ -273,19 +277,22 @@ function Utilities({ month, branches, expenses, user }) {
       {mine.length === 0 ? (
         <Empty>No bills entered for this month yet.</Empty>
       ) : (
-        <table>
-          <tbody>
-            {mine.map((e) => (
-              <tr key={e.id}>
-                <td>
-                  {e.category}
-                  <div className="muted small">{nameOf(e.branchId)}</div>
-                </td>
-                <td className="num"><Money minor={e.amount} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        // .bill/.bill-row, matching the Wages block directly below — the two
+        // lists are the same shape (a name, a note, an amount) and used to be
+        // built from two different components.
+        <div className="bill">
+          {mine.map((e) => (
+            <div className="bill-row" key={e.id}>
+              <span className="bill-code" />
+              <span>
+                <span className="bill-name">{e.category}</span>
+                <div className="muted small">{nameOf(e.branchId)}</div>
+              </span>
+              <span />
+              <span className="bill-amount"><Money minor={e.amount} /></span>
+            </div>
+          ))}
+        </div>
       )}
 
       <div className="row wrap" style={{ gap: 8, marginTop: 12 }}>

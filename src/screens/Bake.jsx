@@ -70,7 +70,7 @@ export default function Bake() {
   return (
     <div className="page">
       <div className="card">
-        <div className="row between">
+        <div className="row between wrap">
           <h2 style={{ margin: 0 }}>{po.ref} — {formatDate(po.businessDate)}</h2>
           <span className="muted small">
             {progress.linesRecorded} of {progress.lines} lines recorded
@@ -97,7 +97,7 @@ export default function Bake() {
           const value = draft[item.productId] ?? recorded ?? item.qtyNeeded
           const isDone = recorded !== undefined
           return (
-            <div className="bill-row" key={item.productId} style={isDone ? { opacity: 0.62 } : undefined}>
+            <div className={`bill-row${isDone ? ' bill-row-done' : ''}`} key={item.productId}>
               <span className="bill-code">{item.code}</span>
               <span>
                 <span className="bill-name">{item.productName}</span>
@@ -136,7 +136,11 @@ export default function Bake() {
         products={products.data ?? []}
       />
 
-      <div className="card" style={{ marginTop: 14 }}>
+      {/* No inline marginTop needed: the preceding Extras card already supplies
+          14px via its own margin-bottom, matching the rhythm used earlier on
+          this same screen. Stacking both used to double the gap to 28px right
+          before the primary submit button. */}
+      <div className="card">
         {po.status === 'done' ? (
           <>
             <h3>Finished</h3>
@@ -217,8 +221,8 @@ function Extras({ order, today, user, products }) {
 
   return (
     <div className="card" style={{ marginTop: 14 }}>
-      <div className="row between">
-        <h3 style={{ margin: 0 }}>Also baked</h3>
+      <div className="row between wrap">
+        <h3 style={{ margin: 0 }}>Also baked today</h3>
         {extras.length > 0 && (
           <span className="muted small">{extrasTotal(order)} extra</span>
         )}
@@ -230,6 +234,12 @@ function Extras({ order, today, user, products }) {
 
       {extras.length > 0 && (
         <div className="bill" style={{ marginBottom: 12 }}>
+          <div className="bill-row bill-head">
+            <span>Code</span>
+            <span>Item</span>
+            <span></span>
+            <span className="bill-amount">Qty</span>
+          </div>
           {extras.map((e) => (
             <div className="bill-row" key={e.productId}>
               <span className="bill-code">{e.code}</span>

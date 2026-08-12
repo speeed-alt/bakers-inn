@@ -8,7 +8,7 @@ import { byCategoryThenName } from '../lib/search.js'
 import { demandDoc, lastSameWeekdayDemand, saveDemand } from '../data/demands.js'
 import { branchReportsQuery } from '../data/reports.js'
 import { sameWeekdayReports, suggestOrder } from '../lib/suggest.js'
-import { Empty, Stepper } from '../components/ui.jsx'
+import { Empty, Loading, Stepper } from '../components/ui.jsx'
 
 /**
  * Tomorrow's order.
@@ -65,7 +65,7 @@ export default function TomorrowsOrder({ branchId, businessDate, bare = false, o
   }, [qty, existing.loading, existing.data, reports.loading, suggestion, history])
 
   if (products.loading || existing.loading || reports.loading || history === undefined || qty === null) {
-    return <p className="muted">Loading…</p>
+    return <Loading>Working out tomorrow's order…</Loading>
   }
 
   const order = existing.data

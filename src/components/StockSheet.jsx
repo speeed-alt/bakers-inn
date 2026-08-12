@@ -43,60 +43,67 @@ export default function StockSheet({ materials = [], reports = [], branches = []
       {short.length > 0 && (
         <div className="sheet-block">
           <h3>Running low — {short.length} of {live.length}</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Material</th>
-                <th className="num">On hand</th>
-                <th className="num">Days left</th>
-              </tr>
-            </thead>
-            <tbody>
-              {short.map((m) => {
-                const days = daysOfStock(m)
-                return (
-                  <tr key={m.id}>
-                    <td>{m.name}</td>
-                    <td className="num">{m.onHand ?? 0} {m.unit}</td>
-                    <td className="num">{days === null ? 'not known' : `${Math.floor(days)}`}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          {/* Print takes its own width from the @media print rules; this
+              scroll container is for the on-screen preview, in a fixed-width
+              modal, before anyone has clicked Print. */}
+          <div className="scroll-x">
+            <table>
+              <thead>
+                <tr>
+                  <th>Material</th>
+                  <th className="num">On hand</th>
+                  <th className="num">Days left</th>
+                </tr>
+              </thead>
+              <tbody>
+                {short.map((m) => {
+                  const days = daysOfStock(m)
+                  return (
+                    <tr key={m.id}>
+                      <td>{m.name}</td>
+                      <td className="num">{m.onHand ?? 0} {m.unit}</td>
+                      <td className="num">{days === null ? 'not known' : `${Math.floor(days)}`}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       <h3>Raw materials</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Material</th>
-            <th className="num">On hand</th>
-            <th className="num">Used / day</th>
-            <th className="num">Days left</th>
-            <th className="num">Value</th>
-            <th className="num">{countMode ? 'Counted' : 'Low'}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((m) => {
-            const days = daysOfStock(m)
-            return (
-              <tr key={m.id}>
-                <td>{m.name}</td>
-                <td className="num">{m.onHand ?? 0} {m.unit}</td>
-                <td className="num">{m.usagePerDay ? `${m.usagePerDay} ${m.unit}` : '—'}</td>
-                <td className="num">{days === null ? '—' : Math.floor(days)}</td>
-                <td className="num">{formatMoney((m.onHand ?? 0) * (m.costPerUnit ?? 0))}</td>
-                <td className="num">
-                  {countMode ? <span className="blank">&nbsp;</span> : isLow(m) ? 'yes' : ''}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      <div className="scroll-x">
+        <table>
+          <thead>
+            <tr>
+              <th>Material</th>
+              <th className="num">On hand</th>
+              <th className="num">Used / day</th>
+              <th className="num">Days left</th>
+              <th className="num">Value</th>
+              <th className="num">{countMode ? 'Counted' : 'Low'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((m) => {
+              const days = daysOfStock(m)
+              return (
+                <tr key={m.id}>
+                  <td>{m.name}</td>
+                  <td className="num">{m.onHand ?? 0} {m.unit}</td>
+                  <td className="num">{m.usagePerDay ? `${m.usagePerDay} ${m.unit}` : '—'}</td>
+                  <td className="num">{days === null ? '—' : Math.floor(days)}</td>
+                  <td className="num">{formatMoney((m.onHand ?? 0) * (m.costPerUnit ?? 0))}</td>
+                  <td className="num">
+                    {countMode ? <span className="blank">&nbsp;</span> : isLow(m) ? 'yes' : ''}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
 
       <p className="muted">
         Total value of raw materials: <b>{formatMoney(stockValue(live))}</b>
@@ -109,17 +116,19 @@ export default function StockSheet({ materials = [], reports = [], branches = []
             <div key={branch.id} style={{ marginBottom: 10 }}>
               <b>{branch.name}</b>{' '}
               <span className="muted">at close on {formatDate(businessDate)}</span>
-              <table>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.productId}>
-                      <td>{r.productName}</td>
-                      <td className="num">{r.leftover}</td>
-                      <td className="num">{countMode ? <span className="blank">&nbsp;</span> : ''}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="scroll-x">
+                <table>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.productId}>
+                        <td>{r.productName}</td>
+                        <td className="num">{r.leftover}</td>
+                        <td className="num">{countMode ? <span className="blank">&nbsp;</span> : ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ))}
         </div>

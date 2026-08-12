@@ -77,13 +77,15 @@ function Products() {
                 <th>Name</th>
                 <th>Category</th>
                 <th className="num">Price</th>
-                <th>Keeps?</th>
+                {/* "Details", not "Keeps?": same-day/keeps, per-kg, daily-rate
+                    and merged-names all land in this one column. */}
+                <th>Details</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {list.map((p) => (
-                <tr key={p.id} style={p.active === false ? { opacity: 0.45 } : undefined}>
+                <tr key={p.id} className={p.active === false ? 'row-archived' : undefined}>
                   <td className="mono small muted">{p.code}</td>
                   <td>{p.name}</td>
                   <td className="muted small">{p.category}</td>
@@ -368,6 +370,13 @@ function People() {
   const list = [...(users.data ?? [])].sort((a, b) => a.name.localeCompare(b.name))
   const branchName = (id) => branches.data?.find((b) => b.id === id)?.name ?? id
 
+  // Without this, a still-loading list and a genuinely empty one looked
+  // identical — the risk on this specific screen is real: someone re-adding
+  // an outlet or a person that already exists because the table looked empty.
+  if (users.loading || branches.loading) {
+    return <div className="card"><Loading>Reading the team…</Loading></div>
+  }
+
   return (
     <>
       <div className="card">
@@ -389,7 +398,7 @@ function People() {
           </thead>
           <tbody>
             {list.map((u) => (
-              <tr key={u.id} style={u.active === false ? { opacity: 0.45 } : undefined}>
+              <tr key={u.id} className={u.active === false ? 'row-archived' : undefined}>
                 <td>{u.name}</td>
                 <td className="muted small">{u.role}</td>
                 <td className="muted small">{branchName(u.branchId)}</td>
@@ -492,6 +501,10 @@ function Outlets() {
   const [id, setId] = useState('')
   const [name, setName] = useState('')
 
+  if (branches.loading) {
+    return <div className="card"><Loading>Reading the team…</Loading></div>
+  }
+
   return (
     <>
       <div className="card">
@@ -524,6 +537,7 @@ function Outlets() {
             <input
               type="text"
               value={id}
+              autoFocus
               onChange={(e) => setId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
             />
           </div>

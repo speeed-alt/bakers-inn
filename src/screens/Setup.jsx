@@ -15,7 +15,7 @@ export default function Setup({ onDone }) {
   const [branchId, setBranchId] = useState('')
   const [letter, setLetter] = useState(deviceLetter())
 
-  if (branches.loading) return <Loading />
+  if (branches.loading) return <Loading>Reading outlets…</Loading>
 
   const list = branches.data ?? []
 
@@ -47,7 +47,8 @@ export default function Setup({ onDone }) {
           </div>
           {list.length === 0 && (
             <p className="muted small">
-              No outlets found. Run <code>npm run seed</code> with the emulators running.
+              No outlets are set up yet. Check this tablet's connection, or ask whoever installed
+              the app to finish setting up the outlets.
             </p>
           )}
         </div>

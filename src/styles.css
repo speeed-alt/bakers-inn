@@ -8,7 +8,11 @@
   --surface: #ffffff;
   --surface-2: #f2f2f1;
   --border: #e4e4e2;
-  --border-strong: #cfcfcc;
+  /* #cfcfcc measured at ~1.6:1 against --surface — invisible at rest on a
+     pin pad or a chip, the exact kind of control someone has to find by touch
+     alone under counter glare. #929290 clears the ~3:1 floor WCAG sets for a
+     UI-component boundary. */
+  --border-strong: #929290;
   --text: #17171a;
   /* Secondary text, not decoration: it carries outlet names, dates and units.
      Dark enough to clear 7:1 on --bg, because half of this is read on a counter
@@ -76,12 +80,36 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 }
 .topbar .brand { font-weight: 600; font-size: 15px; }
 .topbar .spacer { flex: 1; }
-.topbar .who { text-align: right; line-height: 1.2; }
-.topbar .who b { display: block; font-size: 14px; font-weight: 600; }
-.topbar .who span { font-size: 12px; color: var(--muted); }
+/* Outlet name and the who block are the two pieces of topbar text with no
+   fixed length. Without a truncation rule a long one wraps onto a second
+   line and drags the sign-out button and theme toggle out of alignment with
+   it — min-width: 0 is what lets a flex child shrink below its content size
+   at all, ellipsis is what it does once it has. */
+.topbar .outlet {
+  min-width: 0; flex-shrink: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.topbar .who {
+  text-align: right; line-height: 1.2;
+  min-width: 0; flex-shrink: 1;
+}
+/* The ellipsis has to sit on b/span themselves, not on .who: they are the
+   block-level boxes the text actually overflows, stretched to .who's width. */
+.topbar .who b {
+  display: block; font-size: 14px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.topbar .who span {
+  font-size: 12px; color: var(--muted);
+  display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 .content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .page { padding: 20px; max-width: 880px; margin: 0 auto; }
+/* A narrower column for a screen that is a single small card, not a table or a
+   bill — sign-in and its PIN pad, mainly, so the two steps of one screen do
+   not visibly jump width between them. */
+.page.narrow { max-width: 420px; }
 
 .tabbar {
   display: flex; flex-shrink: 0;
@@ -119,6 +147,16 @@ h1, h2, h3 { letter-spacing: -0.01em; }
 .btn.big { min-height: 54px; font-size: 16px; }
 .btn.block { width: 100%; }
 .btn.small { min-height: 34px; padding: 5px 10px; font-size: 13px; }
+/* A small ghost button is still a real tap target — the till's Receipt/Fix
+   pair leads into printing and the void/refund flow. Unconditional rather
+   than only raised under the coarse-pointer/narrow query below, because a
+   desktop-mouse session (an owner reviewing sales on a laptop) deserves the
+   same floor, not just a phone. */
+.btn.ghost.small { min-height: 44px; padding: 8px 14px; }
+/* Two of these sitting side by side with no gap (Receipt/Fix, Adjust/Edit,
+   Edit/Archive) turns a mis-tap into the wrong modal. One rule fixes every
+   occurrence at once. */
+td .btn + .btn { margin-left: 8px; }
 
 input[type="text"], input[type="number"], input[type="password"], select {
   min-height: var(--tap);
@@ -220,6 +258,13 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
   .till-body { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
   .till-left, .till-right { overflow: visible; }
   .till-results { max-height: 320px; }
+  /* 880px covers most tablets in portrait — this is the everyday layout on the
+     counter, not a phone-only edge case. Stacked, Total/Clear/Pay used to sit
+     at the very bottom of the page, under the bill, all of today's sales, and
+     the full catalogue: the one button that matters most on the highest-
+     pressure screen in the app was the hardest thing on it to reach. Pinning
+     it works because it already has an opaque background and its own border. */
+  .till-total { position: sticky; bottom: 0; z-index: 2; }
 }
 
 /* the bill */
@@ -230,6 +275,18 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
   padding: 10px 14px; border-bottom: 1px solid var(--border);
 }
 .bill-row:last-child { border-bottom: 0; }
+/* The close wizard's leftover row is the one place a .bill-row's item cell
+   grows past one line — name, a detail line, and a row of disposition chips.
+   Centering (the default, correct for every single-line row elsewhere) leaves
+   the Stepper floating mid-row instead of level with the product name. */
+.bill-row.top { align-items: start; }
+/* One rule for every "this line is done, still visible, no longer the point"
+   state — a voided sale, an archived material, a recorded bake line. Text
+   colour, not opacity: opacity blends toward the surface behind it, and at the
+   levels these rows used to use that dropped well under WCAG's 4.5:1 floor in
+   light mode. --muted is already calibrated to ~6.5:1 on --surface in both
+   themes, so it stays legible instead of merely looking intentionally faded. */
+.sale-voided td, .row-archived td, .bill-row-done { color: var(--muted); }
 .bill-head {
   font-size: 12px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--muted);
@@ -388,6 +445,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   background: var(--surface); cursor: pointer;
 }
 .pinpad button:hover { background: var(--surface-2); }
+.pinpad button:disabled { opacity: 0.4; cursor: not-allowed; }
 .pindots { display: flex; gap: 12px; justify-content: center; margin: 20px 0; }
 .pindots i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border-strong); }
 .pindots i.on { background: var(--ink); border-color: var(--ink); }
@@ -489,6 +547,17 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .stat { padding: 11px 13px; }
   .topbar { gap: 10px; padding: 0 14px; }
   .topbar .brand { display: none; }  /* the outlet name is the useful one */
+  /* The owner's nav has 5 tabs against the cashier's 3 and the specialist's 2 —
+     the same shared class reading differently by role. Smaller and truncating
+     rather than wrapping keeps every bar single-line instead of only some. */
+  .tabbar a {
+    font-size: 11.5px; padding: 14px 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* A column worth dropping on a phone rather than scrolling sideways to
+     reach the row's actual controls — its value still lives in that row's
+     muted subtext line. */
+  .hide-narrow { display: none; }
 }
 
 /* Nothing smaller than a fingertip.
@@ -507,10 +576,12 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   }
   .btn.small { min-height: 44px; padding: 8px 14px; }
   .btn.ghost { min-height: 44px; }
-  .btn.ghost.small { min-height: 44px; }
+  /* .btn.ghost.small's 44px floor is unconditional now — see the primitives
+     block above — so it does not need repeating here. */
   .chip { min-height: 44px; padding: 9px 15px; }
   .result { min-height: 52px; }
   .pinpad button { min-height: 62px; }
+  .rate-input { min-height: 44px; }
 }
 
 /* ---- printable sheets, as they look on screen --------------------------- */

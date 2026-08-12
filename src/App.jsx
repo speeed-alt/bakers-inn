@@ -129,9 +129,14 @@ function StartupTrouble() {
           It is waiting on this browser's stored data, which usually means that data has been
           damaged. Nothing has been lost — every sale and close is kept on the server.
         </p>
+        {/* The bold, primary-filled button is the one the eye is drawn to tap
+            first — so it belongs on the safe, likely-to-work action, not on
+            the one that wipes every database on the tablet and forces a full
+            re-setup. A cashier facing this mid-queue should be pulled toward
+            "Try again", not toward "Reset". */}
         <div className="grid2">
-          <button className="btn" onClick={() => window.location.reload()}>Try again</button>
-          <button className="btn primary" onClick={resetThisTablet}>Reset this tablet</button>
+          <button className="btn primary" onClick={() => window.location.reload()}>Try again</button>
+          <button className="btn" onClick={resetThisTablet}>Reset this tablet</button>
         </div>
         <p className="muted small" style={{ marginBottom: 0 }}>
           Resetting clears the saved sign-in and this tablet's outlet, so it has to be set up
@@ -203,7 +208,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <span className="brand">Bakery</span>
-        <span className="muted small">
+        <span className="outlet muted small">
           {branch.data?.name ?? branchId} · till {deviceLetter()}
         </span>
         <span className="spacer" />
@@ -214,6 +219,22 @@ export default function App() {
         <ThemeToggle />
         <button className="btn ghost small no-print" onClick={signOut}>Sign out</button>
       </header>
+
+      {/* Ordered by how much it costs to miss, not by when each condition
+          happened to be added: a stale sign-in means nothing typed below this
+          point is actually being saved, which outranks every other banner on
+          the screen. Its own text carries weight for the same reason — the
+          rest stay in the app's one neutral palette, since --alert is reserved
+          for money that does not add up, not for "please read this". */}
+      {claimsStale && (
+        <div className="strip block no-print">
+          <span style={{ fontWeight: 600 }}>
+            This sign-in is out of date, so nothing you enter will save.
+          </span>{' '}
+          Sign out and back in.{' '}
+          <button className="btn ghost small" onClick={signOut}>Sign out</button>
+        </div>
+      )}
 
       {!online && <div className="strip offline">Offline — sales are saved and will sync automatically</div>}
 
@@ -227,13 +248,6 @@ export default function App() {
             Update now
           </button>
           <span className="muted small"> — finish the sale you are on first.</span>
-        </div>
-      )}
-
-      {claimsStale && (
-        <div className="strip block no-print">
-          This sign-in is out of date, so nothing you enter will save. Sign out and back in.{' '}
-          <button className="btn ghost small" onClick={signOut}>Sign out</button>
         </div>
       )}
 

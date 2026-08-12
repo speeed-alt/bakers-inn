@@ -7,7 +7,7 @@ import { businessDateOf, formatDate, formatTime } from '../lib/dates.js'
 import { extrasList, shortfalls } from '../lib/compile.js'
 import { productionDoc } from '../data/production.js'
 import { dispatchTransfer, receiveTransfer, transfersFrom, transfersTo } from '../data/transfers.js'
-import { Empty, Stepper } from '../components/ui.jsx'
+import { Empty, Loading, Stepper } from '../components/ui.jsx'
 
 /**
  * Sending the day's goods out to the other two outlets.
@@ -26,8 +26,13 @@ export default function Dispatch({ branchId }) {
   const inbound = useSnapshot(() => transfersTo(branchId, today), [branchId, today])
   const branches = useSnapshot(() => collection(db, 'branches'), [])
 
-  if (order.loading || transfers.loading) {
-    return <div className="page"><p className="muted">Loading…</p></div>
+  // branches is included here, not just order/transfers: without it, every
+  // card headed by nameOf(...) below could briefly render a raw branch id
+  // ("B2 — DN-0142") instead of a name while branches is still in flight —
+  // on shop wifi that reads as a bug, not as a loading state, because a raw
+  // id looks exactly like real data.
+  if (order.loading || transfers.loading || branches.loading) {
+    return <div className="page"><div className="card"><Loading>Reading today's delivery notes…</Loading></div></div>
   }
 
   const po = order.data
@@ -72,31 +77,12 @@ export default function Dispatch({ branchId }) {
   return (
     <div className="page">
       {returns.map((transfer) => (
-        <div className="card" key={transfer.id}>
-          <div className="row between">
-            <h2 style={{ margin: 0 }}>Coming back — {transfer.ref}</h2>
-            <span className="muted small">from {nameOf(transfer.fromBranch)}</span>
-          </div>
-          <p className="muted small">
-            {nameOf(transfer.fromBranch)} sent this back at closing. Confirm what actually arrived.
-          </p>
-          <table>
-            <tbody>
-              {transfer.items.map((i) => (
-                <tr key={i.productId}>
-                  <td>{i.productName}</td>
-                  <td className="num">{i.qtySent}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <button
-            className="btn primary big block"
-            onClick={() => receiveTransfer({ transfer, user: profile })}
-          >
-            Confirm it all came back
-          </button>
-        </div>
+        <ReturnCard
+          key={transfer.id}
+          transfer={transfer}
+          fromName={nameOf(transfer.fromBranch)}
+          user={profile}
+        />
       ))}
 
       {short.length > 0 && (
@@ -107,6 +93,9 @@ export default function Dispatch({ branchId }) {
             below still show what each outlet ordered.
           </p>
           <table>
+            <thead>
+              <tr><th>Item</th><th className="num">Short</th></tr>
+            </thead>
             <tbody>
               {short.map((s) => (
                 <tr key={s.productId}>
@@ -170,6 +159,62 @@ export default function Dispatch({ branchId }) {
           </table>
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * What actually came back, not just a blind confirmation of what was sent.
+ *
+ * The "Short today" section above exists because the app's own philosophy is
+ * that a shortfall gets a person's decision, never a formula quietly papering
+ * over it — a delivery going the other way, back to the hub, deserves the same
+ * treatment. Breakage or a miscount at the sending outlet is real, and it needs
+ * somewhere to go rather than being recorded as if every last one arrived.
+ */
+function ReturnCard({ transfer, fromName, user }) {
+  const [counted, setCounted] = useState(() =>
+    Object.fromEntries(transfer.items.map((i) => [i.productId, i.qtySent])),
+  )
+  const short = transfer.items.filter((i) => counted[i.productId] !== i.qtySent)
+
+  return (
+    <div className="card">
+      <div className="row between">
+        <h2 style={{ margin: 0 }}>Coming back — {transfer.ref}</h2>
+        <span className="muted small">from {fromName}</span>
+      </div>
+      <p className="muted small">
+        {fromName} sent this back at closing. Count what actually arrived — the figures start at
+        what was sent, so a normal return is no changes.
+      </p>
+      <div className="bill" style={{ margin: '12px 0' }}>
+        <div className="bill-row bill-head">
+          <span></span>
+          <span>Item</span>
+          <span>Arrived</span>
+          <span className="bill-amount">Sent</span>
+        </div>
+        {transfer.items.map((i) => (
+          <div className="bill-row" key={i.productId}>
+            <span></span>
+            <span className="bill-name">{i.productName}</span>
+            <Stepper
+              value={counted[i.productId]}
+              max={i.qtySent}
+              onChange={(v) => setCounted((c) => ({ ...c, [i.productId]: v }))}
+              label={`arrived, ${i.productName}`}
+            />
+            <span className="bill-amount muted">{i.qtySent}</span>
+          </div>
+        ))}
+      </div>
+      <button
+        className="btn primary big block"
+        onClick={() => receiveTransfer({ transfer, counted, user })}
+      >
+        {short.length > 0 ? `Confirm — ${short.length} short` : 'Confirm it all came back'}
+      </button>
     </div>
   )
 }
@@ -246,6 +291,12 @@ function DispatchCard({ transfer, outletName, user, extras = [] }) {
             left stays at the hub.
           </p>
           <div className="bill" style={{ marginBottom: 12 }}>
+            <div className="bill-row bill-head">
+              <span>Code</span>
+              <span>Item</span>
+              <span>Sending</span>
+              <span className="bill-amount">Made</span>
+            </div>
             {offerable.map((e) => (
               <div className="bill-row" key={e.productId}>
                 <span className="bill-code">{e.code}</span>
