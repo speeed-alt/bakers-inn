@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { collection, query, where } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
@@ -7,7 +7,7 @@ import { formatMoney } from '../lib/money.js'
 import { byProduct, stockReport, stockTotals } from '../lib/stock.js'
 import { productionDoc } from '../data/production.js'
 import { printSheet } from '../lib/paper.js'
-import { Empty, Loading, Money } from '../components/ui.jsx'
+import { Empty, Loading, Modal, Money } from '../components/ui.jsx'
 
 /**
  * What is on the shelf right now, at all three outlets.
@@ -62,6 +62,7 @@ export default function StockReport() {
   const rows = useMemo(() => byProduct(report), [report])
   const totals = useMemo(() => stockTotals(rows), [rows])
   const outlets = report.outlets
+  const [sheet, setSheet] = useState(false)
 
   if (loading) {
     return (
@@ -138,7 +139,7 @@ export default function StockReport() {
             </div>
           ))}
         </div>
-        <button className="btn" style={{ marginTop: 12 }} onClick={printSheet}>
+        <button className="btn" style={{ marginTop: 12 }} onClick={() => setSheet(true)}>
           Print stock report
         </button>
       </div>
@@ -213,7 +214,19 @@ export default function StockReport() {
         )}
       </div>
 
-      <StockSheet report={report} rows={rows} />
+      {/* The sheet has to be inside a Modal, which portals it to <body>.
+          Printing collapses #root entirely — that is what stops the whole app
+          appearing behind a receipt — so anything left in the app tree prints
+          as a blank page. It did. */}
+      {sheet && (
+        <Modal title="Stock sheet" onClose={() => setSheet(false)} wide>
+          <StockSheet report={report} rows={rows} />
+          <div className="grid2 no-print" style={{ marginTop: 16 }}>
+            <button className="btn" onClick={printSheet}>Print</button>
+            <button className="btn primary" onClick={() => setSheet(false)}>Done</button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -229,7 +242,7 @@ function StockSheet({ report, rows }) {
   const outlets = report.outlets
 
   return (
-    <div className="sheet print-only">
+    <div className="sheet">
       <div className="sheet-head">
         <h1>Stock on hand</h1>
         <p>
