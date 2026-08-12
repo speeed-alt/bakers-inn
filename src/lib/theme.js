@@ -1,42 +1,42 @@
-// Light or dark, chosen once and remembered on this tablet.
+// Light first. Dark only when somebody on this tablet has explicitly asked
+// for it.
 //
-// With nothing stored the app follows the device, which is what a tablet that
-// dims itself in the evening already expects. The moment somebody taps the
-// toggle it becomes an explicit choice and stops following: a counter under a
-// bright window may want light all day even when Android has gone dark.
+// This app does not follow the device's system setting. A tablet is often
+// left with Android's own evening dark mode on for reasons that have nothing
+// to do with a counter that is lit all day, and a shop opening the till to
+// find it has silently gone dark is a worse surprise than a shop that has to
+// tap a sun icon once to get it. So the default, with nothing chosen, is
+// light — and it stays light until somebody taps the toggle.
 //
 // The choice is per-tablet, not per-person. Two cashiers sharing a till are
 // looking at the same screen in the same room, and asking each of them to set
 // it again after every sign-in would be the opposite of enter-once.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 
 const KEY = 'bakery.theme'
 
-/** The explicit choice, or null when this tablet is still following the device. */
+/** The explicit choice, or null when nothing has been chosen on this tablet. */
 export function storedTheme() {
   try {
     const value = localStorage.getItem(KEY)
     return value === 'light' || value === 'dark' ? value : null
   } catch {
     // Private browsing and locked-down kiosk profiles can refuse localStorage.
-    // Following the device is a fine answer; a broken app is not.
+    // Defaulting to light is a fine answer; a broken app is not.
     return null
   }
 }
 
-export function deviceTheme() {
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
-/** What is actually on screen right now. */
+/** What is actually on screen right now: the choice, or light. */
 export function activeTheme() {
-  return storedTheme() ?? deviceTheme()
+  return storedTheme() ?? 'light'
 }
 
 /**
  * Put the choice on <html> where the stylesheet can see it. Passing null
- * removes the attribute and hands control back to the device.
+ * removes the attribute, which the stylesheet also reads as light — the two
+ * are kept in step deliberately so there is only one definition of the default.
  */
 export function applyTheme(theme) {
   const root = document.documentElement
@@ -47,9 +47,10 @@ export function applyTheme(theme) {
 /**
  * Apply the stored choice before React renders.
  *
- * Only needed when a choice has been stored, because the stylesheet already
- * follows the device on its own — which is what keeps the first paint correct
- * with no script at all, and why there is no flash of the wrong colour.
+ * With nothing stored this does nothing, and that is the point: the
+ * stylesheet's own default is light, so an untouched tablet is correct from
+ * the very first paint with no script needed at all. This only has work to do
+ * on a tablet that has been explicitly switched to dark.
  */
 export function startTheme() {
   applyTheme(storedTheme())
@@ -57,17 +58,6 @@ export function startTheme() {
 
 export function useTheme() {
   const [theme, setTheme] = useState(activeTheme)
-
-  // Keep following the device until somebody chooses. Without this a tablet on
-  // an evening schedule would go dark around it and the app would not.
-  useEffect(() => {
-    if (storedTheme()) return undefined
-    const query = window.matchMedia?.('(prefers-color-scheme: dark)')
-    if (!query) return undefined
-    const onChange = () => setTheme(deviceTheme())
-    query.addEventListener('change', onChange)
-    return () => query.removeEventListener('change', onChange)
-  }, [theme])
 
   const toggle = useCallback(() => {
     const next = activeTheme() === 'dark' ? 'light' : 'dark'

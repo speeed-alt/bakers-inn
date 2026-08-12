@@ -5,22 +5,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bakers_inn/theme.dart';
 
 /// The toggle is one button, so the behaviour worth pinning down is the part
-/// nobody sees: what it does the *first* time, when the tablet is still
-/// following the device, and whether the choice survives a restart.
+/// nobody sees: what it does the *first* time, before anybody has chosen
+/// anything, and whether a choice survives a restart.
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('choosing a side', () {
-    test('with nothing stored, the tablet follows the device', () async {
+    test('with nothing stored, the tablet defaults to light', () async {
+      // Not ThemeMode.system: this app deliberately does not follow the
+      // device's own dark-mode setting. See the doc comment on ThemeController.
       final theme = await ThemeController.load();
-      expect(theme.mode, ThemeMode.system);
+      expect(theme.mode, ThemeMode.light);
     });
 
-    test('the first tap flips away from what is actually on screen', () async {
-      // The trap this guards: resolving `system` as "not dark" would make the
-      // first tap on an already-dark tablet appear to do nothing at all.
+    test('the toggle flips away from what is actually on screen', () async {
       final theme = await ThemeController.load();
-      expect(theme.mode, ThemeMode.system);
+      expect(theme.mode, ThemeMode.light);
 
       await theme.toggle(Brightness.dark);
       expect(theme.mode, ThemeMode.light);

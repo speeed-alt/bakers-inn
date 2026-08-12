@@ -261,12 +261,11 @@ class ThemeToggleButton extends StatelessWidget {
   }
 }
 
-/// Light or dark, chosen once and remembered on this tablet.
+/// Light first. Dark only when somebody has explicitly asked for it.
 ///
-/// With nothing stored the app follows the device, which is what a tablet that
-/// dims itself in the evening already expects. The moment somebody taps the
-/// toggle it becomes an explicit choice and stops following: a counter under a
-/// bright window may want light all day even when Android has gone dark.
+/// This does not follow the phone's system setting. Android's own evening
+/// dark mode has nothing to do with this app, and an owner opening it to find
+/// it has silently gone dark is a worse surprise than tapping a sun icon once.
 ///
 /// Same key and same rule as the web app's `src/lib/theme.js`, so a tablet
 /// behaves the same whichever client it is running.
@@ -285,12 +284,12 @@ class ThemeController extends ChangeNotifier {
       return ThemeController(switch (stored) {
         'light' => ThemeMode.light,
         'dark' => ThemeMode.dark,
-        _ => ThemeMode.system,
+        _ => ThemeMode.light,
       });
     } catch (_) {
-      // A locked-down device can refuse storage. Following the device is a fine
+      // A locked-down device can refuse storage. Defaulting to light is a fine
       // answer; refusing to start is not.
-      return ThemeController(ThemeMode.system);
+      return ThemeController(ThemeMode.light);
     }
   }
 

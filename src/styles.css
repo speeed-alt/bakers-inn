@@ -22,30 +22,13 @@
   color-scheme: light;
 }
 
-/* The dark values are written twice, deliberately.
-   The first block follows the tablet's own setting, so the app is already the
-   right colour on the very first paint, before any JavaScript has run. The
-   second wins when somebody has picked a side from the top bar.
-   CSS `light-dark()` would say this once, but it needs a 2024-era browser, and
-   these are cheap Android tablets — where it is not understood every colour in
-   the app resolves to nothing. Two blocks that always work beat one that might
-   not. If you change a colour, change it in both. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --bg: #131314;
-    --surface: #1c1c1e;
-    --surface-2: #242427;
-    --border: #303034;
-    --border-strong: #45454a;
-    --text: #ececee;
-    --muted: #a6a6a2;
-    --ink: #ececee;
-    --ink-text: #17171a;
-    --alert: #e08b8b;
-    color-scheme: dark;
-  }
-}
-
+/* Light is the default and needs no rule of its own — it is simply what :root
+   already says above. Dark exists only behind the attribute the toggle sets,
+   deliberately not behind `@media (prefers-color-scheme: dark)`: this app does
+   not follow the device's system setting, because a tablet left in Android's
+   own evening dark mode has nothing to do with a counter that is lit all day.
+   An untouched tablet is correct from the very first paint with no script
+   needed, precisely because there is no competing default to override. */
 :root[data-theme='dark'] {
   --bg: #131314;
   --surface: #1c1c1e;
@@ -59,8 +42,6 @@
   --alert: #e08b8b;
   color-scheme: dark;
 }
-
-:root[data-theme='light'] { color-scheme: light; }
 
 * { box-sizing: border-box; }
 /* dvh, so the bottom tabs are not left under a phone browser's toolbar as it
