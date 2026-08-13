@@ -96,11 +96,26 @@ function Only({ path, role, children }) {
  * Wipe everything this browser has stored for the app and start over.
  *
  * The recovery for a tablet whose stored data has been damaged — the one fault
- * that stops the app before it can tell you anything. Nothing of value lives
- * here: sales and closes are on the server, and anything not yet synced is
- * already gone if the storage is broken.
+ * that stops the app before it can tell you anything.
+ *
+ * It is not free, and the copy here used to say it was. Firestore's queue of
+ * writes that have not reached the server yet lives in IndexedDB, which is
+ * exactly what this deletes. On a tablet that has been off the wifi all
+ * afternoon that queue is the afternoon's takings, and they are gone with no
+ * way back. The screen this is offered from appears after an eight-second
+ * timeout, which a slow morning can produce on its own — so it asks first, and
+ * it says what it is really doing.
  */
 async function resetThisTablet() {
+  const sure = window.confirm(
+    'Reset this tablet?\n\n' +
+      'Any sale rung up while this tablet was off the internet, and not yet sent, ' +
+      'will be lost — there is no way to get it back.\n\n' +
+      'If the tablet has been offline today, try "Try again" first, or wait until ' +
+      'it is back on the wifi and the sales have gone through.',
+  )
+  if (!sure) return
+
   try {
     const registrations = await navigator.serviceWorker?.getRegistrations?.()
     for (const reg of registrations ?? []) await reg.unregister()
@@ -127,7 +142,7 @@ function StartupTrouble() {
         <h2>The app cannot finish starting</h2>
         <p className="muted">
           It is waiting on this browser's stored data, which usually means that data has been
-          damaged. Nothing has been lost — every sale and close is kept on the server.
+          damaged. Every sale that has reached the server is safe there.
         </p>
         {/* The bold, primary-filled button is the one the eye is drawn to tap
             first — so it belongs on the safe, likely-to-work action, not on
@@ -139,8 +154,9 @@ function StartupTrouble() {
           <button className="btn" onClick={resetThisTablet}>Reset this tablet</button>
         </div>
         <p className="muted small" style={{ marginBottom: 0 }}>
-          Resetting clears the saved sign-in and this tablet's outlet, so it has to be set up
-          again — about a minute.
+          Try again first. Resetting clears the saved sign-in and this tablet's outlet, so it has
+          to be set up again — about a minute — and it throws away any sale made while this tablet
+          was off the internet that has not been sent yet.
         </p>
       </div>
     </div>

@@ -45,9 +45,11 @@ These are commitments to a real, non-technical owner. They outrank your taste.
 npm run emulators   # syncs shared code, then auth + firestore + functions
 npm run seed        # outlets, staff, the real 44-item catalogue, materials
 npm run dev         # the app
-npm test            # 81 pure-logic tests, no emulator needed
-npm run test:rules  # 43 security-rules tests, emulator must be running
+npm test            # 212 pure-logic tests, no emulator needed
+npm run test:rules  # 55 security-rules tests, emulator must be running
 ```
+
+Both suites also run on every push — see `.github/workflows/test.yml`.
 
 The Firestore emulator needs **JDK 21+**. System Java here is 8; a good JDK
 ships with Android Studio:
@@ -236,26 +238,48 @@ SEED_PROJECT=bakers-inn-pk GOOGLE_APPLICATION_CREDENTIALS=…/key.json node scri
 
 ## Known gaps
 
-- **Blaze is not enabled**, so the Cloud Functions are not deployed. Until they
-  are there is no 05:00 baking list — the rules forbid any client from creating
-  a `productionOrders` document — no daily reports, and `syncStaffClaims` is not
-  running, so anyone added through the app signs in with no permissions. Once
-  billing is on: `firebase deploy --only functions --project bakers-inn-pk`, then
-  turn on backups, which also need billing:
+**[GOLIVE.md](GOLIVE.md) is the authority on what stands between this and a real
+trading day, in the order it has to happen.** What follows is the short version
+for someone about to change code.
+
+- **Blaze is not enabled**, so the Cloud Functions are not deployed. Two of the
+  five now have a substitute in `.github/workflows/daily.yml` — the 05:00
+  compile and the 06:00 report rebuild — running the same shared arithmetic, so
+  switching Blaze on later changes no answers. **`syncStaffClaims` and
+  `reportOnClose` still have no substitute at all.** That is the sharp edge:
+  anyone added through the app signs in with no permissions and every write is
+  refused, and there is no daily report until 06:00 the next morning. The
+  workflow also needs `FIREBASE_SERVICE_ACCOUNT` set as a repository secret,
+  which it currently is not, so it has never run. Once billing is on:
+  `firebase deploy --only functions --project bakers-inn-pk`, then turn on
+  backups, which also need billing:
 
   ```bash
   firebase firestore:databases:update "(default)" --delete-protection ENABLED --point-in-time-recovery ENABLED --project bakers-inn-pk
   ```
 
+- **The live project is full of demo data.** Practically every sale, closing and
+  report on `bakers-inn-pk` carries `demo: true`. Nothing in `src/` filters that
+  flag, and `lib/suggest.js` orders tomorrow's baking off those invented
+  reports. Clear it with `node scripts/demo-day.mjs --clear`, which now also
+  reports anything left behind that has no flag to remove it by.
+- **The dev PINs are almost certainly still live in production.** It was seeded
+  on 2026-08-04, four days before the guard that requires PINs from the
+  environment, and there is no PIN-change screen to have rotated them since. Do
+  not test it to find out; re-seed with real ones.
 - **No PIN reset.** PINs are never stored, so a forgotten one cannot be looked up
   or reset. Fixing it needs a callable Cloud Function using the Admin SDK.
-- **Branch names are placeholders** (Main Outlet / Gulberg / Model Town).
+- **Branch names are placeholders** (Main Outlet / Gulberg / Model Town), and so
+  are the 44 catalogue prices and the 9 material costs.
 - **`sellsNextDay` was my judgement, not the owner's.** It decides what counts as
   stale at close and is worth confirming with him.
 - **The order suggestion ignores stock already on the shelf.** It answers "how
   much does this weekday need", not "how much more do we need". For items that
   carry over it will read slightly high until the carry is subtracted — the
   close wizard knows that figure by the time the order is placed.
+- **A late close cannot be finished through the wizard's Next button.** Once the
+  05:00 job locks today's demand, `TomorrowsOrder` renders no Send button, so
+  the step-3 gate never satisfies. Tapping step 4 directly gets through it.
 
 ## Before you finish
 

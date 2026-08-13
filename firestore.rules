@@ -47,6 +47,22 @@ service cloud.firestore {
     function changedOnly(fields) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
     }
+    function changing(field) {
+      return field in request.resource.data.diff(resource.data).affectedKeys();
+    }
+    /**
+     * A "who did this" field must name the person actually doing it.
+     *
+     * There are no approval queues in this system — the owner's rule is that
+     * visibility replaces approval, so anyone may void a sale or reopen a day
+     * and every action is stamped and surfaces on his dashboard. That makes the
+     * stamp the *only* control against a cashier voiding their own takings, and
+     * a stamp the client picks the value of is not a control at all: the field
+     * was whitelisted as changeable, but nothing said it had to be true.
+     */
+    function stampedHonestly(field) {
+      return !changing(field) || request.resource.data[field] == request.auth.uid;
+    }
 
     // --- Enter-once sources: owner writes, everyone reads -------------------
 
@@ -114,13 +130,16 @@ service cloud.firestore {
                     && request.resource.data.total is number
                     && request.resource.data.status in ['normal', 'refund'];
 
-      // Void a sale, or correct the payment type. Nothing else may change.
+      // Void a sale, or correct the payment type. Nothing else may change, and
+      // whoever did it signs their own name to it — see stampedHonestly.
       allow update: if staff()
                     && canWriteBranch(resource.data.branchId)
                     && changedOnly([
                          'status', 'voidReason', 'voidedBy', 'voidedAt',
                          'payment', 'paymentChangedBy', 'paymentChangedAt'
-                       ]);
+                       ])
+                    && stampedHonestly('voidedBy')
+                    && stampedHonestly('paymentChangedBy');
 
       allow delete: if false;
     }
@@ -153,11 +172,22 @@ service cloud.firestore {
       // What it cannot do is move a close to another outlet or another day, and
       // every close and reopen is appended to the event trail for the owner to
       // see. Visibility rather than permission — the same bargain as voids.
+      //
+      // The trail is the whole bargain, so it may only ever grow. Without that
+      // last condition a re-close could overwrite `events` with a single tidy
+      // entry, and the record of what the drawer said the first time — the one
+      // thing that tells a corrected count from a quietly changed one — would
+      // be gone, leaving a document that looks like it was closed once and
+      // reconciled perfectly.
       allow update: if isOwner()
                     || (staff()
                         && canWriteBranch(resource.data.branchId)
                         && request.resource.data.branchId == resource.data.branchId
-                        && request.resource.data.businessDate == resource.data.businessDate);
+                        && request.resource.data.businessDate == resource.data.businessDate
+                        && stampedHonestly('closedBy')
+                        && stampedHonestly('reopenedBy')
+                        && request.resource.data.get('events', []).size()
+                             >= resource.data.get('events', []).size());
 
       allow delete: if false;
     }
@@ -255,8 +285,15 @@ service cloud.firestore {
 
     // --- Raw materials (phase 5) -------------------------------------------
 
+    // What the bakery buys, and what it pays for it. `data/materials.js` has
+    // always said "raw materials are the owner's alone" and both screens that
+    // read them are owner-only — this rule just did not say so, and `signedIn()`
+    // is a lower bar than it looks: staff accounts are created through the app,
+    // so anyone who can sign in could read the cost price of every ingredient.
+    // Nothing in the client changes; it was already only ever asked for by the
+    // owner's own screens.
     match /rawMaterials/{materialId} {
-      allow read: if signedIn();
+      allow read: if isOwner();
       allow create, update: if isOwner();
       allow delete: if false;
     }

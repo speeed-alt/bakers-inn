@@ -1,6 +1,7 @@
 import { doc, Timestamp, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase.js'
-import { productionDocId } from '../lib/ids.js'
+import { fireAndForget } from './errors.js'
+import { productionDocId, productionRef } from '../lib/ids.js'
 
 // The baking list itself is written only by the scheduled compile. The kitchen
 // adds one thing to it: how many actually came out of the oven. Keeping those
@@ -13,11 +14,14 @@ export function productionDoc(businessDate) {
 }
 
 export function recordProduced({ businessDate, productId, qty, user }) {
-  updateDoc(productionDoc(businessDate), {
-    [`produced.${productId}`]: qty,
-    [`producedBy.${productId}`]: user.id,
-    updatedAt: Timestamp.fromDate(new Date()),
-  }).catch((error) => console.error('[bakery] produced count failed to sync', error))
+  fireAndForget(
+    updateDoc(productionDoc(businessDate), {
+      [`produced.${productId}`]: qty,
+      [`producedBy.${productId}`]: user.id,
+      updatedAt: Timestamp.fromDate(new Date()),
+    }),
+    `baked count on ${productionRef(businessDate)}`,
+  )
 }
 
 /**
@@ -56,16 +60,20 @@ export function removeExtra({ businessDate, productId }) {
 }
 
 export function markOrderDone({ businessDate, user }) {
-  updateDoc(productionDoc(businessDate), {
-    status: 'done',
-    doneBy: user.id,
-    doneByName: user.name,
-    doneAt: Timestamp.fromDate(new Date()),
-  }).catch((error) => console.error('[bakery] order completion failed to sync', error))
+  fireAndForget(
+    updateDoc(productionDoc(businessDate), {
+      status: 'done',
+      doneBy: user.id,
+      doneByName: user.name,
+      doneAt: Timestamp.fromDate(new Date()),
+    }),
+    `finishing ${productionRef(businessDate)}`,
+  )
 }
 
 export function reopenOrder({ businessDate }) {
-  updateDoc(productionDoc(businessDate), { status: 'open' }).catch((error) =>
-    console.error('[bakery] order reopen failed to sync', error),
+  fireAndForget(
+    updateDoc(productionDoc(businessDate), { status: 'open' }),
+    `reopening ${productionRef(businessDate)}`,
   )
 }

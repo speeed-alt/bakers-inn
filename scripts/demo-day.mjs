@@ -41,6 +41,24 @@ const db = getFirestore()
 const CLEAR = process.argv.includes('--clear')
 const TODAY = businessDateOf()
 
+// Filling a live project with invented trading is a one-way door: the figures
+// look real, the owner reads them, and `lib/suggest.js` orders tomorrow's flour
+// off them. It was written for `bakers-inn-pk` and says so at the top of this
+// file, so the guard cannot simply refuse a real project — but it can make
+// somebody say out loud that they meant it. Clearing is always allowed: that is
+// the safe direction, and it is the one somebody will be in a hurry to run.
+const projectIsLive = !projectId.startsWith('demo-')
+if (!CLEAR && projectIsLive && !process.argv.includes('--yes-fill-live-project')) {
+  console.error(
+    `\nRefusing to fill '${projectId}' with demo data.\n\n` +
+      'That project is not an emulator. If this is still the demo phase, re-run\n' +
+      'with --yes-fill-live-project. If the bakery is trading on it, do not:\n' +
+      'clear it instead with --clear, and check every collection reads empty\n' +
+      'before anybody rings a real sale.\n',
+  )
+  process.exit(1)
+}
+
 // A whole month, not a week. Wages and rent are monthly costs, and setting a
 // month of them against ten days of takings makes a healthy bakery look like it
 // is losing money — which is an artefact of the demo, not a finding.
@@ -83,10 +101,24 @@ const STAFF = {
 
 const demo = { demo: true }
 
+/**
+ * Take the demo back out.
+ *
+ * This has to be exhaustive rather than nearly exhaustive. What is left behind
+ * does not sit there harmlessly: `lib/suggest.js` reads old reports to decide
+ * how much to bake, the P&L reads expenses, and the days-left figure reads the
+ * material counts. Anything missed here becomes a real decision made on
+ * invented evidence, weeks later, with nothing on screen to say so.
+ *
+ * `expenses` was missing from this list until 2026-08-13, which left a month of
+ * fabricated wages and bills — around Rs 346,000 of them — in the owner's
+ * profit figure after a clear that reported success.
+ */
 async function wipe() {
   const collections = [
     'sales', 'closings', 'transfers', 'demands', 'productionOrders',
     'dailyReports', 'purchases', 'stockMovements', 'dailyRates', 'clientErrors',
+    'expenses',
   ]
   let removed = 0
   for (const name of collections) {
@@ -98,7 +130,81 @@ async function wipe() {
       removed += chunk.length
     }
   }
-  console.log(`Removed ${removed} demo records.`)
+
+  const reset = await resetMaterials()
+  console.log(`Removed ${removed} demo records, and reset ${reset} raw materials.`)
+  await reportLeftovers(collections)
+}
+
+/**
+ * What is still there once the flagged records have gone.
+ *
+ * Counting the flagged deletions proves only that the delete ran. The question
+ * that actually matters before going live is what is *left*, and the answer is
+ * not always nothing: a record written by hand while testing, or one made
+ * before the flag existed, has no `demo: true` on it and no way to be found by
+ * one. Printing the count is what turns "the script said it worked" into
+ * something somebody can check.
+ */
+async function reportLeftovers(collections) {
+  const left = []
+  for (const name of collections) {
+    const snap = await db.collection(name).limit(20).get()
+    if (!snap.empty) left.push([name, snap.size, snap.docs.map((d) => d.id)])
+  }
+
+  if (left.length === 0) {
+    console.log('\nEvery trading collection now reads empty. Safe to start.')
+    return
+  }
+
+  console.log('\nStill holding records, with no demo flag to remove them by:')
+  for (const [name, size, ids] of left) {
+    const shown = ids.slice(0, 5).join(', ')
+    console.log(`  ${name}: ${size === 20 ? '20+' : size} — ${shown}${size > 5 ? ', …' : ''}`)
+  }
+  console.log(
+    '\nEach one is a real record as far as every screen is concerned. Look at it\n' +
+      'before the bakery starts trading, and remove it by hand if it was a test.\n',
+  )
+  process.exitCode = 1
+}
+
+/**
+ * Raw materials cannot simply be deleted — the documents are real, made by the
+ * seed, and the catalogue of what this bakery buys is not demo data. What is
+ * demo is the counting written *onto* them: an on-hand figure, a last count,
+ * and a usage rate, all invented. They carry no `demo` flag to find them by,
+ * because they were merged into documents that already existed.
+ *
+ * So this resets the counted fields and leaves the material itself alone. A
+ * material with no count is the correct state for a bakery that has not started
+ * counting yet: the screen says "not known" rather than quoting a number nobody
+ * measured.
+ */
+async function resetMaterials() {
+  const snap = await db.collection('rawMaterials').get()
+  let n = 0
+  for (const chunk of chunks(snap.docs, 400)) {
+    const batch = db.batch()
+    for (const d of chunk) {
+      batch.set(
+        d.ref,
+        {
+          onHand: 0,
+          receivedSinceCount: 0,
+          spoiledSinceCount: 0,
+          lastCountQty: 0,
+          lastCountAt: FieldValue.delete(),
+          usagePerDay: FieldValue.delete(),
+        },
+        { merge: true },
+      )
+      n += 1
+    }
+    await batch.commit()
+  }
+  return n
 }
 
 function* chunks(list, size) {
@@ -138,7 +244,9 @@ function salesFor(branchId, date, scale) {
     at.setMinutes(at.getMinutes() + Math.round((n / transactions) * 660))
 
     out.push({
-      id: saleDocId(branchId, date, n, 'A'),
+      // No install token: there is no browser here, and demo ids stay stable
+      // across re-runs so a repeated build overwrites rather than piles up.
+      id: saleDocId(branchId, date, n, 'A', ''),
       body: {
         ...demo,
         ref: saleRef(branchId, date, n, 'A'),

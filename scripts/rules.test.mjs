@@ -250,6 +250,97 @@ test('collections nobody declared are closed by default', async () => {
   await assertFails(setDoc(doc(as(OWNER), 'secretStuff', 'x'), { a: 1 }))
 })
 
+// --- the stamp has to name whoever actually did it -------------------------
+//
+// There are no approval queues anywhere in this system: anyone may void a sale
+// or reopen a day, and the bargain is that every action is stamped and shows up
+// on the owner's dashboard. That makes the stamp the only thing standing
+// between a cashier and voiding their own takings — so it must not be a value
+// the client simply chooses. Whitelisting the field as changeable was never the
+// same as requiring it to be true.
+
+test('a cashier cannot void a sale under another cashier\'s name', async () => {
+  await assertFails(
+    updateDoc(doc(as(CASHIER_MAIN), 'sales', 'existing'), {
+      status: 'voided',
+      voidReason: 'Rung by mistake',
+      voidedBy: CASHIER_B2,
+    }),
+  )
+})
+
+test('a cashier cannot pin a payment correction on somebody else', async () => {
+  await assertFails(
+    updateDoc(doc(as(CASHIER_MAIN), 'sales', 'existing'), {
+      payment: 'card',
+      paymentChangedBy: OWNER,
+    }),
+  )
+})
+
+test('a reopen cannot be signed with another name', async () => {
+  await assertFails(
+    updateDoc(doc(as(CASHIER_MAIN), 'closings', 'C-20260728-MAIN'), {
+      status: 'reopened',
+      reopenedBy: OWNER,
+      reopenReason: 'Not mine to sign',
+    }),
+  )
+})
+
+test('the trail on a close can grow but never shrink', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'closings', 'C-20260729-MAIN'), {
+      branchId: 'MAIN',
+      businessDate: '2026-07-29',
+      status: 'closed',
+      countedCash: 10000,
+      events: [
+        { action: 'closed', by: CASHIER_MAIN, countedCash: 10000 },
+        { action: 'reopened', by: CASHIER_MAIN },
+      ],
+    })
+  })
+
+  // Re-closing appends, which is the normal path and must keep working.
+  await assertSucceeds(
+    updateDoc(doc(as(CASHIER_MAIN), 'closings', 'C-20260729-MAIN'), {
+      status: 'closed',
+      countedCash: 9900,
+      events: [
+        { action: 'closed', by: CASHIER_MAIN, countedCash: 10000 },
+        { action: 'reopened', by: CASHIER_MAIN },
+        { action: 'closed', by: CASHIER_MAIN, countedCash: 9900 },
+      ],
+    }),
+  )
+
+  // Replacing it with one tidy entry would leave a day that looks like it was
+  // counted once and reconciled perfectly. That is the version worth refusing.
+  await assertFails(
+    updateDoc(doc(as(CASHIER_MAIN), 'closings', 'C-20260729-MAIN'), {
+      events: [{ action: 'closed', by: CASHIER_MAIN, countedCash: 9900 }],
+    }),
+  )
+})
+
+test('what the bakery pays for its ingredients is the owner\'s alone', async () => {
+  // Staff accounts are created through the app, so `signedIn()` here was a much
+  // lower bar than it looked: anyone who could sign in could read the cost
+  // price of every ingredient. Both screens that read this are owner-only.
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'rawMaterials', 'flour'), {
+      name: 'Flour',
+      unit: 'kg',
+      costPerUnit: 210,
+      onHand: 40,
+    })
+  })
+  await assertFails(getDoc(doc(as(CASHIER_MAIN), 'rawMaterials', 'flour')))
+  await assertFails(getDoc(doc(as(SPECIALIST), 'rawMaterials', 'flour')))
+  await assertSucceeds(getDoc(doc(as(OWNER), 'rawMaterials', 'flour')))
+})
+
 test('a signed-in account with no role assigned can do nothing', async () => {
   // Claims not yet synced, or a stale token from before someone was set up.
   const db = env.authenticatedContext('u-nobody', {}).firestore()

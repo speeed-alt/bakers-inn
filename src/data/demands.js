@@ -1,5 +1,6 @@
 import { collection, doc, getDoc, query, setDoc, Timestamp, where } from 'firebase/firestore'
 import { db } from '../firebase.js'
+import { fireAndForget } from './errors.js'
 import { demandDocId, demandRef } from '../lib/ids.js'
 import { addDays } from '../lib/dates.js'
 import { HISTORY_WEEKS } from '../config.js'
@@ -60,8 +61,9 @@ export function saveDemand({ branchId, businessDate, items, user, submit = false
 
   // merge: the compile adds its own fields (status, flags) and this must not
   // wipe them. See the note in data/sales.js on why this is not awaited.
-  setDoc(demandDoc(branchId, businessDate), record, { merge: true }).catch((error) =>
-    console.error(`[bakery] order ${record.ref} failed to sync`, error),
+  fireAndForget(
+    setDoc(demandDoc(branchId, businessDate), record, { merge: true }),
+    `order ${record.ref}`,
   )
   return record
 }

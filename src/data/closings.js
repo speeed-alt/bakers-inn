@@ -1,5 +1,6 @@
 import { arrayUnion, doc, getDoc, serverTimestamp, setDoc, Timestamp, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase.js'
+import { fireAndForget } from './errors.js'
 import { closingDocId, closingRef } from '../lib/ids.js'
 import { previousDate } from '../lib/dates.js'
 
@@ -84,8 +85,9 @@ export function closeDay({
   // Same reasoning as sales: the local write lands immediately, the network
   // catches up later. See the note in data/sales.js.
   // merge: a day closed, reopened and closed again keeps its event trail.
-  setDoc(closingDoc(branchId, businessDate), record, { merge: true }).catch((error) =>
-    console.error('[bakery] day close failed to sync', error),
+  fireAndForget(
+    setDoc(closingDoc(branchId, businessDate), record, { merge: true }),
+    `close of ${closingRef(businessDate, branchId)}`,
   )
   return record
 }
@@ -98,12 +100,15 @@ export function closeDay({
  */
 export function reopenDay({ branchId, businessDate, user, reason = null }) {
   const now = Timestamp.fromDate(new Date())
-  updateDoc(closingDoc(branchId, businessDate), {
-    status: 'reopened',
-    reopenedBy: user.id,
-    reopenedByName: user.name,
-    reopenedAt: now,
-    reopenReason: reason,
-    events: arrayUnion({ action: 'reopened', by: user.id, byName: user.name, at: now, reason }),
-  }).catch((error) => console.error('[bakery] day reopen failed to sync', error))
+  fireAndForget(
+    updateDoc(closingDoc(branchId, businessDate), {
+      status: 'reopened',
+      reopenedBy: user.id,
+      reopenedByName: user.name,
+      reopenedAt: now,
+      reopenReason: reason,
+      events: arrayUnion({ action: 'reopened', by: user.id, byName: user.name, at: now, reason }),
+    }),
+    `reopen of ${closingRef(businessDate, branchId)}`,
+  )
 }

@@ -12,6 +12,7 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { db } from '../firebase.js'
+import { fireAndForget } from './errors.js'
 import { businessDateOf, compactDate } from '../lib/dates.js'
 import { applyMovement, purchaseTotal, usageBetweenCounts, COUNT, RECEIVED, SPOILAGE } from '../lib/materials.js'
 
@@ -94,7 +95,7 @@ export function recordPurchase({ items, businessDate = businessDateOf(), supplie
     })
   }
 
-  batch.commit().catch((error) => console.error('[bakery] purchase failed to sync', error))
+  fireAndForget(batch.commit(), 'a purchase of raw materials')
   return { id: purchaseRef.id, total }
 }
 
@@ -144,7 +145,7 @@ export function recordMovement({ material, type, qty, note = null, user, busines
   }
 
   batch.update(doc(db, 'rawMaterials', material.id), patch)
-  batch.commit().catch((error) => console.error('[bakery] stock movement failed to sync', error))
+  fireAndForget(batch.commit(), `a stock movement on ${material.name}`)
   return { onHand, ...patch }
 }
 

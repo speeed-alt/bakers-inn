@@ -10,6 +10,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { db } from '../firebase.js'
+import { fireAndForget } from './errors.js'
 import { businessDateOf } from '../lib/dates.js'
 import { deviceLetter, nextSaleSeq, saleDocId, saleRef } from '../lib/ids.js'
 import { basketTotal } from '../lib/money.js'
@@ -21,9 +22,11 @@ import { basketTotal } from '../lib/money.js'
 // cache synchronously either way, so listeners update at once and the queue
 // drains on reconnect. Awaiting here would freeze the till the moment the
 // internet drops, which is exactly when it must not.
-function fireAndForget(promise, what) {
-  promise.catch((error) => console.error(`[bakery] ${what} failed to sync`, error))
-}
+//
+// Not awaiting is not the same as not looking: `fireAndForget` puts a refused
+// write on the owner's dashboard. On this path a refusal means money was taken
+// and never recorded, which is otherwise found days later, from a drawer that
+// read over at close with nothing to explain it.
 
 export function salesForDay(branchId, businessDate) {
   return query(

@@ -40,6 +40,16 @@ jobs:
     # morning for a fork with no secret is just noise.
     if: github.repository == 'speeed-alt/bakers-inn'
 
+    env:
+      # Getting the cron right is only half of it. Both scripts fall back to
+      # `businessDateOf()`, which reads the *process* clock against the 04:00
+      # rollover — and a runner is UTC. At 00:00 UTC the hour is 0, under the
+      # rollover, so it handed back yesterday: the kitchen would have got
+      # yesterday's baking list every single morning, and the vans yesterday's
+      # delivery notes. One line, and it is the difference between the bakery
+      # working and not. Covered by scripts/dates.test.mjs.
+      TZ: Asia/Karachi
+
     steps:
       - uses: actions/checkout@v4
 

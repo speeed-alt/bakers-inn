@@ -81,10 +81,16 @@ async function main() {
   const result = compileDemands({ branches, demands, fallbacks, existing })
 
   if (result.items.length === 0) {
-    console.log(`Nothing to compile for ${targetDate}.`)
+    console.error(`Nothing to compile for ${targetDate}.`)
     if (result.missing?.length) {
-      console.log(`No order and no history for: ${result.missing.join(', ')}`)
+      console.error(`No order and no history for: ${result.missing.join(', ')}`)
     }
+    // Loudly. A morning with no baking list is not a quiet morning — the
+    // kitchen has nothing to bake and the vans have nothing to carry, and the
+    // rules let no one create the list by hand. Exiting 0 here painted that
+    // green on GitHub and told nobody. A red run emails the repo owner, which
+    // is the only alarm this system has.
+    if (!DEMO) process.exitCode = 1
     return
   }
 

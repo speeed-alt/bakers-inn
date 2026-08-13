@@ -59,6 +59,13 @@ then sign in.
 unless a PIN is supplied for each person in the environment, so that no real PIN
 is ever written into a file that git would remember:
 
+> ⚠️ **They are also, almost certainly, the live PINs on `bakers-inn-pk` right
+> now.** That project was seeded on 2026-08-04, four days before the guard below
+> existed, from a seed that hardcoded these values — and there is no
+> PIN-change screen in the app, so nothing can have rotated them since. Treat
+> the table above as public knowledge until step 9 of [GOLIVE.md](GOLIVE.md) has
+> been done.
+
 ```bash
 PIN_OWNER=… PIN_AYESHA=… PIN_BILAL=… PIN_HINA=… PIN_USMAN=… SEED_PROJECT=… npm run seed
 ```
@@ -167,6 +174,19 @@ this size will sit near zero. Set a budget alert anyway.
 firebase use --add          # pick the new project
 firebase deploy --only firestore:rules,firestore:indexes,functions
 ```
+
+Deploying `functions` **fails without Blaze**, and not because the functions
+would cost anything — Cloud Build and Artifact Registry refuse to enable on the
+free plan. `bakers-inn-pk` is in that state today, so two of the five jobs run
+from `.github/workflows/daily.yml` instead: the 05:00 baking list and the 06:00
+report rebuild, using the same shared arithmetic. That workflow needs the
+service-account JSON from step 3 stored as a repository secret named
+`FIREBASE_SERVICE_ACCOUNT`, and it exits 1 without it.
+
+`syncStaffClaims` and `reportOnClose` have **no** substitute. Until they are
+deployed, anyone added through the app signs in with no permissions and every
+write they make is refused, and there is no report for a day until 06:00 the
+next morning. See [GOLIVE.md](GOLIVE.md).
 
 **3. Seed the real data once** — outlets, staff, the product list — by pointing
 the seed script at the project instead of the emulator. This needs a

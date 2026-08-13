@@ -1,0 +1,52 @@
+# The tests, on every push.
+#
+# Until now nothing ran them anywhere but on the developer's laptop, which is
+# the same as saying they ran when somebody remembered. The two suites are
+# deliberately the whole automated story for this project — the pure arithmetic
+# and the security rules — so they are cheap to run and there is no reason not
+# to run them every time.
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    env:
+      # The same trap as the daily jobs: dates.test.mjs asserts what the 04:00
+      # rollover does either side of midnight, and a UTC runner would disagree
+      # with every tablet in Faisalabad. See .github/workflows/daily.yml.
+      TZ: Asia/Karachi
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: The arithmetic
+        run: npm test
+
+      # The rules are the real permission system — the UI only hides buttons —
+      # so a change that opens one up must not be able to reach main quietly.
+      # The Firestore emulator is a Java process; hence the JDK.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: The security rules
+        run: npx firebase emulators:exec --only firestore --project demo-bakery "npm run test:rules"
+
+      - name: The build
+        run: npm run build

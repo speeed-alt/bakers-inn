@@ -72,6 +72,30 @@ export function reportClientError(error, where = 'app') {
   }
 }
 
+/**
+ * Start a write and get on with it, but do not lose the answer.
+ *
+ * Every write in `src/data/` is deliberately un-awaited — see the note atop
+ * `data/sales.js` for why awaiting freezes the till exactly when the internet
+ * drops. Being offline does not land in the catch: those writes sit in
+ * Firestore's queue and settle on reconnect. What lands here is a write the
+ * server actually *refused* — wrong claims, a rule violation, an id that
+ * already exists — and that means the screen showed a cashier one thing while
+ * the database kept another.
+ *
+ * Every one of these used to end in `console.error` on a tablet nobody will
+ * ever open the console of. This puts it on the owner's dashboard instead.
+ *
+ * @param promise  the un-awaited write
+ * @param what     what was being written, in the owner's words, for the card
+ */
+export function fireAndForget(promise, what) {
+  promise.catch((error) => {
+    console.error(`[bakery] ${what} failed to sync`, error)
+    reportClientError(error, `sync:${what}`)
+  })
+}
+
 /** Recent faults across every tablet. Owner-only — see firestore.rules. */
 export function recentErrorsQuery(count = 20) {
   return query(collection(db, 'clientErrors'), orderBy('at', 'desc'), limit(count))

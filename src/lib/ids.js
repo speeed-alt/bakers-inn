@@ -5,11 +5,14 @@ import { compactDate, shortDate } from './dates.js'
 // come from a counter with exactly one writer.
 
 const DEVICE_KEY = 'bakery.deviceLetter'
+const INSTALL_KEY = 'bakery.installId'
 const SEQ_KEY = 'bakery.saleSeq'
 
 /**
  * One letter per till, set once at setup. A second till at the same outlet
- * becomes 'B' and the two can never collide, with no coordination between them.
+ * becomes 'B' and the two read apart on a receipt with no coordination between
+ * them. It is a label for people — `installId` is what actually keeps the
+ * documents apart.
  */
 export function deviceLetter() {
   let letter = localStorage.getItem(DEVICE_KEY)
@@ -18,6 +21,50 @@ export function deviceLetter() {
     localStorage.setItem(DEVICE_KEY, letter)
   }
   return letter
+}
+
+// No I, L, O or U: this never has to be read aloud, but it does end up in a
+// document id someone may one day be comparing against another on a screen.
+const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+
+function mintInstallId() {
+  const bytes = new Uint8Array(5)
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes)
+  } else {
+    // Nothing on a shop tablet lacks Web Crypto over https, but a sale must not
+    // depend on that being true.
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256)
+  }
+  return Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join('')
+}
+
+/**
+ * A token unique to this installation, minted once and shown to nobody.
+ *
+ * Neither half of a sale id is safe on its own. The till letter is chosen by a
+ * person, so two tablets at one outlet both left on the default 'A' mint the
+ * same ids; and the sequence lives in localStorage, so clearing this browser's
+ * storage — which "Reset this tablet" does — restarts it at 1 over ids that
+ * already exist.
+ *
+ * Either way the second write lands on an existing document. `setDoc` with no
+ * merge reads as an update, the rules allow only a void or a payment fix to
+ * change a sale, so it is refused — and Firestore rolls the *new* sale back out
+ * of the local cache. The earlier sale survives; the one just rung up vanishes
+ * from the till's own list and from the close. Cash in the drawer, no record of
+ * it anywhere, and the drawer reads over at close with nothing to explain it.
+ *
+ * This token is what makes that impossible. A wipe mints a new one, so even a
+ * restarted counter cannot land on an id this tablet has already used.
+ */
+export function installId() {
+  let id = localStorage.getItem(INSTALL_KEY)
+  if (!id) {
+    id = mintInstallId()
+    localStorage.setItem(INSTALL_KEY, id)
+  }
+  return id
 }
 
 export function setDeviceLetter(letter) {
@@ -45,9 +92,20 @@ export function saleRef(branchId, businessDate, seq, letter = deviceLetter()) {
 /**
  * Deterministic document id: the same sale written twice (a retry after a flaky
  * connection) lands on the same document instead of duplicating takings.
+ *
+ * The install token on the end is what stops a *different* sale doing the same
+ * thing by accident — see `installId`. Pass '' for it where the ids are being
+ * generated outside a browser, as the demo and backfill scripts do.
  */
-export function saleDocId(branchId, businessDate, seq, letter = deviceLetter()) {
-  return `S-${compactDate(businessDate)}-${branchId}-${letter}${String(seq).padStart(3, '0')}`
+export function saleDocId(
+  branchId,
+  businessDate,
+  seq,
+  letter = deviceLetter(),
+  install = installId(),
+) {
+  const tail = install ? `-${install}` : ''
+  return `S-${compactDate(businessDate)}-${branchId}-${letter}${String(seq).padStart(3, '0')}${tail}`
 }
 
 export function closingDocId(businessDate, branchId) {

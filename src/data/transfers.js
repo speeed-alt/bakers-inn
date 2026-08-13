@@ -1,5 +1,6 @@
 import { collection, doc, query, setDoc, Timestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '../firebase.js'
+import { fireAndForget } from './errors.js'
 import { transferDocId, transferRef } from '../lib/ids.js'
 import { HUB_BRANCH_ID } from '../config.js'
 
@@ -43,13 +44,16 @@ export function dispatchTransfer({ transfer, sent = {}, user }) {
     qtySent: sent[item.productId] ?? item.qtyDemanded,
   }))
 
-  updateDoc(transferDoc(transfer.id), {
-    items,
-    status: 'dispatched',
-    dispatchedBy: user.id,
-    dispatchedByName: user.name,
-    dispatchedAt: Timestamp.fromDate(new Date()),
-  }).catch((error) => console.error(`[bakery] dispatch of ${transfer.ref} failed to sync`, error))
+  fireAndForget(
+    updateDoc(transferDoc(transfer.id), {
+      items,
+      status: 'dispatched',
+      dispatchedBy: user.id,
+      dispatchedByName: user.name,
+      dispatchedAt: Timestamp.fromDate(new Date()),
+    }),
+    `dispatch of ${transfer.ref}`,
+  )
 }
 
 /**
@@ -68,13 +72,16 @@ export function receiveTransfer({ transfer, counted = {}, reasons = {}, user }) 
     }
   })
 
-  updateDoc(transferDoc(transfer.id), {
-    items,
-    status: 'received',
-    receivedBy: user.id,
-    receivedByName: user.name,
-    receivedAt: Timestamp.fromDate(new Date()),
-  }).catch((error) => console.error(`[bakery] receipt of ${transfer.ref} failed to sync`, error))
+  fireAndForget(
+    updateDoc(transferDoc(transfer.id), {
+      items,
+      status: 'received',
+      receivedBy: user.id,
+      receivedByName: user.name,
+      receivedAt: Timestamp.fromDate(new Date()),
+    }),
+    `receipt of ${transfer.ref}`,
+  )
 }
 
 /**
@@ -106,9 +113,7 @@ export function sendReturn({ fromBranch, businessDate, items, user, toBranch = H
     dispatchedAt: Timestamp.fromDate(new Date()),
   }
 
-  setDoc(transferDoc(id), record, { merge: true }).catch((error) =>
-    console.error(`[bakery] return ${record.ref} failed to sync`, error),
-  )
+  fireAndForget(setDoc(transferDoc(id), record, { merge: true }), `return ${record.ref}`)
   return record
 }
 

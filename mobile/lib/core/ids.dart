@@ -20,6 +20,14 @@ String saleRef(String branchId, String businessDate, int seq, String letter) =>
 
 /// Deterministic document id: the same sale written twice (a retry after a
 /// flaky connection) lands on the same document instead of duplicating takings.
+///
+/// DO NOT WRITE A SALE WITH THIS. It is the pre-2026-08-13 shape, kept only so
+/// the parity test can read ids the web app wrote before that date. The web app
+/// now appends a per-install token (`installId` in src/lib/ids.js) because the
+/// letter and the sequence together are not unique: two tills both on 'A', or
+/// one whose storage was cleared, mint an id that already exists, and the
+/// refused write silently loses the *new* sale. This app has no till, so it has
+/// never had the bug. Give it one before giving it a till.
 String saleDocId(String branchId, String businessDate, int seq, String letter) =>
     'S-${compactDate(businessDate)}-$branchId-$letter${_seq3(seq)}';
 
