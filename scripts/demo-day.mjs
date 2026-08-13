@@ -29,13 +29,28 @@ import {
   transferRef,
 } from '../src/lib/ids.js'
 
-const projectId = process.env.SEED_PROJECT || process.env.GCLOUD_PROJECT
-if (!projectId || !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  console.error('Set SEED_PROJECT and GOOGLE_APPLICATION_CREDENTIALS first.')
+// Defaults to the emulator, exactly as `seed.mjs` does.
+//
+// It used to demand SEED_PROJECT and a service-account key before it would run
+// at all, which meant the *only* way to see a full set of screens was to point
+// it at the real project. That is almost certainly how `bakers-inn-pk` ended up
+// holding a fortnight of invented trading. Building the demo against the
+// emulator costs nothing and touches nothing.
+const projectId = process.env.SEED_PROJECT || process.env.GCLOUD_PROJECT || 'demo-bakery'
+const useEmulator = projectId.startsWith('demo-')
+
+if (useEmulator) {
+  process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080'
+} else if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  console.error(
+    `\nRefusing to touch '${projectId}': GOOGLE_APPLICATION_CREDENTIALS is not set.\n` +
+      'Point it at a service-account key, or leave SEED_PROJECT unset to build\n' +
+      'the demo against the emulators instead.\n',
+  )
   process.exit(1)
 }
 
-initializeApp({ projectId, credential: applicationDefault() })
+initializeApp(useEmulator ? { projectId } : { projectId, credential: applicationDefault() })
 const db = getFirestore()
 
 const CLEAR = process.argv.includes('--clear')
@@ -47,8 +62,7 @@ const TODAY = businessDateOf()
 // file, so the guard cannot simply refuse a real project — but it can make
 // somebody say out loud that they meant it. Clearing is always allowed: that is
 // the safe direction, and it is the one somebody will be in a hurry to run.
-const projectIsLive = !projectId.startsWith('demo-')
-if (!CLEAR && projectIsLive && !process.argv.includes('--yes-fill-live-project')) {
+if (!CLEAR && !useEmulator && !process.argv.includes('--yes-fill-live-project')) {
   console.error(
     `\nRefusing to fill '${projectId}' with demo data.\n\n` +
       'That project is not an emulator. If this is still the demo phase, re-run\n' +

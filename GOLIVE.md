@@ -47,7 +47,7 @@ and the database still has to be cleaned.
 | 2 | The live database is **demo data** — every figure on every screen is fiction | fixed the cleanup; still to run |
 | 3 | The **dev PINs are almost certainly live**. Owner is probably still `1111` | needs re-seeding |
 | 4 | Nobody the owner adds through the app can work, and nobody he removes is stopped | needs Blaze, or a script |
-| 5 | Two tills, or one cleared tablet, minted the same sale id — and the **new sale was the one destroyed** | fixed |
+| 5 | A cleared tablet minted a sale id that already existed — and the **new sale was the one destroyed** | fixed |
 
 ### 1 · The morning jobs
 
@@ -126,10 +126,12 @@ branch until the token expires.
 ### 5 · The sale id — fixed
 
 `saleDocId` was the till letter (defaulting to `'A'`) plus a `localStorage`
-counter. Two tablets at one outlet, or one mid-day "Reset this tablet", and the
-next write landed on an id that already existed. `setDoc` with no merge reads as
-an update, the rules allow only a void or a payment fix to change a sale, so it
-was refused — and Firestore rolled the **new** sale back out of the local cache.
+counter. Each shop runs one till, so two tablets never collided in practice —
+but "Reset this tablet", or cleared browser data, restarts that counter at 1
+over ids that already exist, which needs no second tablet at all. The next write
+landed on an id that already existed. `setDoc` with no merge reads as an update,
+the rules allow only a void or a payment fix to change a sale, so it was
+refused — and Firestore rolled the **new** sale back out of the local cache.
 The earlier sale survived. The one just rung up vanished from the till's own
 list and from the close, with no message to anyone. Cash in the drawer, no
 record, and a drawer that read over at close with nothing to explain it.
@@ -209,8 +211,10 @@ otherwise appear on all three tills — archive that one in Catalog.
 
 Sit down together. Write it on paper first — it doubles as the owner's training.
 
-- The three **real outlet names**. They are currently Main Outlet, Gulberg and
-  Model Town, which are placeholders.
+- ~~The three **real outlet names**.~~ Settled from his own sheet: **Susan
+  Road** (the hub), **Gulberg**, **Gulistan Colony**. Already in `seed.mjs`.
+  Confirm the mapping is right — Susan Road is `MAIN` because it keeps half the
+  bake rather than being delivered to.
 - Every **staff member**: real name, role (owner / cashier / specialist), outlet.
 - The **real selling price** for all 44 items. The seeded prices are
   round-number guesses.
@@ -257,12 +261,15 @@ On the wifi **at the counter**, not by the door:
 
 1. Open the URL in Chrome → **Add to Home Screen**.
 2. Open it from the home screen, not from Chrome.
-3. Run Setup: the right outlet, and a **till letter no other tablet at that
-   outlet is using**.
+3. Run Setup and pick the right outlet. Leave the till letter on **A** — each
+   shop has one till, so there is nothing to tell apart.
 4. Sign in once, so the catalogue caches.
-5. Write the till letter on the back with a marker.
-6. **Turn the wifi off and ring a test sale.** A tablet that has never been
+5. **Turn the wifi off and ring a test sale.** A tablet that has never been
    online has an empty product list and cannot sell.
+
+If a shop ever gets a second till, give that one letter **B** at setup. Sale
+ids no longer depend on it being unique — they carry a per-install token — but
+the letter is what tells the two apart on a receipt.
 
 ### 12 · [both] One full dry day · a day
 

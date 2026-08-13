@@ -23,7 +23,7 @@
 // closings are shaped for the screens, not for this. Re-run demo-day.mjs to put
 // them back.
 
-import { initializeApp, applicationDefault } from 'firebase-admin/app'
+import { initAdmin } from './admin.mjs'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 
 import { buildDailyReport, carryoverFrom } from '../src/lib/dailyReport.js'
@@ -31,13 +31,8 @@ import { closingDocId, productionDocId, reportDocId, reportRef } from '../src/li
 import { businessDateOf, previousDate } from '../src/lib/dates.js'
 import { HUB_BRANCH_ID } from '../src/config.js'
 
-const projectId = process.env.SEED_PROJECT || process.env.GCLOUD_PROJECT
-if (!projectId || !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  console.error('Set SEED_PROJECT and GOOGLE_APPLICATION_CREDENTIALS first.')
-  process.exit(1)
-}
 
-initializeApp({ projectId, credential: applicationDefault() })
+const { projectId } = initAdmin()
 const db = getFirestore()
 
 const dateArg = process.argv.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a))

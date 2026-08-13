@@ -11,19 +11,14 @@
 // ordered. Those three are what the shortfall, the variance and the extras
 // screens exist for, and a demo where everything reconciles never shows them.
 
-import { initializeApp, applicationDefault } from 'firebase-admin/app'
+import { initAdmin } from './admin.mjs'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 
 import { businessDateOf } from '../src/lib/dates.js'
 import { productionDocId } from '../src/lib/ids.js'
 
-const projectId = process.env.SEED_PROJECT || process.env.GCLOUD_PROJECT
-if (!projectId || !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  console.error('Set SEED_PROJECT and GOOGLE_APPLICATION_CREDENTIALS first.')
-  process.exit(1)
-}
 
-initializeApp({ projectId, credential: applicationDefault() })
+const { projectId } = initAdmin()
 const db = getFirestore()
 
 const TODAY = process.argv[2] || businessDateOf()

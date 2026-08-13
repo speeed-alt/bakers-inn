@@ -18,6 +18,8 @@ import { recentErrorsQuery } from '../data/errors.js'
 import { grossMargin } from '../lib/materials.js'
 import { dailySummaryCsv, downloadCsv, monthRange, purchasesCsv, salesCsv } from '../lib/csv.js'
 import { Empty, Loading, Money } from '../components/ui.jsx'
+import DailySheet from '../components/DailySheet.jsx'
+import { dailySheet } from '../lib/dailySheet.js'
 import { getDocs } from 'firebase/firestore'
 
 /**
@@ -97,6 +99,22 @@ export default function Dashboard() {
   const weekTotal = week.reduce((sum, d) => sum + d.total, 0)
   const tradingDays = best.length || 1
 
+  // His own daily line. Every input is already on this screen, so it costs no
+  // extra read — it was only ever the shape that was missing.
+  const sheet = useMemo(
+    () =>
+      dailySheet({
+        products: products.data ?? [],
+        branches: branchList,
+        production: order.data,
+        transfers: transfers.data ?? [],
+        sales: all,
+        closings: closings.data ?? [],
+        businessDate: today,
+      }),
+    [products.data, branchList, order.data, transfers.data, all, closings.data, today],
+  )
+
   // Wait for the two feeds the figures are made of, and nothing else.
   //
   // Without this the whole page drew immediately with every total at Rs 0,
@@ -131,6 +149,11 @@ export default function Dashboard() {
 
   return (
     <div className="page">
+      {/* First, before anything the system invented. He opens this to find the
+          line he would otherwise be writing by hand, and recognising it is what
+          buys every screen underneath the benefit of the doubt. */}
+      <DailySheet sheet={sheet} />
+
       <div className="card">
         <div className="row between" style={{ marginBottom: 12 }}>
           <h2 style={{ margin: 0 }}>Today</h2>

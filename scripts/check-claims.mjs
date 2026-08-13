@@ -14,17 +14,12 @@
 // It matters most while `syncStaffClaims` is not deployed, because then nothing
 // is keeping the two in step automatically.
 
-const projectId = process.env.SEED_PROJECT || process.env.GCLOUD_PROJECT
-if (!projectId || !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  console.error('Set SEED_PROJECT and GOOGLE_APPLICATION_CREDENTIALS first.')
-  process.exit(1)
-}
 
-import { initializeApp, applicationDefault } from 'firebase-admin/app'
+import { initAdmin } from './admin.mjs'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 
-initializeApp({ projectId, credential: applicationDefault() })
+const { projectId } = initAdmin({ needsAuth: true })
 const auth = getAuth()
 const db = getFirestore()
 

@@ -40,10 +40,17 @@ initializeApp(useEmulator ? { projectId } : { projectId, credential: application
 const db = getFirestore()
 const auth = getAuth()
 
+// The real shops, off the owner's own daily sheet. Susan Road is the hub — it
+// is the one that keeps half the bake rather than being delivered to.
+//
+// The ids never change. They are written into every document id in the system
+// (S-20260813-B2-…, C-20260813-MAIN, T-20260813-B3) so renaming a shop is a
+// display change and nothing more, but re-lettering one would orphan its
+// history. If a shop moves or is renamed, change `name` and leave `id` alone.
 const BRANCHES = [
-  { id: 'MAIN', name: 'Main Outlet', isMain: true },
+  { id: 'MAIN', name: 'Susan Road', isMain: true },
   { id: 'B2', name: 'Gulberg', isMain: false },
-  { id: 'B3', name: 'Model Town', isMain: false },
+  { id: 'B3', name: 'Gulistan Colony', isMain: false },
 ]
 
 // `devPin` is a development convenience and nothing more. It is used only

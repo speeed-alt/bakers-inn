@@ -192,6 +192,34 @@ columns map exactly onto what the system tracks. Keep this language:
 | Remaining Stock | carried over |
 | Closing Sale | sold |
 
+The owner also keeps **one ruled line a day**, separate from the per-outlet
+closing sheet, and it is the only record he reads end to end. Photographed off
+the counter on 2026-08-13:
+
+```
+Date | Production | Distribution ×3 | Sale position ×3 | Total sale | Total stale
+```
+
+`lib/dailySheet.js` reproduces exactly that row and `components/DailySheet.jsx`
+renders it as the first card on his dashboard. Three things about it that are
+easy to get wrong:
+
+- **It is in rupees, not units.** He writes `2 lakh`, never `2000 loaves`. The
+  system holds quantities per product and derives the value; his sheet is the
+  other way round.
+- **Production means what came out of the oven**, not what the list asked for,
+  so it counts `produced` and not `qtyNeeded` — and extras count, because a tray
+  nobody ordered was still baked and still gets sold.
+- **His columns do not reconcile, and that is not an error.** On the sheet
+  photographed: 2,00,000 sent out, 1,80,000 sold, 5,000 stale — 15,000 with no
+  column to go in. It is stock still on a shelf. The card names it underneath
+  rather than adding a column, because the table has to stay the shape he
+  recognises.
+
+Whether this line is the *whole* of what he records, or a summary on top of the
+44-item closing sheet, is **not yet confirmed with him**. It changes how much of
+the close wizard he will actually use.
+
 ## Deliberate decisions worth not re-litigating
 
 - **No recipe/ingredient depletion.** The owner rejected it. Usage is derived

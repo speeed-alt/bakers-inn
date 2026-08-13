@@ -14,7 +14,7 @@
 // It is safe to run twice. The list is a natural key, orders already locked
 // stay locked, and a delivery note already on its way is left alone.
 
-import { initializeApp, applicationDefault } from 'firebase-admin/app'
+import { initAdmin } from './admin.mjs'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 
 import { compileDemands } from '../src/lib/compile.js'
@@ -29,13 +29,8 @@ import {
 import { addDays, businessDateOf } from '../src/lib/dates.js'
 import { HISTORY_WEEKS } from '../src/config.js'
 
-const projectId = process.env.SEED_PROJECT || process.env.GCLOUD_PROJECT
-if (!projectId || !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  console.error('Set SEED_PROJECT and GOOGLE_APPLICATION_CREDENTIALS first.')
-  process.exit(1)
-}
 
-initializeApp({ projectId, credential: applicationDefault() })
+const { projectId } = initAdmin()
 const db = getFirestore()
 
 const SUBMITTED = ['submitted', 'locked']
