@@ -54,8 +54,11 @@ and the database still has to be cleaned.
 Two separate faults, same job.
 
 `FIREBASE_SERVICE_ACCOUNT` does not exist as a repository secret, so the
-workflow has exited 1 on every run it has ever had — which is none, because it
-has also never been triggered.
+workflow dies at its second step every morning. It **is** firing on schedule —
+run 31664009726 at 03:28 UTC on 2026-08-13 failed in 23 seconds with
+`FIREBASE_SERVICE_ACCOUNT is not set` — so the alarm has been going off daily
+since it was committed, into an inbox nobody reads. Paste the service-account
+JSON in as that secret and the step passes.
 
 And the cron fires at 00:00 UTC, which *is* 05:00 in Faisalabad — but both
 scripts fall back to `businessDateOf()`, which reads the **process** clock

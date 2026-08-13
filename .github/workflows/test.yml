@@ -25,9 +25,9 @@ jobs:
       TZ: Asia/Karachi
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -40,7 +40,7 @@ jobs:
       # The rules are the real permission system — the UI only hides buttons —
       # so a change that opens one up must not be able to reach main quietly.
       # The Firestore emulator is a Java process; hence the JDK.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
