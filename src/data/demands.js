@@ -4,6 +4,7 @@ import { fireAndForget } from './errors.js'
 import { demandDocId, demandRef } from '../lib/ids.js'
 import { addDays } from '../lib/dates.js'
 import { HISTORY_WEEKS } from '../config.js'
+import { practiceStamp } from '../lib/practice.js'
 
 // One order per outlet per day, so the document id is the date and the outlet.
 // Nothing to coordinate, and the compile lands on the same documents if it runs
@@ -41,6 +42,8 @@ export async function lastSameWeekdayDemand(branchId, businessDate) {
 export function saveDemand({ branchId, businessDate, items, user, submit = false }) {
   const now = Timestamp.fromDate(new Date())
   const record = {
+    // Carries the mode it was made in. See src/lib/practice.js.
+    ...practiceStamp(),
     ref: demandRef(businessDate, branchId),
     branchId,
     businessDate,

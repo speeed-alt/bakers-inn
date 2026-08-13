@@ -19,6 +19,7 @@ import { grossMargin } from '../lib/materials.js'
 import { dailySummaryCsv, downloadCsv, monthRange, purchasesCsv, salesCsv } from '../lib/csv.js'
 import { Empty, Loading, Money } from '../components/ui.jsx'
 import DailySheet from '../components/DailySheet.jsx'
+import PracticeCard from '../components/PracticeCard.jsx'
 import { dailySheet } from '../lib/dailySheet.js'
 import { getDocs } from 'firebase/firestore'
 
@@ -342,6 +343,11 @@ export default function Dashboard() {
         </div>
         )}
       </div>
+
+      {/* Last on the page on purpose. It is used the day somebody new starts
+          and then not for months, and a switch that changes what every figure
+          above it means should not sit where a thumb lands. */}
+      <PracticeCard />
     </div>
   )
 }

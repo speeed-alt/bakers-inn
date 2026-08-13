@@ -12,6 +12,7 @@ import {
 import { db } from '../firebase.js'
 import { businessDateOf } from '../lib/dates.js'
 import { SALARY, UTILITY } from '../lib/pnl.js'
+import { practiceStamp, isPractising } from '../lib/practice.js'
 
 // What the business spends besides ingredients: bills and wages.
 //
@@ -22,15 +23,18 @@ import { SALARY, UTILITY } from '../lib/pnl.js'
 // by the price of a person.
 
 /** `UTL-202608-B2-electricity`, or `UTL-202608-ALL-internet` for the business. */
-export function utilityDocId(month, branchId, category) {
+export function utilityDocId(month, branchId, category, practising = isPractising()) {
   const where_ = branchId || 'ALL'
   const slug = String(category).toLowerCase().replace(/[^a-z0-9]+/g, '-')
-  return `UTL-${month.replace('-', '')}-${where_}-${slug}`
+  // Practice gets its own document, for the same reason closings do — see the
+  // note on PRACTICE_SUFFIX in lib/ids.js. One bill per month per outlet per
+  // category means a practice entry would otherwise overwrite the real one.
+  return `UTL-${month.replace('-', '')}-${where_}-${slug}${practising ? '-P' : ''}`
 }
 
 /** `SAL-202608-bilal`. */
-export function salaryDocId(month, personId) {
-  return `SAL-${month.replace('-', '')}-${personId}`
+export function salaryDocId(month, personId, practising = isPractising()) {
+  return `SAL-${month.replace('-', '')}-${personId}${practising ? '-P' : ''}`
 }
 
 export function expensesQuery(months = 6) {
@@ -46,6 +50,7 @@ export function saveUtility({ month, branchId, category, amount, note = null, us
   return setDoc(
     doc(db, 'expenses', id),
     {
+      ...practiceStamp(),
       type: UTILITY,
       category,
       // Null rather than absent: a bill for the whole business is a real
@@ -69,6 +74,7 @@ export function saveSalary({ month, person, amount, note = null, user }) {
   return setDoc(
     doc(db, 'expenses', id),
     {
+      ...practiceStamp(),
       type: SALARY,
       category: 'Salary',
       personId: person.id,

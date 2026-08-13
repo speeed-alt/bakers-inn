@@ -47,7 +47,7 @@ const targetDate = args.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a)) || businessDa
 async function lastSameWeekday(branchId, businessDate) {
   for (let week = 1; week <= HISTORY_WEEKS; week += 1) {
     const past = addDays(businessDate, -7 * week)
-    const snap = await db.collection('demands').doc(demandDocId(past, branchId)).get()
+    const snap = await db.collection('demands').doc(demandDocId(past, branchId, DEMO)).get()
     if (!snap.exists) continue
     const doc = { id: snap.id, ...snap.data() }
     if (doc.status !== 'draft' && (doc.items?.length ?? 0) > 0) return doc
@@ -59,7 +59,7 @@ async function main() {
   const [branchesSnap, demandsSnap, existingSnap] = await Promise.all([
     db.collection('branches').get(),
     db.collection('demands').where('businessDate', '==', targetDate).get(),
-    db.collection('productionOrders').doc(productionDocId(targetDate)).get(),
+    db.collection('productionOrders').doc(productionDocId(targetDate, DEMO)).get(),
   ])
 
   const branches = branchesSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
@@ -96,7 +96,7 @@ async function main() {
   const batch = db.batch()
 
   batch.set(
-    db.collection('productionOrders').doc(productionDocId(targetDate)),
+    db.collection('productionOrders').doc(productionDocId(targetDate, DEMO)),
     {
       ...demo,
       ref: productionRef(targetDate),
@@ -120,7 +120,7 @@ async function main() {
     }
     const fallback = fallbacks[branch.id]
     if (!fallback) continue
-    batch.set(db.collection('demands').doc(demandDocId(targetDate, branch.id)), {
+    batch.set(db.collection('demands').doc(demandDocId(targetDate, branch.id, DEMO)), {
       ref: demandRef(targetDate, branch.id),
       branchId: branch.id,
       businessDate: targetDate,
@@ -141,7 +141,7 @@ async function main() {
   )
 
   for (const transfer of result.transfers) {
-    const id = transferDocId(targetDate, transfer.toBranchId)
+    const id = transferDocId(targetDate, transfer.toBranchId, 1, DEMO)
     if (alreadyMoving.has(id)) {
       console.log(`  ${id} is already on its way — left alone`)
       continue

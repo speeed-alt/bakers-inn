@@ -14,6 +14,7 @@ import { fireAndForget } from './errors.js'
 import { businessDateOf } from '../lib/dates.js'
 import { deviceLetter, nextSaleSeq, saleDocId, saleRef } from '../lib/ids.js'
 import { basketTotal } from '../lib/money.js'
+import { practiceStamp } from '../lib/practice.js'
 
 // IMPORTANT — never `await` a Firestore write on the selling path.
 //
@@ -45,6 +46,8 @@ export function recordSale({ branchId, cashier, lines, payment, cashGiven = null
   const total = basketTotal(lines)
 
   const sale = {
+    // Carries the mode it was made in. See src/lib/practice.js.
+    ...practiceStamp(),
     ref: saleRef(branchId, businessDate, seq, letter),
     branchId,
     businessDate,
@@ -94,6 +97,8 @@ export function recordRefund({ original, cashier, payment }) {
   const id = saleDocId(original.branchId, businessDate, seq, letter)
 
   const refund = {
+    // Carries the mode it was made in. See src/lib/practice.js.
+    ...practiceStamp(),
     ref: saleRef(original.branchId, businessDate, seq, letter),
     branchId: original.branchId,
     businessDate,

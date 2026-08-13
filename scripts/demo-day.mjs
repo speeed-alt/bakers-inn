@@ -289,7 +289,7 @@ function salesFor(branchId, date, scale) {
 /** The order an outlet sends for a given day. */
 function demandFor(branchId, date, scale, status = 'locked') {
   return {
-    id: demandDocId(date, branchId),
+    id: demandDocId(date, branchId, true),
     body: {
       ...demo,
       ref: demandRef(date, branchId),
@@ -354,7 +354,7 @@ async function history() {
 
       batchOf.push([
         'closings',
-        closingDocId(date, branchId),
+        closingDocId(date, branchId, true),
         {
           ...demo,
           branchId,
@@ -381,7 +381,7 @@ async function history() {
 
       batchOf.push([
         'dailyReports',
-        reportDocId(date, branchId),
+        reportDocId(date, branchId, true),
         {
           ...demo,
           ref: reportRef(date, branchId),
@@ -418,7 +418,7 @@ async function todayRun() {
 
   // Yesterday left a little on the shelves, so the stock screen has carry-in.
   for (const branchId of Object.keys(SHAPE)) {
-    const id = closingDocId(addDays(TODAY, -1), branchId)
+    const id = closingDocId(addDays(TODAY, -1), branchId, true)
     writes.push([
       'closings',
       id,

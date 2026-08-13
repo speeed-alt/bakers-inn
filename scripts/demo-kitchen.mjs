@@ -26,7 +26,7 @@ const BAKER = { id: 'usman', name: 'Usman' }
 const AT = Timestamp.fromDate(new Date(`${TODAY}T05:40:00`))
 
 async function main() {
-  const orderRef = db.collection('productionOrders').doc(productionDocId(TODAY))
+  const orderRef = db.collection('productionOrders').doc(productionDocId(TODAY, true))
   const snap = await orderRef.get()
   if (!snap.exists) {
     console.error(`No baking list for ${TODAY}. Run scripts/compile-now.mjs first.`)

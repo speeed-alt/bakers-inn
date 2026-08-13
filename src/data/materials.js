@@ -15,6 +15,7 @@ import { db } from '../firebase.js'
 import { fireAndForget } from './errors.js'
 import { businessDateOf, compactDate } from '../lib/dates.js'
 import { applyMovement, purchaseTotal, usageBetweenCounts, COUNT, RECEIVED, SPOILAGE } from '../lib/materials.js'
+import { practiceStamp } from '../lib/practice.js'
 
 // Raw materials are the owner's alone — see firestore.rules.
 
@@ -55,6 +56,7 @@ export function recordPurchase({ items, businessDate = businessDateOf(), supplie
   const now = Timestamp.fromDate(new Date())
 
   batch.set(purchaseRef, {
+    ...practiceStamp(),
     ref: `P-${compactDate(businessDate)}-${purchaseRef.id.slice(0, 4).toUpperCase()}`,
     businessDate,
     supplier,
@@ -76,6 +78,7 @@ export function recordPurchase({ items, businessDate = businessDateOf(), supplie
   for (const item of items) {
     const movement = doc(collection(db, 'stockMovements'))
     batch.set(movement, {
+      ...practiceStamp(),
       materialId: item.materialId,
       materialName: item.materialName,
       type: RECEIVED,
@@ -109,6 +112,7 @@ export function recordMovement({ material, type, qty, note = null, user, busines
   const batch = writeBatch(db)
 
   batch.set(doc(collection(db, 'stockMovements')), {
+    ...practiceStamp(),
     materialId: material.id,
     materialName: material.name,
     type,

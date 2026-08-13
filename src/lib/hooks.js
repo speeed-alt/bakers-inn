@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
 import { onSnapshot } from 'firebase/firestore'
 import { clockDrift } from './clock.js'
+import { isPractising, visibleInMode } from './practice.js'
+
+/** Which collection a snapshot came from, for the practice split. */
+function collectionOf(ref) {
+  // `parent` on a document reference is its collection; on a collection
+  // reference it is the document above it, so the id is read off the ref itself.
+  return ref?.parent?.id ?? ref?.id ?? ''
+}
 
 /**
  * Subscribe to a Firestore query or document reference.
@@ -8,6 +16,11 @@ import { clockDrift } from './clock.js'
  * `build` returns the ref; `deps` control when it is rebuilt. Passing the ref
  * directly would resubscribe on every render, so it is built inside the effect.
  * Return null from `build` to stay idle (e.g. before a branch is known).
+ *
+ * Every read in the app comes through here, which is why the practice split
+ * lives here too rather than in each screen. A screen that forgot to filter
+ * would put invented money in a real total, and there are too many screens for
+ * "remember to filter" to be a plan. See src/lib/practice.js.
  */
 export function useSnapshot(build, deps) {
   const [state, setState] = useState({ loading: true, data: null, error: null, fromCache: false })
@@ -22,17 +35,26 @@ export function useSnapshot(build, deps) {
       ref,
       (snap) => {
         const fromCache = snap.metadata.fromCache
+        const practising = isPractising()
         if ('docs' in snap) {
           setState({
             loading: false,
-            data: snap.docs.map((d) => ({ id: d.id, ...d.data() })),
+            data: snap.docs
+              .map((d) => ({ id: d.id, ...d.data(), __in: collectionOf(d.ref) }))
+              .filter((r) => visibleInMode(r, r.__in, practising))
+              .map(({ __in, ...record }) => record),
             error: null,
             fromCache,
           })
         } else {
+          const record = snap.exists() ? { id: snap.id, ...snap.data() } : null
           setState({
             loading: false,
-            data: snap.exists() ? { id: snap.id, ...snap.data() } : null,
+            // A single document fetched by id gets the same treatment. Today's
+            // baking list is read this way, and a practice one reaching a live
+            // kitchen would have them baking against invented orders.
+            data:
+              record && visibleInMode(record, collectionOf(snap.ref), practising) ? record : null,
             error: null,
             fromCache,
           })

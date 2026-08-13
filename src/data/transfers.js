@@ -3,6 +3,7 @@ import { db } from '../firebase.js'
 import { fireAndForget } from './errors.js'
 import { transferDocId, transferRef } from '../lib/ids.js'
 import { HUB_BRANCH_ID } from '../config.js'
+import { practiceStamp } from '../lib/practice.js'
 
 // A delivery note. Created as a draft by the compile, pre-filled with what the
 // outlet asked for, so the hub only confirms or adjusts and the outlet only
@@ -94,6 +95,8 @@ export function receiveTransfer({ transfer, counted = {}, reasons = {}, user }) 
 export function sendReturn({ fromBranch, businessDate, items, user, toBranch = HUB_BRANCH_ID }) {
   const id = transferDocId(businessDate, fromBranch, 'R')
   const record = {
+    // Carries the mode it was made in. See src/lib/practice.js.
+    ...practiceStamp(),
     ref: transferRef(businessDate, fromBranch, 'R'),
     fromBranch,
     toBranchId: toBranch,

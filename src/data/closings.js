@@ -3,6 +3,7 @@ import { db } from '../firebase.js'
 import { fireAndForget } from './errors.js'
 import { closingDocId, closingRef } from '../lib/ids.js'
 import { previousDate } from '../lib/dates.js'
+import { practiceStamp } from '../lib/practice.js'
 
 // One definition of "is this day shut?", shared with the screens.
 export { isClosed, reopenCount } from '../lib/closing.js'
@@ -40,6 +41,8 @@ export function closeDay({
   noTrade = false,
 }) {
   const record = {
+    // Carries the mode it was made in. See src/lib/practice.js.
+    ...practiceStamp(),
     ref: closingRef(businessDate, branchId),
     branchId,
     businessDate,

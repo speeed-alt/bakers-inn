@@ -9,6 +9,8 @@ import { useTheme } from './lib/theme.js'
 import { installUpdate, useUpdateWaiting } from './lib/updates.js'
 import { Loading } from './components/ui.jsx'
 import { deviceLetter } from './lib/ids.js'
+import { goLive, isPractising } from './lib/practice.js'
+import { NotInPractice } from './components/PracticeCard.jsx'
 import Setup from './screens/Setup.jsx'
 import Login from './screens/Login.jsx'
 import Sell from './screens/Sell.jsx'
@@ -217,6 +219,11 @@ export default function App() {
     )
   }
 
+  // Read once per render rather than held in state: the mode only ever changes
+  // through a reload, so there is no moment where this and the data on screen
+  // could disagree. See src/lib/practice.js.
+  const practising = isPractising()
+
   const nav = NAV[profile.role] ?? []
   const home = HOME[profile.role] ?? '/sell'
 
@@ -235,6 +242,24 @@ export default function App() {
         <ThemeToggle />
         <button className="btn ghost small no-print" onClick={signOut}>Sign out</button>
       </header>
+
+      {/* Above every other banner, and above the stale sign-in, because it is
+          the only one that changes what the numbers on screen *mean*. A cashier
+          who does not notice this rings a real customer's bread into a practice
+          day and the takings are simply not there at close.
+
+          Ending practice is on the banner rather than behind the owner's login
+          on purpose: turning it on is a decision, turning it off is a safety
+          valve, and whoever is holding the tablet must always be able to hand
+          it back live without finding the owner first. */}
+      {practising && (
+        <div className="strip block no-print">
+          <span style={{ fontWeight: 600 }}>PRACTICE — nothing here is real.</span>{' '}
+          Sales, closes and orders made on this tablet are for training and will not appear
+          anywhere. It goes back to normal on its own tomorrow.{' '}
+          <button className="btn ghost small" onClick={goLive}>End practice</button>
+        </div>
+      )}
 
       {/* Ordered by how much it costs to miss, not by when each condition
           happened to be added: a stale sign-in means nothing typed below this
@@ -329,7 +354,7 @@ export default function App() {
             path="/materials"
             element={
               <Only path="/materials" role={profile.role}>
-                <Materials />
+                {practising ? <NotInPractice what="Raw materials" /> : <Materials />}
               </Only>
             }
           />
@@ -345,7 +370,7 @@ export default function App() {
             path="/money"
             element={
               <Only path="/money" role={profile.role}>
-                <MoneyScreen />
+                {practising ? <NotInPractice what="The money screen" /> : <MoneyScreen />}
               </Only>
             }
           />

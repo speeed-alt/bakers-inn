@@ -1,4 +1,26 @@
 import { compactDate, shortDate } from './dates.js'
+import { isPractising } from './practice.js'
+
+/**
+ * Practice records get their own ids, and this is not cosmetic.
+ *
+ * Most ids in this file are natural keys — one close per outlet per day, one
+ * baking list per day — which is what makes a re-run land on the same document
+ * instead of duplicating it. It also means a practice close and the real close
+ * for the same shop on the same day are the *same document id*. Without a
+ * suffix, teaching a cashier to close the day would overwrite the shop's real
+ * close with a practice one, and the practice stamp on it would then hide the
+ * result from every live screen. The day's takings would simply be gone.
+ *
+ * Every builder below defaults to asking whether this tablet is practising, so
+ * no caller has to remember. The scripts pass their own flag, because they run
+ * in Node where there is no tablet to ask.
+ */
+const PRACTICE_SUFFIX = '-P'
+
+function forMode(id, practising) {
+  return practising ? `${id}${PRACTICE_SUFFIX}` : id
+}
 
 // Human-readable ids with no global counter — global counters and offline
 // devices do not mix. Ids are either natural keys (one per outlet per day) or
@@ -108,8 +130,8 @@ export function saleDocId(
   return `S-${compactDate(businessDate)}-${branchId}-${letter}${String(seq).padStart(3, '0')}${tail}`
 }
 
-export function closingDocId(businessDate, branchId) {
-  return `C-${compactDate(businessDate)}-${branchId}`
+export function closingDocId(businessDate, branchId, practising = isPractising()) {
+  return forMode(`C-${compactDate(businessDate)}-${branchId}`, practising)
 }
 
 export function closingRef(businessDate, branchId) {
@@ -123,16 +145,16 @@ export function closingRef(businessDate, branchId) {
 // outlet alone. No coordination, no counter to clash over, and re-running the
 // compile lands on the same documents instead of duplicating them.
 
-export function demandDocId(businessDate, branchId) {
-  return `D-${compactDate(businessDate)}-${branchId}`
+export function demandDocId(businessDate, branchId, practising = isPractising()) {
+  return forMode(`D-${compactDate(businessDate)}-${branchId}`, practising)
 }
 
 export function demandRef(businessDate, branchId) {
   return `D-${shortDate(businessDate)}-${branchId}`
 }
 
-export function productionDocId(businessDate) {
-  return `PO-${compactDate(businessDate)}`
+export function productionDocId(businessDate, practising = isPractising()) {
+  return forMode(`PO-${compactDate(businessDate)}`, practising)
 }
 
 export function productionRef(businessDate) {
@@ -144,9 +166,9 @@ export function productionRef(businessDate) {
  * top-up run, or goods going back to the hub — so they carry a suffix.
  * `seq` 1 is the day's main delivery; 'R' marks a return to the hub.
  */
-export function transferDocId(businessDate, branchId, seq = 1) {
+export function transferDocId(businessDate, branchId, seq = 1, practising = isPractising()) {
   const suffix = seq === 1 ? '' : `-${seq}`
-  return `T-${compactDate(businessDate)}-${branchId}${suffix}`
+  return forMode(`T-${compactDate(businessDate)}-${branchId}${suffix}`, practising)
 }
 
 /**
@@ -154,12 +176,12 @@ export function transferDocId(businessDate, branchId, seq = 1) {
  * morning's rates are a single fact, so setting them twice lands on the same
  * document instead of leaving two disagreeing answers.
  */
-export function rateDocId(businessDate) {
-  return `RATE-${compactDate(businessDate)}`
+export function rateDocId(businessDate, practising = isPractising()) {
+  return forMode(`RATE-${compactDate(businessDate)}`, practising)
 }
 
-export function reportDocId(businessDate, branchId) {
-  return `R-${compactDate(businessDate)}-${branchId}`
+export function reportDocId(businessDate, branchId, practising = isPractising()) {
+  return forMode(`R-${compactDate(businessDate)}-${branchId}`, practising)
 }
 
 export function reportRef(businessDate, branchId) {
