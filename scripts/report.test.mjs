@@ -4,9 +4,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { expectedCash, overShort, summariseDay } from '../src/lib/report.js'
 import { formatMoney, parseMoney, basketTotal } from '../src/lib/money.js'
-import { itemCount, itemHeader, itemLines, receiptText, row, wrap } from '../src/lib/receipt.js'
-import { RECEIPT_WIDTH } from '../src/config.js'
-import { fontSizeFor } from '../src/lib/paper.js'
+import { itemCount, itemRow, receiptModel } from '../src/lib/receipt.js'
 
 const sale = (over) => ({
   status: 'normal',
@@ -76,59 +74,46 @@ test('typed amounts parse, including ones with separators', () => {
 
 // Till entry-box matching is covered in search.test.mjs.
 
-test('a short name keeps its figures on the same line, in their columns', () => {
-  const line = itemLines({ name: 'Bread Small', price: 120, qty: 30 })
-  assert.equal(line.length, 1)
-  assert.match(line[0], /^Bread Small/)
-  // Rate, quantity, then amount — the order the printed bills here use.
-  assert.match(line[0], /120\s+30\s+3,600$/)
-  assert.equal(line[0].length, RECEIPT_WIDTH)
+test('a line carries its rate, its quantity and what that came to', () => {
+  const row = itemRow({ name: 'Bread Small', price: 120, qty: 30 })
+  assert.equal(row.name, 'Bread Small')
+  assert.equal(row.rate, '120')
+  assert.equal(row.qty, '30')
+  assert.equal(row.amount, '3,600')
 })
 
-test('a name too wide for its column wraps instead of truncating', () => {
+test('a long name is kept whole — the table wraps it, nothing truncates it', () => {
+  // "Birthday Cake (1 l" on a customer's receipt reads as a fault in the till
+  // rather than as a long name, so the name is never shortened here. Fitting
+  // it is the table's job now, not this function's.
   const name = 'Chocolate Fudge Celebration Cake Extra Large'
-  const lines = itemLines({ name, price: 4500, qty: 2 })
-  assert.ok(lines.length > 1, 'should spill onto more than one line')
-  // Every word survives somewhere, and nothing overflows the roll.
-  const joined = lines.join(' ')
-  for (const word of name.split(' ')) assert.ok(joined.includes(word), `lost "${word}"`)
-  for (const l of lines) assert.ok(l.length <= RECEIPT_WIDTH, `too wide: "${l}"`)
-  // The figures still land in their columns underneath.
-  assert.match(lines.at(-1), /4,500\s+2\s+9,000$/)
+  const row = itemRow({ name, price: 4500, qty: 2 })
+  assert.equal(row.name, name)
+  assert.equal(row.amount, '9,000')
 })
 
-test('a weighed line shows its rate, its weight, and what that came to', () => {
-  const line = itemLines({
-    name: 'Biscuits',
-    price: 1400,
-    qty: 4.5,
-    soldByWeight: true,
-    unit: 'kg',
-  })
-  assert.equal(line.length, 1)
-  assert.match(line[0], /^Biscuits \(kg\)/)
-  assert.match(line[0], /1,400\s+4\.5\s+6,300$/)
-  assert.equal(line[0].length, RECEIPT_WIDTH)
+test('a weighed line names its unit and keeps the quantity a bare number', () => {
+  // The unit rides on the name because every printed bill here has a column of
+  // bare numbers under Qty, and "4.5 kg" in it breaks that scan.
+  const row = itemRow({ name: 'Biscuits', price: 1400, qty: 4.5, soldByWeight: true, unit: 'kg' })
+  assert.equal(row.name, 'Biscuits (kg)')
+  assert.equal(row.rate, '1,400')
+  assert.equal(row.qty, '4.5')
+  assert.equal(row.amount, '6,300')
 })
 
-test('a heavy weighed line still fits the roll', () => {
-  // "12.5 kg" in the quantity column was what pushed a line past the edge.
-  const lines = itemLines({
-    name: 'Biscuits',
-    price: 1400,
-    qty: 12.5,
-    soldByWeight: true,
-    unit: 'kg',
-  })
-  for (const l of lines) assert.ok(l.length <= RECEIPT_WIDTH, `too wide: "${l}"`)
-  assert.match(lines.at(-1), /17,500$/)
+test('a weighed quantity does not trail meaningless zeros', () => {
+  const whole = itemRow({ name: 'Biscuits', price: 1400, qty: 12.5, soldByWeight: true, unit: 'kg' })
+  assert.equal(whole.qty, '12.5')
+  assert.equal(whole.amount, '17,500')
 })
 
-test('the header names the columns the figures land in', () => {
-  const header = itemHeader()
-  assert.equal(header.length, RECEIPT_WIDTH)
-  assert.match(header, /^Item/)
-  assert.match(header, /Rate\s+Qty\s+Amount$/)
+test('two lines of the same thing get different keys', () => {
+  // Two one-offs can share a name and a price, and two variants of a merged
+  // product share an id. Position is what keeps them apart.
+  const a = itemRow({ productId: 'custom:coke', name: 'Coke', price: 80, qty: 1 }, 0)
+  const b = itemRow({ productId: 'custom:coke', name: 'Coke', price: 80, qty: 1 }, 1)
+  assert.notEqual(a.key, b.key)
 })
 
 test('items counts what was bought, not how many lines it took', () => {
@@ -142,19 +127,8 @@ test('a weighed line counts as one thing, not as its weight', () => {
   assert.equal(itemCount(items), 64)
 })
 
-test('wrapping breaks a single unbroken word rather than overflowing', () => {
-  const lines = wrap('A'.repeat(70), RECEIPT_WIDTH)
-  assert.ok(lines.every((l) => l.length <= RECEIPT_WIDTH))
-  assert.equal(lines.join('').length, 70)
-})
-
-test('amounts sit flush to the right edge of the roll', () => {
-  assert.equal(row('TOTAL', 'Rs 3,030').length, RECEIPT_WIDTH)
-  assert.ok(row('TOTAL', 'Rs 3,030').endsWith('Rs 3,030'))
-})
-
-test('a full receipt fits the roll and shows the money', () => {
-  const text = receiptText(
+test('the slip carries everything a customer would check', () => {
+  const r = receiptModel(
     {
       ref: 'S-MAIN-0728-A001',
       branchId: 'MAIN',
@@ -162,6 +136,7 @@ test('a full receipt fits the roll and shows the money', () => {
       status: 'normal',
       payment: 'cash',
       cashierName: 'Ayesha',
+      device: 'A',
       total: 3030,
       cashGiven: 5000,
       changeGiven: 1970,
@@ -170,36 +145,63 @@ test('a full receipt fits the roll and shows the money', () => {
         { name: 'Vegetable Samosa', price: 70, qty: 1 },
       ],
     },
-    'Main Outlet',
+    'Susan Road',
   )
-  for (const l of text.split('\n')) assert.ok(l.length <= RECEIPT_WIDTH, `too wide: "${l}"`)
-  assert.match(text, /TOTAL\s+Rs 3,030/)
-  assert.match(text, /Change\s+1,970/)
-  assert.match(text, /Cashier: Ayesha/)
-  assert.match(text, /Items: 2/)
+
+  assert.equal(r.outlet, 'Susan Road')
+  assert.equal(r.cashier, 'Ayesha')
+  assert.equal(r.till, 'A')
+  assert.equal(r.itemCount, 2)
+  assert.equal(r.rows.length, 2)
+  assert.equal(r.total, 'Rs 3,030')
+  assert.equal(r.cashGiven, 'Rs 5,000')
+  assert.equal(r.changeGiven, 'Rs 1,970')
+  assert.equal(r.isRefund, false)
   // The figure spelled out, which is what stops a pen changing it.
-  // Wrapped across lines on a narrow roll, so match across the break.
-  assert.match(text, /RUPEES\s+THREE\s+THOUSAND\s+THIRTY\s+ONLY/)
+  assert.match(r.words, /THREE THOUSAND THIRTY/i)
 })
 
-test('type size makes the slip span the paper, whatever the paper is', () => {
-  // A slip that lands as a small block in the corner is what forces people to
-  // wind the scale up in the print dialog.
-  const roll = fontSizeFor(74)
-  const a5 = fontSizeFor(132)
-  const a4 = fontSizeFor(186)
+test('a card sale prints how it was paid and no cash lines', () => {
+  // Nothing to imply the payment type, so it has to be said outright.
+  const r = receiptModel(
+    { businessDate: '2026-07-28', status: 'normal', payment: 'card', total: 800, items: [] },
+    'Gulberg',
+  )
+  assert.equal(r.payment, 'card')
+  assert.equal(r.cashGiven, null)
+  assert.equal(r.changeGiven, null)
+})
 
-  // Sanity: bigger paper needs bigger type to fill the same 32 characters.
-  assert.ok(roll < a5 && a5 < a4)
-  // A thermal roll wants ordinary receipt-sized type.
-  assert.ok(roll > 8 && roll < 14, `80mm roll got ${roll}pt`)
-  // A5 lands near the doubling the owner had to dial in by hand.
-  assert.ok(a5 / roll > 1.6 && a5 / roll < 2.1, `A5 is ${(a5 / roll).toFixed(2)}x the roll`)
+test('a cash sale does not repeat the payment type it already shows', () => {
+  const r = receiptModel(
+    {
+      businessDate: '2026-07-28',
+      status: 'normal',
+      payment: 'cash',
+      total: 800,
+      cashGiven: 1000,
+      changeGiven: 200,
+      items: [],
+    },
+    'Gulberg',
+  )
+  assert.equal(r.payment, null, 'the cash and change lines already say it')
+})
 
-  // The characters really do span the paper, give or take a millimetre.
-  const spanMm = (pt) => RECEIPT_WIDTH * 0.6 * pt * (25.4 / 72)
-  assert.ok(Math.abs(spanMm(a5) - 132) < 1)
-  assert.ok(Math.abs(spanMm(roll) - 74) < 1)
+test('a refund says so, because a refund slip that reads like a bill gets paid twice', () => {
+  const r = receiptModel(
+    { businessDate: '2026-07-28', status: 'refund', payment: 'cash', total: -500, items: [] },
+    'Gulberg',
+  )
+  assert.equal(r.isRefund, true)
+  assert.equal(r.payment, null)
+})
+
+test('the shop can be reached about a wrong order', () => {
+  // A bill with no address and no phone is one a customer cannot come back to.
+  const r = receiptModel({ businessDate: '2026-07-28', total: 0, items: [] }, 'Susan Road')
+  assert.ok(r.business.length > 0)
+  assert.ok(r.address.length > 0, 'set BUSINESS_ADDRESS in config.js')
 })
 
 test('a long basket stays exact', () => {

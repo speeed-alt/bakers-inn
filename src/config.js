@@ -1,10 +1,13 @@
 // Single place for the handful of business constants.
 
 // Printed at the top of every receipt.
+//
+// CONFIRM WITH THE OWNER before going live. Every bakery bill in Faisalabad
+// carries a shop address and a phone number — it is how a customer comes back
+// about a wrong order — and these are placeholders.
 export const BUSINESS_NAME = "The Baker's Inn"
-
-// Characters across the slip in the receipt's monospace font.
-export const RECEIPT_WIDTH = 32
+export const BUSINESS_ADDRESS = 'Susan Road, Faisalabad'
+export const BUSINESS_PHONE = ''
 
 // What receipts are printed on. This sets the page size, margins and type size
 // together so the slip comes out right at 100% — nobody should have to touch

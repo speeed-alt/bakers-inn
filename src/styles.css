@@ -450,10 +450,83 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .pindots i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border-strong); }
 .pindots i.on { background: var(--ink); border-color: var(--ink); }
 
+/* The printed slip.
+
+   Ruled boxes rather than rows of dashes. A dash rule prints on a thermal head
+   as a dotted grey line that reads like the printer is failing; a 1px table
+   border prints as a line. Everything is black-on-white and sized in ems from
+   one root size, so the same markup comes out right on an 80mm roll and on A5
+   — see src/lib/paper.js, which sets that one size per paper. */
 .receipt {
-  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
-  font-size: 12.5px; line-height: 1.5; white-space: pre-wrap;
-  background: var(--surface-2); padding: 16px; border-radius: var(--radius);
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #000;
+  background: #fff;
+  padding: 12px;
+  border-radius: var(--radius);
+  /* Figures line up under each other without a monospace face, which is what
+     lets the names be set in something readable. */
+  font-variant-numeric: tabular-nums;
+}
+
+.receipt-head { text-align: center; margin-bottom: 0.6em; }
+.receipt-business {
+  font-size: 1.5em; font-weight: 700; letter-spacing: 0.02em; line-height: 1.15;
+}
+.receipt-where { font-size: 0.92em; }
+
+.receipt-stamp {
+  text-align: center; font-weight: 700; letter-spacing: 0.08em;
+  border: 1px solid #000; padding: 0.15em 0; margin-bottom: 0.5em;
+}
+
+.receipt table {
+  width: 100%;
+  border-collapse: collapse;
+  /* Fixed, so a long product name cannot steal width from the figures and
+     push the amount column off the edge of the roll. */
+  table-layout: fixed;
+}
+
+.receipt th, .receipt td {
+  border: 1px solid #000;
+  padding: 0.2em 0.35em;
+  vertical-align: top;
+  text-align: left;
+  font-weight: 400;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.receipt .num { text-align: right; }
+
+.receipt-meta td { font-size: 0.92em; }
+
+.receipt-items { margin-top: -1px; }
+.receipt-items thead th { font-weight: 700; }
+/* Description takes what is left; the three figure columns are fixed because
+   they hold small numbers and must stay in the same place on every line. */
+.receipt-items th:nth-child(2), .receipt-items td:nth-child(2) { width: 20%; }
+.receipt-items th:nth-child(3), .receipt-items td:nth-child(3) { width: 16%; }
+.receipt-items th:nth-child(4), .receipt-items td:nth-child(4) { width: 26%; }
+.receipt-name { hyphens: auto; }
+
+.receipt-totals { margin-top: -1px; }
+.receipt-totals th { width: 30%; }
+.receipt-totals td.num { width: 34%; }
+.receipt-aside { width: 36%; }
+.receipt-items-count { font-weight: 700; }
+.receipt-thanks {
+  margin-top: 0.4em; font-size: 0.85em; font-weight: 700; line-height: 1.2;
+}
+.receipt-grand { font-weight: 700; font-size: 1.1em; }
+
+.receipt-words {
+  margin-top: 0.5em;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  line-height: 1.25;
 }
 
 /* Page size and print type size are written at start-up from RECEIPT_PAPER —
