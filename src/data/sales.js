@@ -63,6 +63,11 @@ export function recordSale({ branchId, cashier, lines, payment, cashGiven = null
       name: l.name,
       price: l.price,
       qty: l.qty,
+      // Typed in at the counter rather than picked off the list. Carried on the
+      // item so every screen downstream can tell money from stock without
+      // having to parse an id — see lib/custom.js.
+      ...(l.custom ? { custom: true } : {}),
+      ...(l.soldByWeight ? { soldByWeight: true, unit: l.unit } : {}),
     })),
     total,
     cashGiven,

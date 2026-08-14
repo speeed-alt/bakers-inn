@@ -1,8 +1,11 @@
+import { isCustomItem } from './custom.js'
+
 // Pure money maths, kept out of the UI so it can be tested on its own.
 // Rules that hold everywhere in the system:
 //   - a voided sale is excluded from every total, but stays on the report
 //   - a refund is a negative sale and reduces takings
 //   - "sold" quantities are always net of voids
+//   - a one-off counts as money and never as stock — see lib/custom.js
 
 export function isCounted(sale) {
   return sale.status !== 'voided'
@@ -18,6 +21,7 @@ export function summariseDay(sales) {
   let txCount = 0
   let refundCount = 0
   const byProduct = new Map()
+  const custom = new Map()
 
   for (const sale of counted) {
     salesTotal += sale.total
@@ -32,7 +36,18 @@ export function summariseDay(sales) {
     }
 
     for (const item of sale.items ?? []) {
-      const row = byProduct.get(item.productId) ?? {
+      // One-offs are kept in their own list, never in byProduct.
+      //
+      // Their money is already counted — it went into salesTotal above, which
+      // is what the drawer is checked against. What must not happen is a
+      // one-off reaching anything that reasons about stock: `buildDailyReport`
+      // builds its rows from these keys, and `suggest.soldOut` reads "sold
+      // some, none left, none binned" as a product that ran out. A bottle of
+      // Coke matches that every single time, because there is no shelf for it
+      // to be left on — so without this split, selling one would put Coke on
+      // tomorrow's baking list, with 10% added for having sold out.
+      const into = isCustomItem(item) ? custom : byProduct
+      const row = into.get(item.productId) ?? {
         productId: item.productId,
         name: item.name,
         qty: 0,
@@ -40,9 +55,11 @@ export function summariseDay(sales) {
       }
       row.qty += item.qty
       row.revenue += item.price * item.qty
-      byProduct.set(item.productId, row)
+      into.set(item.productId, row)
     }
   }
+
+  const bySold = (a, b) => b.qty - a.qty
 
   return {
     salesTotal,
@@ -52,7 +69,11 @@ export function summariseDay(sales) {
     txCount,
     refundCount,
     voidedCount: sales.length - counted.length,
-    byProduct: [...byProduct.values()].sort((a, b) => b.qty - a.qty),
+    byProduct: [...byProduct.values()].sort(bySold),
+    // What was sold that the bakery does not make. The owner's cue to add a
+    // product properly: a thing rung forty times a month is not a one-off.
+    customItems: [...custom.values()].sort(bySold),
+    customTotal: [...custom.values()].reduce((sum, r) => sum + r.revenue, 0),
   }
 }
 

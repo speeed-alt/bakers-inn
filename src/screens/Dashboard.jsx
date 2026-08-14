@@ -344,6 +344,8 @@ export default function Dashboard() {
         )}
       </div>
 
+      <OffCatalogue rows={overall.customItems} total={overall.customTotal} />
+
       {/* Last on the page on purpose. It is used the day somebody new starts
           and then not for months, and a switch that changes what every figure
           above it means should not sit where a thumb lands. */}
@@ -752,6 +754,68 @@ function Waste({ reports, loading }) {
           </p>
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * What was sold today that the bakery does not make.
+ *
+ * Cashiers can ring something that is not on the list — a bottle of Coke out of
+ * the fridge — by typing a name and a price. That money is in the takings and
+ * in the drawer, but it is deliberately kept out of the product figures, the
+ * stock report and the baking list, because none of those know anything about
+ * a Coke. Which means that without this card it would be spent, banked and
+ * completely invisible.
+ *
+ * Two things it answers. Should this be a real product? — anything appearing
+ * here week after week should be in the catalogue at a price the owner set,
+ * not typed fresh by whoever is on the till. And is the price right? — this is
+ * the only figure in the system nobody has checked, so it is worth a glance.
+ *
+ * Hidden entirely on a day with none, which is most days.
+ */
+function OffCatalogue({ rows = [], total = 0 }) {
+  if (rows.length === 0) return null
+
+  return (
+    <div className="card">
+      <h3>Sold off the list today</h3>
+      <p className="muted small">
+        Typed in at a till rather than picked from the catalogue. The money is in today's takings;
+        the kitchen is never asked to bake these.
+      </p>
+      <div className="scroll-x">
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th className="num">Qty</th>
+              <th className="num">Taken</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.productId}>
+                <td>{r.name}</td>
+                <td className="num">{r.qty}</td>
+                <td className="num"><Money minor={r.revenue} /></td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td><b>Total</b></td>
+              <td className="num">{rows.reduce((s, r) => s + r.qty, 0)}</td>
+              <td className="num"><b><Money minor={total} /></b></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p className="muted small" style={{ marginBottom: 0 }}>
+        Anything here most days belongs in the catalogue, with a price you set — add it under{' '}
+        <b>Catalogue</b> and the cashier picks it instead of typing it.
+      </p>
     </div>
   )
 }

@@ -71,8 +71,17 @@ Then the payment:
 - **Card** — just tap it.
 - **Print the receipt.**
 
+- **Something not on the list.** Type `coke`. Nothing matches — so tap **Sell
+  "coke" as a one-off**, type the price, add it to the bill. Next time the price
+  is already filled in.
+
 Have them ring twenty sales. Not five. Twenty is where it stops being a screen
 and starts being a reflex.
+
+> On one-offs, say this: *"If a customer buys something that is not on the till,
+> ring it as a one-off. Never take the money and leave it off the bill — the
+> drawer will be over at close and nobody will know why."* That is the whole
+> reason the button exists.
 
 ### 3 · The two corrections (10 min)
 

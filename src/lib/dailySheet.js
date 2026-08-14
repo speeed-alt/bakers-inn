@@ -125,6 +125,7 @@ export function dailySheet({
   const outlets = branches.map((branch) => {
     const distributed = distributedTo({ branch, production, transfers, prices })
     const mine = sales.filter((s) => s.branchId === branch.id)
+    const day = summariseDay(mine)
     const closing = closings.find(
       (c) => c.branchId === branch.id && c.businessDate === businessDate,
     )
@@ -135,7 +136,12 @@ export function dailySheet({
       isMain: Boolean(branch.isMain),
       distributedQty: distributed.qty,
       distributed: distributed.value,
-      sold: summariseDay(mine).salesTotal,
+      sold: day.salesTotal,
+      // Money taken for things the bakery never sent out — a bottle of Coke
+      // out of the fridge. Part of the sale position, because it is part of
+      // what the shop took, but it cannot be set against what was distributed:
+      // nothing was distributed for it. Kept apart so `unsold` stays honest.
+      soldOffList: day.customTotal,
       // A day that has been reopened is not shut, so its waste is not final.
       stale: closing && closing.status !== 'reopened' ? (closing.wasteValue ?? 0) : null,
       closed: Boolean(closing) && closing.status !== 'reopened',
@@ -144,6 +150,7 @@ export function dailySheet({
 
   const distributed = outlets.reduce((sum, o) => sum + o.distributed, 0)
   const totalSale = outlets.reduce((sum, o) => sum + o.sold, 0)
+  const soldOffList = outlets.reduce((sum, o) => sum + o.soldOffList, 0)
   const counted = outlets.filter((o) => o.closed)
   const totalStale = counted.length === 0 ? null : counted.reduce((sum, o) => sum + o.stale, 0)
 
@@ -153,6 +160,7 @@ export function dailySheet({
     outlets,
     distributed,
     totalSale,
+    soldOffList,
     totalStale,
     outletsClosed: counted.length,
     // The line his sheet has no column for.
@@ -162,6 +170,12 @@ export function dailySheet({
     // back at the hub. The system knows which, product by product, and the
     // whole reason to keep this figure is that a total which does not add up is
     // the fastest way to lose somebody's trust in a screen.
-    unsold: distributed - totalSale,
+    //
+    // Measured against what was sold *off the baking list only*. A bottle of
+    // Coke was never distributed, so counting its takings here would report
+    // that much less bread left on the shelf than there really is — and on a
+    // quiet morning with a full fridge it would go negative, which is not a
+    // quantity of anything.
+    unsold: distributed - (totalSale - soldOffList),
   }
 }

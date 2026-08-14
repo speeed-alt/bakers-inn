@@ -99,6 +99,33 @@ test('the 15,000 his sheet has no column for is named, not swallowed', () => {
   assert.equal(sheet.unsold - sheet.totalStale, 15000)
 })
 
+test('a bottle of Coke is takings, but is not bread off the shelf', () => {
+  // The sale position has to include it — the money is in the drawer. What it
+  // must not do is come off the unsold figure, because nothing was ever
+  // distributed for it. Counting it there would report 5,000 less bread on the
+  // shelf than is really there, and on a quiet morning it would go negative.
+  const withCoke = build({
+    sales: [
+      ...SALES,
+      {
+        branchId: 'B2',
+        businessDate: DATE,
+        status: 'normal',
+        payment: 'cash',
+        total: 5000,
+        items: [
+          { productId: 'custom:coke', custom: true, name: 'Coke', price: 100, qty: 50 },
+        ],
+      },
+    ],
+  })
+
+  assert.equal(at(withCoke, 'B2').sold, 55000, 'the shop took it, so it is in the sale position')
+  assert.equal(withCoke.totalSale, 185000)
+  assert.equal(withCoke.soldOffList, 5000)
+  assert.equal(withCoke.unsold, 20000, 'unchanged — the same bread is still on the shelf')
+})
+
 // --- stale is counted, never assumed ---------------------------------------
 
 test('before anyone closes, stale is not known rather than zero', () => {

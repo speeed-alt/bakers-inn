@@ -103,6 +103,19 @@ The main screen for a cashier, and the most-used screen in the business.
   in words as well as figures — a figure can be altered with a pen, a line of
   words cannot.
 
+**Something not on the list.** The shop sells a few things it does not bake — a
+bottle of Coke out of the fridge, a packet of crisps. Type the name, and when
+nothing matches, tap **Sell "coke" as a one-off**, give it a price, and it goes
+on the bill like anything else.
+
+- It counts in the takings, the cash and card split, the receipt and the drawer.
+- It is **not** added to the catalogue, and the kitchen is never asked to bake
+  it. It stays out of the stock report, the shelf count and tomorrow's order.
+- The price this tablet last charged for that name is filled in for you.
+- Everything sold this way shows on the owner's dashboard under **Sold off the
+  list today**. Anything appearing there most days should become a real product
+  with a price the owner sets, rather than being typed fresh each time.
+
 Corrections, both same-day and both stamped:
 
 - **Fix** changes a sale rung as cash to card, or the other way round.

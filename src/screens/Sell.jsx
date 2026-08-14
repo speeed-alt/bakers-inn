@@ -20,6 +20,7 @@ import {
   stepFor,
   unitOf,
 } from '../lib/quantity.js'
+import { customLine, lastCustomPrice, rememberCustomPrice, validCustom } from '../lib/custom.js'
 import { Empty, Loading, Modal, Money, Stepper } from '../components/ui.jsx'
 import { QUICK_CASH_STEPS, VOID_REASONS } from '../config.js'
 import Receipt from '../components/Receipt.jsx'
@@ -57,6 +58,9 @@ export default function Sell({ branchId, branchName }) {
   const [receipt, setReceipt] = useState(null)
   const [voidTarget, setVoidTarget] = useState(null)
   const [notFound, setNotFound] = useState('')
+  // The name typed into the entry box when the cashier asked to sell it as a
+  // one-off. Null when the dialogue is closed.
+  const [customFor, setCustomFor] = useState(null)
   const [picking, setPicking] = useState(null)
   const entry = useRef(null)
 
@@ -150,6 +154,23 @@ export default function Sell({ branchId, branchName }) {
     const pick = exactCodeMatch(catalogue, text) ?? results[0]
     if (pick) addProduct(pick)
     else setNotFound(`No item matches "${text.trim()}"`)
+  }
+
+  /**
+   * Put a typed-in item on the bill.
+   *
+   * Always its own line, never merged into an existing one even for the same
+   * name: two Cokes at different prices is a real thing that happens when the
+   * second one is the big bottle, and silently folding them together would
+   * make the slip disagree with what the customer was told.
+   */
+  function addCustom({ name, price, qty }) {
+    rememberCustomPrice(name, price)
+    setLines((cur) => [...cur, customLine({ name, price, qty })])
+    setCustomFor(null)
+    setText('')
+    setNotFound('')
+    entry.current?.focus()
   }
 
   function takePayment(payment, cashGiven = null) {
@@ -257,8 +278,24 @@ export default function Sell({ branchId, branchName }) {
         />
         {/* Plain text, not --alert: a mistyped code is not the money-does-not-
             add-up condition that colour is reserved for, and using it here
-            would dilute the one signal the design relies on for that. */}
-        {notFound && <p className="small" style={{ margin: '8px 2px 0' }}>{notFound}</p>}
+            would dilute the one signal the design relies on for that.
+
+            The way out sits directly under the dead end. A customer holding a
+            bottle of Coke is standing at the counter while this is on screen,
+            and the alternative to a button here is the cashier taking the money
+            out of the till by hand and the drawer being over at close. */}
+        {notFound && (
+          <div style={{ margin: '8px 2px 0' }}>
+            <p className="small" style={{ margin: 0 }}>{notFound}</p>
+            <button
+              className="btn ghost small"
+              style={{ marginTop: 6 }}
+              onClick={() => setCustomFor(text.trim())}
+            >
+              Sell "{text.trim()}" as a one-off
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="till-body">
@@ -327,6 +364,17 @@ export default function Sell({ branchId, branchName }) {
         </div>
       </div>
 
+      {customFor !== null && (
+        <CustomModal
+          initialName={customFor}
+          onAdd={addCustom}
+          onClose={() => {
+            setCustomFor(null)
+            entry.current?.focus()
+          }}
+        />
+      )}
+
       {picking && (
         <Modal title={picking.name} onClose={() => setPicking(null)}>
           <p className="muted small">
@@ -393,6 +441,93 @@ export default function Sell({ branchId, branchName }) {
   )
 }
 
+/**
+ * Selling something that is not in the catalogue.
+ *
+ * The shop sells a few things it does not bake — a bottle of Coke out of the
+ * fridge, a packet of crisps. Before this the cashier had no way to ring one,
+ * so the money went into the drawer without a line against it and the till read
+ * over at close, every time, with nothing to explain it.
+ *
+ * The price is the whole reason this is a dialogue rather than one tap: it is
+ * the only figure in the app that nobody has checked, so it gets its own field,
+ * its own keyboard, and the last price this tablet charged already filled in.
+ */
+function CustomModal({ initialName, onAdd, onClose }) {
+  const [name, setName] = useState(initialName ?? '')
+  const remembered = lastCustomPrice(initialName ?? '')
+  const [price, setPrice] = useState(
+    remembered != null ? formatMoney(remembered, { symbol: false }) : '',
+  )
+  const [qty, setQty] = useState(1)
+
+  const minor = parseMoney(price)
+  const ok = validCustom({ name, price: minor }) && qty > 0
+  const total = ok ? minor * qty : 0
+
+  return (
+    <Modal title="Something not on the list" onClose={onClose}>
+      <div className="field">
+        <label>What is it? — this is what the receipt will say</label>
+        <input
+          type="text"
+          value={name}
+          autoFocus={!initialName}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Coke"
+        />
+      </div>
+
+      <div className="field">
+        <label>Price for one</label>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={price}
+          autoFocus={Boolean(initialName)}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder="e.g. 80"
+        />
+        {remembered != null && (
+          <p className="muted small" style={{ marginBottom: 0 }}>
+            Last time this tablet sold {initialName} it was{' '}
+            {formatMoney(remembered)}. Change it if that is wrong.
+          </p>
+        )}
+      </div>
+
+      <div className="field">
+        <label>How many</label>
+        <Stepper value={qty} onChange={setQty} min={1} />
+      </div>
+
+      {ok && qty > 1 && (
+        <p className="small" style={{ marginTop: 0 }}>
+          {qty} × {formatMoney(minor)} = <b>{formatMoney(total)}</b>
+        </p>
+      )}
+
+      <p className="muted small">
+        It goes on the bill and in today's takings like anything else. It is not
+        added to the catalogue and the kitchen is never asked to bake it — if you
+        find yourself typing the same thing every day, ask the owner to add it
+        properly.
+      </p>
+
+      <div className="grid2">
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button
+          className="btn primary"
+          disabled={!ok}
+          onClick={() => onAdd({ name: name.trim(), price: minor, qty })}
+        >
+          Add to bill
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 function Bill({ lines, onQty }) {
   return (
     <div className="bill">
@@ -404,13 +539,17 @@ function Bill({ lines, onQty }) {
       </div>
       {lines.length === 0 && <Empty>Type a code or name above to start the bill</Empty>}
       {lines.map((l, index) => (
-        <div className="bill-row" key={`${l.productId}::${l.name}`}>
-          <span className="bill-code">{l.code}</span>
+        // Position is part of the key. Two one-offs typed with the same name
+        // are deliberately separate lines — the second Coke may be the big
+        // bottle at a different price — so id-and-name alone is not unique.
+        <div className="bill-row" key={`${l.productId}::${l.name}::${index}`}>
+          <span className="bill-code">{l.code || (l.custom ? '—' : '')}</span>
           <span>
             <span className="bill-name">{l.name}</span>
             <span className="muted small">
               {' · '}
               {formatMoney(l.price, { symbol: false })} {l.soldByWeight ? `per ${l.unit}` : 'each'}
+              {l.custom && ' · one-off'}
             </span>
           </span>
           {/* The line carries its own kind, so the stepper takes a quarter kilo
