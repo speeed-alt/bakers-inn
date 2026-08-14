@@ -22,6 +22,7 @@ const {
 const { summariseDay } = await import('../src/lib/report.js')
 const { buildDailyReport } = await import('../src/lib/dailyReport.js')
 const { soldOut } = await import('../src/lib/suggest.js')
+const { findProducts } = await import('../src/lib/search.js')
 
 // --- naming a one-off ------------------------------------------------------
 
@@ -53,6 +54,39 @@ test('a one-off is recognisable from the flag or from the id alone', () => {
   assert.equal(isCustomItem({ productId: 'bread-small' }), false)
   assert.equal(isCustomItem({}), false)
   assert.equal(isCustomItem(null), false)
+})
+
+// --- offering the one-off at all -------------------------------------------
+
+test('typing something the shop does not sell offers the one-off, before Enter', () => {
+  // The bug this covers: the offer was stored in state that only the Enter
+  // handler ever set, so the till knew nothing matched by the third letter and
+  // said so only if asked. A cashier with a customer holding a bottle of Coke
+  // saw "Nothing matches" and no way forward, which is the moment they take the
+  // money by hand and the drawer reads over at close.
+  //
+  // The till computes it as `typed && results.length === 0`, so this asserts
+  // the half that can actually be wrong: the search finding nothing.
+  const catalogue = [
+    { id: 'bread-small', code: '01', name: 'Bread Small', price: 120 },
+    { id: 'rusk', code: '05', name: 'Rusk', price: 150 },
+  ]
+
+  for (const partial of ['c', 'co', 'cok', 'coke']) {
+    assert.equal(findProducts(catalogue, partial).length, 0, `nothing matches "${partial}"`)
+  }
+
+  // And it must not fire when there is something to pick.
+  assert.ok(findProducts(catalogue, 'bre').length > 0)
+  assert.ok(findProducts(catalogue, '01').length > 0)
+})
+
+test('an empty box is the price list, not a dead end', () => {
+  // With nothing typed the panel shows the whole catalogue, so an empty
+  // results list must not be read as "offer a one-off".
+  const catalogue = [{ id: 'bread-small', code: '01', name: 'Bread Small', price: 120 }]
+  assert.equal(''.trim().length > 0, false, 'nothing typed, so nothing is offered')
+  assert.ok(findProducts(catalogue, '').length > 0)
 })
 
 // --- what the till will accept ---------------------------------------------

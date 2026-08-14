@@ -57,7 +57,6 @@ export default function Sell({ branchId, branchName }) {
   const [paying, setPaying] = useState(false)
   const [receipt, setReceipt] = useState(null)
   const [voidTarget, setVoidTarget] = useState(null)
-  const [notFound, setNotFound] = useState('')
   // The name typed into the entry box when the cashier asked to sell it as a
   // one-off. Null when the dialogue is closed.
   const [customFor, setCustomFor] = useState(null)
@@ -74,6 +73,12 @@ export default function Sell({ branchId, branchName }) {
   // An empty box lists the whole catalogue, so the same panel is both the
   // search result and the price list a new cashier reads codes off.
   const results = useMemo(() => findProducts(catalogue, text), [catalogue, text])
+
+  // Derived, not stored. This used to be a piece of state set only inside the
+  // Enter handler, which meant the till knew nothing matched the moment the
+  // third letter was typed and said so only if you asked it.
+  const typed = text.trim()
+  const noMatch = typed.length > 0 && results.length === 0
   const total = basketTotal(lines)
 
   // Yesterday had takings but was never closed: that has to be fixed before a
@@ -126,7 +131,6 @@ export default function Sell({ branchId, branchName }) {
       return next
     })
     setText('')
-    setNotFound('')
     entry.current?.focus()
   }
 
@@ -144,16 +148,22 @@ export default function Sell({ branchId, branchName }) {
   function onEntryKey(e) {
     if (e.key === 'Escape') {
       setText('')
-      setNotFound('')
       return
     }
     if (e.key !== 'Enter') return
     e.preventDefault()
-    if (!text.trim()) return
+    if (!typed) return
     // A typed code wins outright, even if some product name contains the digits.
     const pick = exactCodeMatch(catalogue, text) ?? results[0]
-    if (pick) addProduct(pick)
-    else setNotFound(`No item matches "${text.trim()}"`)
+    if (pick) {
+      addProduct(pick)
+      return
+    }
+    // Enter on something that matches nothing means "I meant that". Nothing is
+    // committed by opening the dialogue: a mistyped code lands there with a
+    // number for a name and an empty price, which reads wrong at a glance and
+    // still needs a price typed and a deliberate tap before it reaches a bill.
+    setCustomFor(typed)
   }
 
   /**
@@ -169,7 +179,6 @@ export default function Sell({ branchId, branchName }) {
     setLines((cur) => [...cur, customLine({ name, price, qty })])
     setCustomFor(null)
     setText('')
-    setNotFound('')
     entry.current?.focus()
   }
 
@@ -270,32 +279,14 @@ export default function Sell({ branchId, branchName }) {
           value={text}
           onChange={(e) => {
             setText(e.target.value)
-            setNotFound('')
           }}
           onKeyDown={onEntryKey}
           placeholder="Type item code or name, then press Enter"
           aria-label="Add an item by code or name"
         />
-        {/* Plain text, not --alert: a mistyped code is not the money-does-not-
-            add-up condition that colour is reserved for, and using it here
-            would dilute the one signal the design relies on for that.
-
-            The way out sits directly under the dead end. A customer holding a
-            bottle of Coke is standing at the counter while this is on screen,
-            and the alternative to a button here is the cashier taking the money
-            out of the till by hand and the drawer being over at close. */}
-        {notFound && (
-          <div style={{ margin: '8px 2px 0' }}>
-            <p className="small" style={{ margin: 0 }}>{notFound}</p>
-            <button
-              className="btn ghost small"
-              style={{ marginTop: 6 }}
-              onClick={() => setCustomFor(text.trim())}
-            >
-              Sell "{text.trim()}" as a one-off
-            </button>
-          </div>
-        )}
+        {/* No "not found" message here any more. The results panel already
+            says so the moment it is true, and repeating it under the box meant
+            the same fact appeared twice, a keypress apart, in two wordings. */}
       </div>
 
       <div className="till-body">
@@ -312,9 +303,24 @@ export default function Sell({ branchId, branchName }) {
             {text.trim() ? `Matches for "${text.trim()}"` : 'All items — tap to add'}
           </div>
           <div className="till-results">
-            {results.length === 0 && (
-              <Empty>{text.trim() ? 'Nothing matches' : 'No products yet'}</Empty>
+            {/* The way out belongs here, next to the dead end, and it has to
+                appear while the cashier is still typing. It used to be hidden
+                behind pressing Enter first — so someone holding a bottle of
+                Coke saw "Nothing matches" and nothing else, which is exactly
+                the moment they give up and take the money by hand. */}
+            {noMatch && (
+              <div style={{ padding: '4px 2px' }}>
+                <Empty>Nothing matches "{typed}"</Empty>
+                <button className="btn block" onClick={() => setCustomFor(typed)}>
+                  Sell "{typed}" as a one-off
+                </button>
+                <p className="muted small" style={{ marginTop: 8, marginBottom: 0 }}>
+                  For something the bakery does not make — a Coke out of the fridge, a packet of
+                  crisps. You give it a price. Pressing Enter does the same thing.
+                </p>
+              </div>
             )}
+            {results.length === 0 && !typed && <Empty>No products yet</Empty>}
             {results.map((p, i) => (
               <button
                 key={p.id}
