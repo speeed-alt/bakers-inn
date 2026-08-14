@@ -8,6 +8,7 @@ import { byProduct, stockReport, stockTotals } from '../lib/stock.js'
 import { productionDoc } from '../data/production.js'
 import { printSheet } from '../lib/paper.js'
 import { Empty, Loading, Modal, Money } from '../components/ui.jsx'
+import { BUSINESS_NAME } from '../config.js'
 
 /**
  * What is on the shelf right now, at all three outlets.
@@ -249,7 +250,7 @@ function StockSheet({ report, rows }) {
       <div className="sheet-head">
         <h1>Stock on hand</h1>
         <p>
-          The Baker's Inn · {formatDate(report.businessDate)} · {report.onShelf} items,{' '}
+          {BUSINESS_NAME} · {formatDate(report.businessDate)} · {report.onShelf} items,{' '}
           {formatMoney(report.value)}
         </p>
       </div>

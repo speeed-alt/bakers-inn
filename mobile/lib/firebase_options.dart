@@ -18,7 +18,7 @@ class DefaultFirebaseOptions {
         return android;
       default:
         throw UnsupportedError(
-          'The Baker\'s Inn is built for Android tablets and the web. '
+          'Baker\'s Inn is built for Android tablets and the web. '
           '$defaultTargetPlatform has no Firebase configuration here.',
         );
     }

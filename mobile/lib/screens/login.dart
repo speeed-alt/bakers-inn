@@ -93,7 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text("The Baker's Inn", style: context.type.titleLarge),
+        Text("Baker's Inn", style: context.type.titleLarge),
         const SizedBox(height: 4),
         Text('Tap your name to start.',
             style: TextStyle(color: context.colors.muted)),

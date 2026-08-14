@@ -20,10 +20,10 @@ export default defineConfig({
       injectRegister: null,
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: "The Baker's Inn",
+        name: "Baker's Inn",
         // Home screens truncate at roughly 12 characters.
         short_name: "Baker's Inn",
-        description: "Till, daily orders and closing reports for The Baker's Inn",
+        description: "Till, daily orders and closing reports for Baker's Inn",
         theme_color: '#17171a',
         background_color: '#ffffff',
         display: 'standalone',

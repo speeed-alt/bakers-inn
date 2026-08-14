@@ -107,7 +107,7 @@ function checkPins() {
   }
 }
 
-// The real catalogue, taken from The Baker's Inn's own Daily Closing Report.
+// The real catalogue, taken from Baker's Inn's own Daily Closing Report.
 //
 // [id, code, name, category, price, keepsTillTomorrow]
 //

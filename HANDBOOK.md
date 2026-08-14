@@ -1,4 +1,4 @@
-# The Baker's Inn — handbook
+# Baker's Inn — handbook
 
 How the system works, what happens each day, and what to do when it doesn't.
 

@@ -1,4 +1,4 @@
-# The Baker's Inn — working notes
+# Baker's Inn — working notes
 
 A transaction and management system for a real Pakistani bakery with three
 outlets. Read [PLAN.md](PLAN.md) for the full design and [README.md](README.md)

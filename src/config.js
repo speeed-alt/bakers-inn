@@ -9,7 +9,7 @@
 //
 // CONFIRM WITH THE OWNER before going live: these are placeholders, and every
 // bakery bill in Faisalabad carries a real address and a real phone number.
-export const BUSINESS_NAME = "The Baker's Inn"
+export const BUSINESS_NAME = "Baker's Inn"
 export const BUSINESS_ADDRESS = 'Faisalabad'
 export const BUSINESS_PHONE = ''
 

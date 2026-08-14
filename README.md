@@ -1,4 +1,4 @@
-# The Baker's Inn
+# Baker's Inn
 
 Transaction and management system for a bakery with three outlets, built to the
 design in [PLAN.md](PLAN.md).

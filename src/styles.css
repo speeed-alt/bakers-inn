@@ -489,17 +489,41 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   table-layout: fixed;
 }
 
+/* This has to undo the app's own table styling, not merely add to it.
+ *
+ * Further up this file, `th, td` pins every cell to 15px and `th` to 12px
+ * uppercase letter-spaced --muted. Those are right for a dashboard and wrong
+ * for a bill in three separate ways:
+ *
+ *   - a fixed px size ignores the pt that paper.js sets per paper, so the
+ *     whole point of choosing a paper size did nothing to the table — only the
+ *     headings and the words line ever changed;
+ *   - --muted is grey, and a thermal head renders grey as dithered dots, so
+ *     the column headings came out looking like the printer was failing;
+ *   - no printed bill anywhere shouts DESCRIPTION at its reader.
+ *
+ * Every one of those had to be turned off by name. It was invisible in the
+ * preview I was checking against, because that preview loaded this block on
+ * its own without the rules it needs to override. */
 .receipt th, .receipt td {
   border: 1px solid #000;
   /* Tight. Four cells of generous side padding costs about an eighth of a
      74mm roll, and every millimetre of it comes out of the product name. */
   padding: 0.18em 0.22em;
+  font-size: inherit;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: #000;
   vertical-align: top;
   text-align: left;
-  font-weight: 400;
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
+
+/* The app drops the last row's bottom border so a card does not end in a line.
+   A ruled bill has to close its box. */
+.receipt tr:last-child td { border-bottom: 1px solid #000; }
 
 .receipt .num { text-align: right; }
 

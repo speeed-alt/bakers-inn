@@ -37,7 +37,7 @@ class BakeryApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: theme,
       builder: (context, _) => MaterialApp(
-        title: "The Baker's Inn",
+        title: "Baker's Inn",
         debugShowCheckedModeBanner: false,
         theme: bakeryLight,
         darkTheme: bakeryDark,

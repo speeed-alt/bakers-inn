@@ -8,7 +8,7 @@
 library;
 
 /// Printed at the top of every receipt.
-const String businessName = "The Baker's Inn";
+const String businessName = "Baker's Inn";
 
 /// Characters across the slip in the receipt's monospace font.
 const int receiptWidth = 32;
