@@ -2,11 +2,15 @@
 
 // Printed at the top of every receipt.
 //
-// CONFIRM WITH THE OWNER before going live. Every bakery bill in Faisalabad
-// carries a shop address and a phone number — it is how a customer comes back
-// about a wrong order — and these are placeholders.
+// The address and phone here are only a fallback. Each outlet carries its own —
+// three shops in three different places cannot share one address, and a
+// customer coming back about a wrong order needs the counter they stood at.
+// Set them per outlet under Catalogue → Outlets.
+//
+// CONFIRM WITH THE OWNER before going live: these are placeholders, and every
+// bakery bill in Faisalabad carries a real address and a real phone number.
 export const BUSINESS_NAME = "The Baker's Inn"
-export const BUSINESS_ADDRESS = 'Susan Road, Faisalabad'
+export const BUSINESS_ADDRESS = 'Faisalabad'
 export const BUSINESS_PHONE = ''
 
 // What receipts are printed on. This sets the page size, margins and type size

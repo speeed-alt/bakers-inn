@@ -491,7 +491,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .receipt th, .receipt td {
   border: 1px solid #000;
-  padding: 0.2em 0.35em;
+  /* Tight. Four cells of generous side padding costs about an eighth of a
+     74mm roll, and every millimetre of it comes out of the product name. */
+  padding: 0.18em 0.22em;
   vertical-align: top;
   text-align: left;
   font-weight: 400;
@@ -505,17 +507,30 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .receipt-items { margin-top: -1px; }
 .receipt-items thead th { font-weight: 700; }
-/* Description takes what is left; the three figure columns are fixed because
-   they hold small numbers and must stay in the same place on every line. */
-.receipt-items th:nth-child(2), .receipt-items td:nth-child(2) { width: 20%; }
-.receipt-items th:nth-child(3), .receipt-items td:nth-child(3) { width: 16%; }
-.receipt-items th:nth-child(4), .receipt-items td:nth-child(4) { width: 26%; }
-.receipt-name { hyphens: auto; }
+
+/* The three figure columns are fixed, and deliberately mean.
+ *
+ * They hold two to six characters — 1,400 · 4.5 · 6,300 — and must stay in the
+ * same place on every line so the slip can be scanned down rather than read.
+ * Everything left over goes to the name, which is the only column with real
+ * words in it: "Milky Bread Large" is seventeen characters and has to fit.
+ *
+ * The first attempt gave these three 62% of the roll between them and left the
+ * name 38%, which wrapped "Description" itself onto two lines and turned every
+ * ordinary product into a three-line row. */
+.receipt-items th:nth-child(2), .receipt-items td:nth-child(2) { width: 17%; }
+.receipt-items th:nth-child(3), .receipt-items td:nth-child(3) { width: 13%; }
+.receipt-items th:nth-child(4), .receipt-items td:nth-child(4) { width: 23%; }
+
+/* Tighter than the rest of the slip: a long name is going to take several
+   lines whatever happens, and this keeps them from becoming a paragraph. */
+.receipt-name { line-height: 1.15; hyphens: auto; }
 
 .receipt-totals { margin-top: -1px; }
-.receipt-totals th { width: 30%; }
-.receipt-totals td.num { width: 34%; }
-.receipt-aside { width: 36%; }
+/* "Total", "Cash", "Change" are short; "Rs 20,000" is not. */
+.receipt-totals th { width: 24%; }
+.receipt-totals td.num { width: 37%; }
+.receipt-aside { width: 39%; }
 .receipt-items-count { font-weight: 700; }
 .receipt-thanks {
   margin-top: 0.4em; font-size: 0.85em; font-weight: 700; line-height: 1.2;

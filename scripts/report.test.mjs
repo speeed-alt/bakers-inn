@@ -197,11 +197,28 @@ test('a refund says so, because a refund slip that reads like a bill gets paid t
   assert.equal(r.payment, null)
 })
 
-test('the shop can be reached about a wrong order', () => {
-  // A bill with no address and no phone is one a customer cannot come back to.
+test('the slip carries the address of the counter the customer stood at', () => {
+  // Three shops in three places cannot share one address. The first version of
+  // this printed the shop's name directly above a different shop's address.
+  const r = receiptModel(
+    { businessDate: '2026-07-28', total: 0, items: [] },
+    { name: 'Gulberg', address: 'Kohinoor Plaza, Faisalabad', phone: '0300-1234567' },
+  )
+  assert.equal(r.outlet, 'Gulberg')
+  assert.equal(r.address, 'Kohinoor Plaza, Faisalabad')
+  assert.equal(r.phone, '0300-1234567')
+})
+
+test('an outlet with no address of its own falls back rather than printing none', () => {
+  const r = receiptModel({ businessDate: '2026-07-28', total: 0, items: [] }, { name: 'Gulberg' })
+  assert.equal(r.outlet, 'Gulberg')
+  assert.ok(r.address.length > 0, 'falls back to BUSINESS_ADDRESS')
+})
+
+test('a caller with only the name still gets a slip', () => {
   const r = receiptModel({ businessDate: '2026-07-28', total: 0, items: [] }, 'Susan Road')
+  assert.equal(r.outlet, 'Susan Road')
   assert.ok(r.business.length > 0)
-  assert.ok(r.address.length > 0, 'set BUSINESS_ADDRESS in config.js')
 })
 
 test('a long basket stays exact', () => {

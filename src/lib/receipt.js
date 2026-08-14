@@ -66,15 +66,23 @@ export function itemRow(item, index = 0) {
  * figure the customer checks against the money in their hand is the one worth
  * spelling out.
  */
-export function receiptModel(sale, branchName) {
+export function receiptModel(sale, branch) {
   const when = sale.localAt?.toDate?.() ?? null
   const items = sale.items ?? []
 
+  // The whole outlet, or just its name for the callers that only have that.
+  //
+  // Three shops in three different places cannot share one address, which the
+  // first version of this did — and it printed the shop's name immediately
+  // above an address for a different shop. A customer coming back about a
+  // wrong order needs the address of the counter they actually stood at.
+  const outlet = typeof branch === 'string' ? { name: branch } : (branch ?? {})
+
   return {
     business: BUSINESS_NAME,
-    address: BUSINESS_ADDRESS,
-    phone: BUSINESS_PHONE,
-    outlet: branchName ?? sale.branchId,
+    address: outlet.address || BUSINESS_ADDRESS,
+    phone: outlet.phone || BUSINESS_PHONE,
+    outlet: outlet.name ?? sale.branchId,
 
     ref: sale.ref ?? '',
     till: String(sale.till ?? sale.device ?? '').trim(),

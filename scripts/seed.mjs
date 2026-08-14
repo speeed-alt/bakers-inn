@@ -48,10 +48,14 @@ const auth = getAuth()
 // (S-20260813-B2-…, C-20260813-MAIN, T-20260813-B3) so renaming a shop is a
 // display change and nothing more, but re-lettering one would orphan its
 // history. If a shop moves or is renamed, change `name` and leave `id` alone.
+//
+// `address` and `phone` are printed on that shop's own receipts. Blank until
+// the owner gives them — the app falls back to the one in config.js, and they
+// can be filled in under Catalogue → Outlets without touching this file.
 const BRANCHES = [
-  { id: 'MAIN', name: 'Susan Road', isMain: true },
-  { id: 'B2', name: 'Gulberg', isMain: false },
-  { id: 'B3', name: 'Gulistan Colony', isMain: false },
+  { id: 'MAIN', name: 'Susan Road', isMain: true, address: '', phone: '' },
+  { id: 'B2', name: 'Gulberg', isMain: false, address: '', phone: '' },
+  { id: 'B3', name: 'Gulistan Colony', isMain: false, address: '', phone: '' },
 ]
 
 // `devPin` is a development convenience and nothing more. It is used only

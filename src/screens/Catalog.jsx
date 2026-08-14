@@ -526,7 +526,7 @@ function Outlets() {
                 <td>{b.name}</td>
                 <td className="muted small">{b.isMain ? 'hub — buys, bakes, distributes' : 'shop'}</td>
                 <td className="num">
-                  <button className="btn ghost small" onClick={() => setRenaming(b)}>Rename</button>
+                  <button className="btn ghost small" onClick={() => setRenaming(b)}>Edit</button>
                 </td>
               </tr>
             ))}
@@ -582,20 +582,46 @@ function Outlets() {
 
 function RenameOutlet({ branch, onClose }) {
   const [name, setName] = useState(branch.name ?? '')
+  const [address, setAddress] = useState(branch.address ?? '')
+  const [phone, setPhone] = useState(branch.phone ?? '')
   const [busy, setBusy] = useState(false)
-  const changed = name.trim() && name.trim() !== branch.name
+
+  const changed =
+    name.trim() &&
+    (name.trim() !== branch.name ||
+      address.trim() !== (branch.address ?? '') ||
+      phone.trim() !== (branch.phone ?? ''))
 
   return (
-    <Modal title={`Rename ${branch.name}`} onClose={onClose}>
+    <Modal title={branch.name} onClose={onClose}>
       <div className="field">
         <label>Name — what staff and customers see</label>
+        <input type="text" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
+      </div>
+
+      {/* Printed at the top of this shop's own receipts. Each outlet has its
+          own, because a customer coming back about a wrong order needs the
+          address of the counter they actually stood at, not the head office. */}
+      <div className="field">
+        <label>Address — printed on this shop's receipts</label>
         <input
           type="text"
-          value={name}
-          autoFocus
-          onChange={(e) => setName(e.target.value)}
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder="e.g. Main Gate Wala Chowk, Faisalabad"
         />
       </div>
+      <div className="field">
+        <label>Phone — printed on this shop's receipts</label>
+        <input
+          type="text"
+          inputMode="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="e.g. 0304-4218406"
+        />
+      </div>
+
       <p className="muted small">
         The code <b className="mono">{branch.id}</b> does not change. It is printed on every receipt
         this shop has ever issued and cannot be altered without losing that history.
@@ -608,7 +634,11 @@ function RenameOutlet({ branch, onClose }) {
           onClick={async () => {
             setBusy(true)
             try {
-              await saveBranch(branch.id, { name: name.trim() })
+              await saveBranch(branch.id, {
+                name: name.trim(),
+                address: address.trim(),
+                phone: phone.trim(),
+              })
               onClose()
             } finally {
               setBusy(false)

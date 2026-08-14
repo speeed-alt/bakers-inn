@@ -38,7 +38,8 @@ function unpricedList(products, max = 3) {
   return `${names.slice(0, max).join(', ')} and ${names.length - max} more`
 }
 
-export default function Sell({ branchId, branchName }) {
+export default function Sell({ branchId, branch }) {
+  const branchName = branch?.name ?? branchId
   const { profile } = useAuth()
   const today = businessDateOf()
   const yesterday = previousDate(today)
@@ -417,7 +418,7 @@ export default function Sell({ branchId, branchName }) {
 
       {receipt && (
         <Modal title="Receipt" onClose={() => setReceipt(null)}>
-          <Receipt sale={receipt} branchName={branchName} />
+          <Receipt sale={receipt} branch={branch} />
           <div className="grid2 no-print" style={{ marginTop: 16 }}>
             <button className="btn" onClick={printReceipt}>Print</button>
             <button className="btn primary" onClick={() => setReceipt(null)}>Done</button>

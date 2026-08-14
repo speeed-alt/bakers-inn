@@ -13,8 +13,8 @@ import { receiptModel } from '../lib/receipt.js'
  * and on a thermal printer they come out as a dotted grey line that looks like
  * the printer is running out, rather than as a rule.
  */
-export default function Receipt({ sale, branchName }) {
-  const r = receiptModel(sale, branchName)
+export default function Receipt({ sale, branch, branchName }) {
+  const r = receiptModel(sale, branch ?? branchName)
 
   const totals = [
     { label: 'Total', value: r.total, grand: true },

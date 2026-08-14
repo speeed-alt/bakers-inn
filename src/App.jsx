@@ -306,7 +306,9 @@ export default function App() {
             path="/sell"
             element={
               <Only path="/sell" role={profile.role}>
-                <Sell branchId={branchId} branchName={branch.data?.name} />
+                {/* The whole outlet, not just its name: the receipt prints the
+                    shop's own address and phone, which differ per outlet. */}
+                <Sell branchId={branchId} branch={branch.data} />
               </Only>
             }
           />
