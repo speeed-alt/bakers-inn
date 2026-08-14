@@ -9,6 +9,7 @@ globalThis.localStorage = {
   clear: () => store.clear(),
 }
 
+const { businessDateOf, previousDate } = await import('../src/lib/dates.js')
 const { isPractising, practiceStamp, visibleInMode } = await import('../src/lib/practice.js')
 const { closingDocId, demandDocId, productionDocId, rateDocId, transferDocId } = await import(
   '../src/lib/ids.js'
@@ -131,10 +132,28 @@ test('a practice rate cannot overwrite the morning rate the shops are selling at
 })
 
 test('the builders ask the tablet when nobody tells them', () => {
+  // The stored date has to be the *real* business date, not the fixture one.
+  // Leaving the practising argument off means the builder calls isPractising()
+  // with no argument, which reads the actual clock — so hard-coding a date here
+  // made this test pass only on 13 August, and it duly broke the next morning.
+  const realToday = businessDateOf()
+  const id = closingDocId(realToday, 'B2', false)
+
   store.clear()
-  assert.equal(closingDocId(TODAY, 'B2'), 'C-20260813-B2')
-  practising(TODAY)
-  assert.equal(closingDocId(TODAY, 'B2'), 'C-20260813-B2-P')
+  assert.equal(closingDocId(realToday, 'B2'), id)
+
+  practising(realToday)
+  assert.equal(closingDocId(realToday, 'B2'), `${id}-P`)
+  store.clear()
+})
+
+test('practice stored under a different day does not leak into today', () => {
+  // The same expiry as isPractising, reached through the id builders instead —
+  // yesterday's practice must not still be suffixing today's documents.
+  const realToday = businessDateOf()
+  store.clear()
+  practising(previousDate(realToday))
+  assert.equal(closingDocId(realToday, 'B2'), closingDocId(realToday, 'B2', false))
   store.clear()
 })
 

@@ -35,6 +35,7 @@ import { initializeApp, applicationDefault } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { getAuth } from 'firebase-admin/auth'
 import { isValidPin, pinPassword, staffEmail } from '../src/lib/pin.js'
+import { DEFAULT_WEIGHT_UNIT } from '../src/lib/quantity.js'
 
 initializeApp(useEmulator ? { projectId } : { projectId, credential: applicationDefault() })
 const db = getFirestore()
@@ -108,8 +109,19 @@ function checkPins() {
 //
 // `code` is deliberately the SR number already printed on that sheet, so the
 // cashier types the number they have been reading off paper for years. Prices
-// are whole rupees. The last flag drives the default at the daily close: false
+// are whole rupees. `sellsNextDay` drives the default at the daily close: false
 // means unsold stock is counted as stale, true means it carries over.
+//
+// The last column is `weighed`. A weighed item is priced per kilo and the
+// cashier types what the customer asked for — 4.5, or 450g — instead of a
+// count. Loose biscuits are the case this exists for: nobody buys "one
+// biscuit", they buy however much they want.
+//
+// It was missing from this table entirely until 2026-08-13, which is why no
+// product in the live project had it and the till offered no way to sell
+// anything by weight — the whole feature was built, and nothing could reach it.
+//
+// [id, code, name, category, price, sellsNextDay, weighed?]
 const PRODUCTS = [
   ['bread-small', '01', 'Bread Small', 'Bread', 120, false],
   ['bread-large', '02', 'Bread Large', 'Bread', 220, false],
@@ -146,7 +158,10 @@ const PRODUCTS = [
   ['chicken-sandwich', '32', 'Chicken Sandwich', 'Savoury', 150, false],
   ['club-sandwich', '33', 'Club Sandwich', 'Savoury', 150, false],
   ['special-sandwich', '34', 'Special Sandwich', 'Savoury', 200, false],
-  ['biscuits', '35', 'Biscuits', 'Bakery', 1400, true],
+  // Rs 1400 per kilo, loose, scooped to order — not Rs 1400 for one biscuit.
+  // Code 04 above is the boxed kind and stays counted. CONFIRM WITH THE OWNER:
+  // if any other item is scooped or cut to order, add `true` to its row too.
+  ['biscuits', '35', 'Biscuits', 'Bakery', 1400, true, true],
   ['customised-cake', '36', 'Customised Cake', 'Cakes', 1300, false],
   ['sandwich-bread', '37', 'Sandwich Bread', 'Bread', 250, false],
   ['special-rusk', '38', 'Special Rusk', 'Bakery', 300, true],
@@ -196,22 +211,42 @@ async function ensureStaff(person) {
   await db.collection('users').doc(uid).set({ loginId: uid, name, role, branchId, active: true })
 }
 
+/**
+ * Everything except the people.
+ *
+ * Renaming an outlet or marking a product as sold by weight used to mean
+ * re-running the whole seed, which rewrites every staff account and every PIN
+ * — so a one-word correction to a shop's name needed the whole team's PINs to
+ * hand, and would reset them all. In practice that meant it never happened, and
+ * the shops sat under placeholder names on the live login screen.
+ *
+ *   node scripts/seed.mjs --catalogue-only
+ *
+ * Touches branches, products and materials. Never touches Firebase Auth.
+ */
+const CATALOGUE_ONLY = process.argv.includes('--catalogue-only')
+
 async function main() {
   console.log(
     useEmulator
       ? `Seeding the emulators (${projectId})\n`
       : `Seeding the REAL project ${projectId}\n`,
   )
-  checkPins()
+  if (CATALOGUE_ONLY) console.log('Catalogue only — no staff account or PIN will be touched.\n')
+  if (!CATALOGUE_ONLY) checkPins()
 
   for (const branch of BRANCHES) {
     const { id, ...rest } = branch
-    await db.collection('branches').doc(id).set(rest)
+    // Merge, so renaming a shop cannot drop a field this table does not know
+    // about. `isMain` is in the table, so the hub stays the hub.
+    await db.collection('branches').doc(id).set(rest, { merge: true })
   }
-  console.log(`✓ ${BRANCHES.length} outlets`)
+  console.log(`✓ ${BRANCHES.length} outlets — ${BRANCHES.map((b) => b.name).join(', ')}`)
 
-  for (const person of STAFF) await ensureStaff(person)
-  console.log(`✓ ${STAFF.length} staff accounts`)
+  if (!CATALOGUE_ONLY) {
+    for (const person of STAFF) await ensureStaff(person)
+    console.log(`✓ ${STAFF.length} staff accounts`)
+  }
 
   // Demo data only: drop products that are no longer in the list so re-seeding
   // never leaves stale items behind. The running system never deletes anything,
@@ -224,13 +259,27 @@ async function main() {
     for (const d of existing.docs) if (!keep.has(d.id)) await d.ref.delete()
   }
 
-  for (const [id, code, name, category, price, sellsNextDay] of PRODUCTS) {
-    await db
-      .collection('products')
-      .doc(id)
-      .set({ code, name, category, price, sellsNextDay, active: true })
+  for (const [id, code, name, category, price, sellsNextDay, weighed = false] of PRODUCTS) {
+    const description = {
+      code,
+      name,
+      category,
+      price,
+      sellsNextDay,
+      soldByWeight: weighed,
+      unit: weighed ? DEFAULT_WEIGHT_UNIT : null,
+      active: true,
+    }
+    // Merge on a real project, replace on the emulator.
+    //
+    // A plain `set` replaces the whole document, and on a live project that
+    // would quietly destroy anything the owner has set from the app that this
+    // table does not know about — most importantly the `variants` written when
+    // several products are merged onto one code, which cannot be reconstructed.
+    await db.collection('products').doc(id).set(description, useEmulator ? {} : { merge: true })
   }
-  console.log(`✓ ${PRODUCTS.length} products`)
+  const weighedCount = PRODUCTS.filter((p) => p[6]).length
+  console.log(`✓ ${PRODUCTS.length} products, ${weighedCount} sold by weight`)
 
   for (const [id, name, unit, costPerUnit, reorderLevel] of MATERIALS) {
     const ref = db.collection('rawMaterials').doc(id)
@@ -250,6 +299,13 @@ async function main() {
     )
   }
   console.log(`✓ ${MATERIALS.length} raw materials`)
+
+  // No sign-in list after a catalogue-only run. It touched no account and set
+  // no PIN, and printing the table would say otherwise.
+  if (CATALOGUE_ONLY) {
+    console.log('\nNo staff account or PIN was touched. Everyone signs in exactly as before.')
+    return
+  }
 
   // Against a real project the PINs came from whoever ran this, so echoing them
   // back teaches nobody anything and only writes them into terminal history.

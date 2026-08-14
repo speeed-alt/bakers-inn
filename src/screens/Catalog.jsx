@@ -498,6 +498,7 @@ function PersonModal({ branches, onClose }) {
 function Outlets() {
   const branches = useSnapshot(() => collection(db, 'branches'), [])
   const [adding, setAdding] = useState(false)
+  const [renaming, setRenaming] = useState(null)
   const [id, setId] = useState('')
   const [name, setName] = useState('')
 
@@ -516,7 +517,7 @@ function Outlets() {
       <div className="card">
         <table>
           <thead>
-            <tr><th>Code</th><th>Name</th><th>Role</th></tr>
+            <tr><th>Code</th><th>Name</th><th>Role</th><th /></tr>
           </thead>
           <tbody>
             {(branches.data ?? []).map((b) => (
@@ -524,6 +525,9 @@ function Outlets() {
                 <td className="mono">{b.id}</td>
                 <td>{b.name}</td>
                 <td className="muted small">{b.isMain ? 'hub — buys, bakes, distributes' : 'shop'}</td>
+                <td className="num">
+                  <button className="btn ghost small" onClick={() => setRenaming(b)}>Rename</button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -559,6 +563,61 @@ function Outlets() {
           </button>
         </Modal>
       )}
+
+      {/* Renaming was simply missing: an outlet could be added and never
+          corrected, so the shops sat under whatever name they were first given
+          — which is why the live login screen still read "Main Outlet" and
+          "Model Town" long after the real names were known.
+
+          The code is not editable, and that is the point. It is written into
+          every document id in the system (S-20260813-B2-…, C-20260813-MAIN),
+          so a shop can move or be renamed freely, but re-lettering one would
+          orphan its whole history. */}
+      {renaming && (
+        <RenameOutlet branch={renaming} onClose={() => setRenaming(null)} />
+      )}
     </>
+  )
+}
+
+function RenameOutlet({ branch, onClose }) {
+  const [name, setName] = useState(branch.name ?? '')
+  const [busy, setBusy] = useState(false)
+  const changed = name.trim() && name.trim() !== branch.name
+
+  return (
+    <Modal title={`Rename ${branch.name}`} onClose={onClose}>
+      <div className="field">
+        <label>Name — what staff and customers see</label>
+        <input
+          type="text"
+          value={name}
+          autoFocus
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      <p className="muted small">
+        The code <b className="mono">{branch.id}</b> does not change. It is printed on every receipt
+        this shop has ever issued and cannot be altered without losing that history.
+      </p>
+      <div className="grid2">
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button
+          className="btn primary"
+          disabled={!changed || busy}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              await saveBranch(branch.id, { name: name.trim() })
+              onClose()
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </Modal>
   )
 }
