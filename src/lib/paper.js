@@ -55,9 +55,11 @@ export function printReceipt() {
  * Print a full-page document — a stock sheet, a report. Always an ordinary
  * sheet, never the till roll, whatever receipts are set to.
  */
-export function printSheet() {
+export function printSheet({ landscape = false } = {}) {
   const spec = PAPERS.a4
-  rule(`@page { size: ${spec.size}; margin: ${spec.margin}; }
+  // The register is eleven columns of rupees and does not fit portrait.
+  const size = landscape ? 'A4 landscape' : spec.size
+  rule(`@page { size: ${size}; margin: ${spec.margin}; }
 @media print { .sheet { font-size: 10.5pt; } }`)
   window.print()
   // Leave receipts working straight afterwards, so a printed sheet cannot

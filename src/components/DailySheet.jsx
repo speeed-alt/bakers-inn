@@ -18,7 +18,7 @@ import { Money } from './ui.jsx'
  * nine-column table on a phone is unreadable and he reads this on a phone. The
  * totals stay where he expects them: at the end.
  */
-export default function DailySheet({ sheet }) {
+export default function DailySheet({ sheet, onPrint }) {
   const { production, outlets, distributed, totalSale, totalStale, unsold } = sheet
   const nothingYet = production.value === 0 && distributed === 0 && totalSale === 0
 
@@ -32,6 +32,11 @@ export default function DailySheet({ sheet }) {
         The same line you write on the pad, worked out from what the tills and the kitchen have
         recorded today.
       </p>
+      {onPrint && (
+        <button className="btn" style={{ marginBottom: 12 }} onClick={onPrint}>
+          Print the register
+        </button>
+      )}
 
       {nothingYet ? (
         <p className="muted small" style={{ marginBottom: 0 }}>

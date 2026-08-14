@@ -11,7 +11,7 @@
     "sync:shared": "node scripts/sync-shared.mjs",
     "emulators": "npm run sync:shared && firebase emulators:start --only auth,firestore,functions",
     "seed": "node scripts/seed.mjs",
-    "test": "node --test scripts/report.test.mjs scripts/search.test.mjs scripts/compile.test.mjs scripts/dashboard.test.mjs scripts/leftovers.test.mjs scripts/materials.test.mjs scripts/csv.test.mjs scripts/clock.test.mjs scripts/suggest.test.mjs scripts/rates.test.mjs scripts/quantity.test.mjs scripts/words.test.mjs scripts/extras.test.mjs scripts/stock.test.mjs scripts/pnl.test.mjs scripts/grouping.test.mjs scripts/ids.test.mjs scripts/dates.test.mjs scripts/dailysheet.test.mjs scripts/practice.test.mjs scripts/custom.test.mjs",
+    "test": "node --test scripts/report.test.mjs scripts/search.test.mjs scripts/compile.test.mjs scripts/dashboard.test.mjs scripts/leftovers.test.mjs scripts/materials.test.mjs scripts/csv.test.mjs scripts/clock.test.mjs scripts/suggest.test.mjs scripts/rates.test.mjs scripts/quantity.test.mjs scripts/words.test.mjs scripts/extras.test.mjs scripts/stock.test.mjs scripts/pnl.test.mjs scripts/grouping.test.mjs scripts/ids.test.mjs scripts/dates.test.mjs scripts/dailysheet.test.mjs scripts/practice.test.mjs scripts/custom.test.mjs scripts/register.test.mjs",
     "test:rules": "node --test scripts/rules.test.mjs"
   },
   "dependencies": {

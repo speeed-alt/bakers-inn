@@ -20,6 +20,10 @@ import { dailySummaryCsv, downloadCsv, monthRange, purchasesCsv, salesCsv } from
 import { Empty, Loading, Money } from '../components/ui.jsx'
 import DailySheet from '../components/DailySheet.jsx'
 import PracticeCard from '../components/PracticeCard.jsx'
+import DailyRegister from '../components/DailyRegister.jsx'
+import { buildRegister, recentDates } from '../lib/register.js'
+import { Modal } from '../components/ui.jsx'
+import { printSheet } from '../lib/paper.js'
 import { dailySheet } from '../lib/dailySheet.js'
 import { getDocs } from 'firebase/firestore'
 
@@ -102,6 +106,10 @@ export default function Dashboard() {
 
   // His own daily line. Every input is already on this screen, so it costs no
   // extra read — it was only ever the shape that was missing.
+  // Only true while the printable register is open, which is what stops its
+  // two extra queries running on every dashboard load.
+  const [register, setRegister] = useState(false)
+
   const sheet = useMemo(
     () =>
       dailySheet({
@@ -153,7 +161,22 @@ export default function Dashboard() {
       {/* First, before anything the system invented. He opens this to find the
           line he would otherwise be writing by hand, and recognising it is what
           buys every screen underneath the benefit of the doubt. */}
-      <DailySheet sheet={sheet} />
+      <DailySheet sheet={sheet} onPrint={() => setRegister(true)} />
+
+      {/* Portalled to <body> and printed as a sheet, not a till roll. Printing
+          collapses #root, so anything left in the app tree prints blank. */}
+      {register && (
+        <Modal onClose={() => setRegister(false)} wide>
+          <RegisterSheet
+            today={today}
+            branches={branchList}
+            products={products.data ?? []}
+            closings={closings.data ?? []}
+            todaySheet={sheet}
+            onClose={() => setRegister(false)}
+          />
+        </Modal>
+      )}
 
       <div className="card">
         <div className="row between" style={{ marginBottom: 12 }}>
@@ -817,6 +840,54 @@ function OffCatalogue({ rows = [], total = 0 }) {
         <b>Catalogue</b> and the cashier picks it instead of typing it.
       </p>
     </div>
+  )
+}
+
+/**
+ * The register, loaded only when somebody asks to print it.
+ *
+ * Its two extra queries — the bake and the deliveries for the fortnight — are
+ * not worth making on every dashboard load for a button most days nobody
+ * presses. The closes are already on the screen and carry each day's takings
+ * and waste, so nothing here re-reads a fortnight of individual sales.
+ */
+function RegisterSheet({ today, branches, products, closings, todaySheet, onClose }) {
+  const dates = useMemo(() => recentDates(today, 14), [today])
+
+  // `in` takes up to 30 values, and 14 dates is well inside that — so this is
+  // two document reads' worth of query rather than a range and an index.
+  const productions = useSnapshot(
+    () => query(collection(db, 'productionOrders'), where('businessDate', 'in', dates)),
+    [dates.join()],
+  )
+  const transfers = useSnapshot(
+    () => query(collection(db, 'transfers'), where('businessDate', 'in', dates)),
+    [dates.join()],
+  )
+
+  if (productions.loading || transfers.loading) {
+    return <Loading>Reading the last fortnight…</Loading>
+  }
+
+  const register = buildRegister({
+    dates,
+    branches,
+    products,
+    closings,
+    productions: productions.data ?? [],
+    transfers: transfers.data ?? [],
+    today,
+    todaySheet,
+  })
+
+  return (
+    <>
+      <DailyRegister register={register} from={dates[dates.length - 1]} to={dates[0]} />
+      <div className="grid2 no-print" style={{ marginTop: 16 }}>
+        <button className="btn" onClick={() => printSheet({ landscape: true })}>Print</button>
+        <button className="btn primary" onClick={onClose}>Done</button>
+      </div>
+    </>
   )
 }
 
