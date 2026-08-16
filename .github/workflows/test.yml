@@ -19,9 +19,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # The same trap as the daily jobs: dates.test.mjs asserts what the 04:00
-      # rollover does either side of midnight, and a UTC runner would disagree
-      # with every tablet in Faisalabad. See .github/workflows/daily.yml.
+      # dates.test.mjs asserts what the 04:00 rollover does either side of
+      # midnight, and a UTC runner would disagree with every tablet in
+      # Faisalabad. The scheduled jobs are Cloud Functions pinned to
+      # Asia/Karachi; this keeps the test agreeing with them.
       TZ: Asia/Karachi
 
     steps:

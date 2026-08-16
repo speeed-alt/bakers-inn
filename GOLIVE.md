@@ -17,6 +17,12 @@ without step 4 done first.
 
 ---
 
+> **Done on 2026-08-14:** Blaze is on, all five Cloud Functions are deployed
+> and verified, delete protection and point-in-time recovery are enabled
+> (7-day window), 1,900 demo records are cleared, and the kitchen can now
+> build the baking list itself. Steps 1–6 below are complete. **What is left
+> is steps 7 onward — and those are the owner's.**
+
 ## The one thing that unblocks the most
 
 **Blaze billing has never been enabled on `bakers-inn-pk`, so `functions/` has

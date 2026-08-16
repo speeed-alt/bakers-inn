@@ -19,8 +19,9 @@ The daily cycle, which is the spine of the whole thing:
            → 4 Kitchen bakes → 5 Deliver out → 6 Close & report → repeat
 ```
 
-All five phases of PLAN.md are built and verified. What remains is not code:
-a real Firebase project, hardware, training, rollout.
+All five phases of PLAN.md are built and verified, deployed on Blaze with all
+five Cloud Functions live. What remains is mostly not code: the owner's real
+prices and PINs, hardware, training, rollout. See [GOLIVE.md](GOLIVE.md).
 
 ## The owner's rules
 
@@ -45,8 +46,8 @@ These are commitments to a real, non-technical owner. They outrank your taste.
 npm run emulators   # syncs shared code, then auth + firestore + functions
 npm run seed        # outlets, staff, the real 44-item catalogue, materials
 npm run dev         # the app
-npm test            # 212 pure-logic tests, no emulator needed
-npm run test:rules  # 55 security-rules tests, emulator must be running
+npm test            # 289 pure-logic tests, no emulator needed
+npm run test:rules  # 64 security-rules tests, emulator must be running
 ```
 
 Both suites also run on every push — see `.github/workflows/test.yml`.
@@ -270,22 +271,18 @@ SEED_PROJECT=bakers-inn-pk GOOGLE_APPLICATION_CREDENTIALS=…/key.json node scri
 trading day, in the order it has to happen.** What follows is the short version
 for someone about to change code.
 
-- **Blaze is not enabled**, so the Cloud Functions are not deployed. Two of the
-  five now have a substitute in `.github/workflows/daily.yml` — the 05:00
-  compile and the 06:00 report rebuild — running the same shared arithmetic, so
-  switching Blaze on later changes no answers. **`syncStaffClaims` and
-  `reportOnClose` still have no substitute at all.** That is the sharp edge:
-  anyone added through the app signs in with no permissions and every write is
-  refused, and there is no daily report until 06:00 the next morning. The
-  workflow also needs `FIREBASE_SERVICE_ACCOUNT` set as a repository secret,
-  which it currently is not, so it has never run. Once billing is on:
-  `firebase deploy --only functions --project bakers-inn-pk`, then turn on
-  backups, which also need billing:
-
-  ```bash
-  firebase firestore:databases:update "(default)" --delete-protection ENABLED --point-in-time-recovery ENABLED --project bakers-inn-pk
-  ```
-
+- **Blaze is on and all five Cloud Functions are deployed** (2026-08-14),
+  pinned to `asia-south1`: `syncStaffClaims`, `reportOnClose`, the 05:00
+  `compileDailyOrders`, the 06:00 `rebuildYesterdaysReports`, and the
+  key-protected `compileNow`. The schedules carry `timeZone: 'Asia/Karachi'`,
+  so they never had the UTC-runner bug the scripts did. The GitHub Actions
+  substitute has been deleted — three mechanisms for one job is how they drift.
+  Delete protection and point-in-time recovery are on; the recovery window is
+  seven days.
+- **The 05:00 job is no longer a single point of failure.** The owner or a
+  specialist can build the day's list from the Bake screen, running the same
+  `compileDemands` the function runs. `productionOrders` create is open to
+  those two roles only, and the compiler's own uid must be stamped on it.
 - **The live project is full of demo data.** Practically every sale, closing and
   report on `bakers-inn-pk` carries `demo: true`. Nothing in `src/` filters that
   flag, and `lib/suggest.js` orders tomorrow's baking off those invented

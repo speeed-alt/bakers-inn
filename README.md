@@ -175,18 +175,22 @@ firebase use --add          # pick the new project
 firebase deploy --only firestore:rules,firestore:indexes,functions
 ```
 
-Deploying `functions` **fails without Blaze**, and not because the functions
-would cost anything — Cloud Build and Artifact Registry refuse to enable on the
-free plan. `bakers-inn-pk` is in that state today, so two of the five jobs run
-from `.github/workflows/daily.yml` instead: the 05:00 baking list and the 06:00
-report rebuild, using the same shared arithmetic. That workflow needs the
-service-account JSON from step 3 stored as a repository secret named
-`FIREBASE_SERVICE_ACCOUNT`, and it exits 1 without it.
+Deploying `functions` needs Blaze — not because the functions cost anything,
+but because Cloud Build and Artifact Registry refuse to enable on the free
+plan. `bakers-inn-pk` is on Blaze as of 2026-08-14 and all five are deployed.
 
-`syncStaffClaims` and `reportOnClose` have **no** substitute. Until they are
-deployed, anyone added through the app signs in with no permissions and every
-write they make is refused, and there is no report for a day until 06:00 the
-next morning. See [GOLIVE.md](GOLIVE.md).
+Set an artifact cleanup policy at the same time, or old container images
+accumulate into a slow monthly bill:
+
+```bash
+firebase functions:artifacts:setpolicy --location asia-south1 --days 3
+```
+
+And turn on the safety net, which also needs Blaze:
+
+```bash
+firebase firestore:databases:update "(default)"   --delete-protection ENABLED --point-in-time-recovery ENABLED
+```
 
 **3. Seed the real data once** — outlets, staff, the product list — by pointing
 the seed script at the project instead of the emulator. This needs a

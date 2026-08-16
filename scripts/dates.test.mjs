@@ -40,7 +40,7 @@ test('the rollover carries backwards across a month and a year', () => {
 })
 
 test('the 05:00 job must run on a clock set to Karachi, not on UTC', () => {
-  // The bug this file exists for. daily.yml fires at 00:00 UTC, which is 05:00
+  // The bug this file exists for. A UTC cron at 00:00 is 05:00
   // in Karachi — the schedule is right. But businessDateOf reads the *process*
   // clock, and on a UTC runner that instant is hour 0, which is under the
   // rollover, so it hands back yesterday. The kitchen would have got yesterday's
