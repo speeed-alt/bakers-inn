@@ -7,7 +7,7 @@ import { DEFAULT_WEIGHT_UNIT } from '../lib/quantity.js'
 import { mergeSuggestions, planMerge } from '../lib/grouping.js'
 import { PRODUCT_CATEGORIES, ROLES } from '../config.js'
 import { archiveProduct, saveBranch, saveProduct, setUserActive } from '../data/catalog.js'
-import { createStaff } from '../data/staff.js'
+import { changeStaffPin, createStaff, updateStaff } from '../data/staff.js'
 import { isValidPin } from '../lib/pin.js'
 import { Empty, Loading, Modal, Money } from '../components/ui.jsx'
 
@@ -366,6 +366,7 @@ function People() {
   const users = useSnapshot(() => collection(db, 'users'), [])
   const branches = useSnapshot(() => collection(db, 'branches'), [])
   const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState(null)
 
   const list = [...(users.data ?? [])].sort((a, b) => a.name.localeCompare(b.name))
   const branchName = (id) => branches.data?.find((b) => b.id === id)?.name ?? id
@@ -403,6 +404,7 @@ function People() {
                 <td className="muted small">{u.role}</td>
                 <td className="muted small">{branchName(u.branchId)}</td>
                 <td className="num">
+                  <button className="btn ghost small" onClick={() => setEditing(u)}>Edit</button>
                   <button
                     className="btn ghost small"
                     onClick={() => setUserActive(u.id, u.active === false)}
@@ -420,7 +422,151 @@ function People() {
       </div>
 
       {adding && <PersonModal branches={branches.data ?? []} onClose={() => setAdding(false)} />}
+      {editing && (
+        <EditPersonModal
+          person={editing}
+          branches={branches.data ?? []}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </>
+  )
+}
+
+/**
+ * Change who somebody is, and what they can do.
+ *
+ * There was no way to do either. A cashier promoted to the kitchen, somebody
+ * moving between shops, a name misspelled on the day they were added — all of
+ * it was permanent, and the only remedy was to turn the person off and create
+ * them again, which leaves their sales attributed to an account nobody can
+ * find on the list any more.
+ *
+ * Setting a PIN lives here too, and it is the bigger of the two. It could not
+ * exist before today: changing another account's password needs the Admin SDK,
+ * so it needs a Cloud Function, and Cloud Functions needed Blaze. Until this,
+ * a forgotten PIN at seven on a Friday stopped a shop until somebody found the
+ * laptop with the admin key on it.
+ */
+function EditPersonModal({ person, branches, onClose }) {
+  const [name, setName] = useState(person.name ?? '')
+  const [role, setRole] = useState(person.role ?? 'cashier')
+  const [branchId, setBranchId] = useState(person.branchId ?? branches[0]?.id ?? '')
+  const [pin, setPin] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [pinDone, setPinDone] = useState(false)
+
+  const detailsChanged =
+    name.trim() !== person.name || role !== person.role || branchId !== person.branchId
+  const canSave = name.trim() && branchId && detailsChanged
+
+  async function saveDetails() {
+    setBusy(true)
+    setError('')
+    try {
+      await updateStaff(person.id, { name: name.trim(), role, branchId })
+      onClose()
+    } catch (e) {
+      setError(e.message ?? 'Could not save this.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function savePin() {
+    setBusy(true)
+    setError('')
+    setPinDone(false)
+    try {
+      await changeStaffPin(person.id, pin)
+      setPin('')
+      setPinDone(true)
+    } catch (e) {
+      setError(e.message ?? 'Could not set the PIN.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title={person.name} onClose={onClose}>
+      <div className="field">
+        <label>Name</label>
+        <input type="text" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
+        <p className="muted small" style={{ marginBottom: 0 }}>
+          Sales already rung keep the name they were recorded under. Only what happens from now on
+          uses this one.
+        </p>
+      </div>
+
+      <div className="field">
+        <label>Role</label>
+        <div className="row wrap">
+          {ROLES.map((r) => (
+            <button key={r} className={`chip ${role === r ? 'on' : ''}`} onClick={() => setRole(r)}>
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="field">
+        <label>Outlet</label>
+        <div className="row wrap">
+          {branches.map((b) => (
+            <button
+              key={b.id}
+              className={`chip ${branchId === b.id ? 'on' : ''}`}
+              onClick={() => setBranchId(b.id)}
+            >
+              {b.name}
+            </button>
+          ))}
+        </div>
+        {(role !== person.role || branchId !== person.branchId) && (
+          <p className="muted small" style={{ marginBottom: 0 }}>
+            They will need to sign out and back in for this to take effect.
+          </p>
+        )}
+      </div>
+
+      <button className="btn primary block" disabled={!canSave || busy} onClick={saveDetails}>
+        {busy ? 'Saving…' : 'Save'}
+      </button>
+
+      <hr style={{ margin: '18px 0', border: 0, borderTop: '1px solid var(--border)' }} />
+
+      <div className="field">
+        <label>Set a new PIN</label>
+        <p className="muted small">
+          For somebody who has forgotten theirs. Nobody can look a PIN up — not you, not me — so
+          the only fix is to set a new one. Let them choose it and type it in themselves, then it
+          stays theirs.
+        </p>
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={4}
+          value={pin}
+          onChange={(e) => {
+            setPin(e.target.value.replace(/\D/g, ''))
+            setPinDone(false)
+          }}
+          placeholder="4 digits"
+        />
+      </div>
+      <button className="btn block" disabled={!isValidPin(pin) || busy} onClick={savePin}>
+        {busy ? 'Setting…' : `Set ${person.name}'s PIN`}
+      </button>
+      {pinDone && (
+        <p className="small" style={{ fontWeight: 600 }}>
+          Done. {person.name} signs in with the new PIN from now on.
+        </p>
+      )}
+
+      {error && <p className="bad small">{error}</p>}
+    </Modal>
   )
 }
 

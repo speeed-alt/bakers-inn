@@ -1,5 +1,5 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler'
-import { onRequest } from 'firebase-functions/v2/https'
+import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https'
 import { onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { logger, setGlobalOptions } from 'firebase-functions'
 import { initializeApp } from 'firebase-admin/app'
@@ -20,6 +20,7 @@ import {
   transferRef,
 } from './shared/lib/ids.js'
 import { addDays, previousDate } from './shared/lib/dates.js'
+import { isValidPin, pinPassword } from './shared/lib/pin.js'
 import { onlyForMode } from './shared/lib/practice.js'
 import { COMPILE_HOUR, HISTORY_WEEKS, HUB_BRANCH_ID, TIME_ZONE } from './shared/config.js'
 
@@ -367,4 +368,57 @@ export const compileNow = onRequest(async (req, res) => {
     logger.error('compile failed', error)
     res.status(500).send(String(error))
   }
+})
+
+
+/**
+ * Give somebody a new PIN.
+ *
+ * The one thing the owner could not do for himself. PINs are never stored —
+ * the Auth password is a hash of the PIN and a per-person salt — so a forgotten
+ * one could not be looked up, and could not be changed either: setting another
+ * account's password needs the Admin SDK, which is only available here. Until
+ * this existed, a cashier who forgot their PIN at seven on a Friday stopped the
+ * shop until somebody found a laptop with the admin key on it.
+ *
+ * The owner never learns the PIN and neither does this function keep it: the
+ * new one arrives, becomes a password hash, and is gone. Which means the person
+ * has to be told it out loud, and can change it again the same way.
+ *
+ * Owner only, checked against the token rather than the /users document — the
+ * same source the security rules read, so this cannot be talked into trusting a
+ * document somebody edited.
+ */
+export const setStaffPin = onCall(async (request) => {
+  const token = request.auth?.token
+  if (!token || token.role !== 'owner' || token.active !== true) {
+    throw new HttpsError('permission-denied', 'Only the owner can set a PIN.')
+  }
+
+  const { uid, pin } = request.data ?? {}
+  if (typeof uid !== 'string' || !uid) {
+    throw new HttpsError('invalid-argument', 'Which person?')
+  }
+  if (!isValidPin(pin)) {
+    throw new HttpsError('invalid-argument', 'A PIN is exactly four digits.')
+  }
+
+  const snap = await db.collection('users').doc(uid).get()
+  if (!snap.exists) {
+    throw new HttpsError('not-found', 'No such person.')
+  }
+
+  // The password is derived from the login id, not the auth uid — they differ
+  // for anyone created through the app, and deriving from the wrong one would
+  // set a password nobody could ever sign in with.
+  const loginId = snap.data().loginId
+  if (!loginId) {
+    throw new HttpsError('failed-precondition', 'That person has no login id.')
+  }
+
+  await getAuth().updateUser(uid, { password: await pinPassword(loginId, pin) })
+
+  // Not the PIN. Never the PIN.
+  logger.info('staff PIN changed', { uid, by: request.auth.uid })
+  return { ok: true }
 })

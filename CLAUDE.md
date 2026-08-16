@@ -292,8 +292,6 @@ for someone about to change code.
   on 2026-08-04, four days before the guard that requires PINs from the
   environment, and there is no PIN-change screen to have rotated them since. Do
   not test it to find out; re-seed with real ones.
-- **No PIN reset.** PINs are never stored, so a forgotten one cannot be looked up
-  or reset. Fixing it needs a callable Cloud Function using the Admin SDK.
 - **Branch names are placeholders** (Main Outlet / Gulberg / Model Town), and so
   are the 44 catalogue prices and the 9 material costs.
 - **`sellsNextDay` was my judgement, not the owner's.** It decides what counts as

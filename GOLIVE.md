@@ -238,8 +238,8 @@ Sit down together. Write it on paper first — it doubles as the owner's trainin
 Privately, one person at a time, told only to whoever is doing step 9. Not four
 digits anyone at the counter could guess, and **not over WhatsApp**.
 
-There is no PIN reset in this system — PINs are never stored, so a forgotten one
-needs a laptop with the admin key.
+A forgotten PIN is no longer a crisis: the owner sets a new one from
+Catalogue → People → Edit. Nobody can look an existing one up.
 
 ### 9 · [dev] Re-seed with the real roster · 40 min · *destructive*
 
@@ -317,7 +317,7 @@ two and expensive to unpick on day thirty.
 
 Not blockers. Worth knowing before somebody reports one as a bug.
 
-- **No PIN reset.** Needs a callable Cloud Function using the Admin SDK.
+- ~~No PIN reset.~~ Done 2026-08-14 — Catalogue → People → Edit sets a new one.
 - **A four-digit PIN with no lockout**, and the Owner button on every outlet's
   tablet. Worth dropping Owner from the outlet lists and adding a backoff.
 - **The order suggestion ignores stock already on the shelf.** It answers "how

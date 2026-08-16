@@ -342,9 +342,9 @@ on the dashboard. They do not need the owner.
 
 ### Somebody forgot their PIN
 
-**There is no PIN reset.** PINs are never stored anywhere, so nobody can look
-one up. Fixing it needs a laptop with the admin key. Do not let this happen at
-07:00 on a Friday.
+Nobody can look a PIN up — they are never stored. But the owner can set a new
+one: **Catalogue → People → Edit → Set a new PIN**. Let the person choose it
+and type it in themselves, so it stays theirs.
 
 ### A tablet is showing yesterday's numbers
 
@@ -362,7 +362,6 @@ Honest list, so nobody waits on something that is not going to happen by itself.
   (it needs Blaze billing). Until then a new person signs in fine and can save
   nothing. See [GOLIVE.md](GOLIVE.md).
 - **Turning someone off** stops them at the next sign-in, not immediately.
-- **No PIN reset**, as above.
 - **Printing is whatever Android can print to.** There is no thermal-printer
   support in the app.
 - **The order suggestion ignores stock already on the shelf.** It answers "how
