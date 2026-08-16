@@ -48,7 +48,11 @@ built on.
    again — only picked or confirmed.
 2. **Nothing is ever deleted.** Products are archived, staff are turned off,
    sales are voided, days are reopened. Every one of those keeps the original
-   and adds a note. The database itself refuses deletes.
+   and adds a note. The database itself refuses deletes — there is no button
+   anywhere in the app that destroys a record, and that is on purpose. A
+   person who leaves is turned off, not removed: every sale they ever rang
+   still has their name against it, and that attribution is the only control
+   there is on a void.
 3. **Visibility instead of permission.** There is no approval queue anywhere.
    Anyone can void a sale or reopen a day — and every one of those actions is
    stamped with a name and appears on the owner's dashboard the same day.
@@ -361,7 +365,6 @@ Honest list, so nobody waits on something that is not going to happen by itself.
   but their permissions are written by a server job that is not deployed yet
   (it needs Blaze billing). Until then a new person signs in fine and can save
   nothing. See [GOLIVE.md](GOLIVE.md).
-- **Turning someone off** stops them at the next sign-in, not immediately.
 - **Printing is whatever Android can print to.** There is no thermal-printer
   support in the app.
 - **The order suggestion ignores stock already on the shelf.** It answers "how

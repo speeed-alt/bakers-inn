@@ -221,10 +221,13 @@ export const syncStaffClaims = onDocumentWritten('users/{uid}', async (event) =>
   const { uid } = event.params
   const after = event.data?.after?.data()
 
+  const before = event.data?.before?.data()
+
   try {
     if (!after) {
       // The record went away; take their permissions with it.
       await getAuth().setCustomUserClaims(uid, { role: null, branchId: null, active: false })
+      await getAuth().revokeRefreshTokens(uid)
       logger.info('staff record removed, claims cleared', { uid })
       return
     }
@@ -233,6 +236,24 @@ export const syncStaffClaims = onDocumentWritten('users/{uid}', async (event) =>
       branchId: after.branchId ?? null,
       active: after.active !== false,
     })
+
+    // Turning somebody off has to actually stop them.
+    //
+    // New claims do not reach a tablet that is already signed in — it keeps
+    // the token it was issued, saying `active: true`, until that token
+    // refreshes. So a dismissed cashier could go on selling on the shop's own
+    // tablet, and "Turn off" would have looked like it worked. Revoking the
+    // refresh token means they cannot be issued another one, which bounds it
+    // at the life of the token in their hand rather than leaving it open.
+    //
+    // Only on the transition, not on every write: revoking on an ordinary
+    // rename would sign the person out mid-shift for no reason.
+    const wasActive = before ? before.active !== false : true
+    if (wasActive && after.active === false) {
+      await getAuth().revokeRefreshTokens(uid)
+      logger.info('staff turned off, sessions revoked', { uid })
+    }
+
     logger.info('claims synced', { uid, role: after.role, branchId: after.branchId })
   } catch (error) {
     // A staff document can exist before its auth account does (or in tests).
