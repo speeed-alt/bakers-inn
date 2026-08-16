@@ -30,6 +30,7 @@ import { buildDailyReport, carryoverFrom } from '../src/lib/dailyReport.js'
 import { closingDocId, productionDocId, reportDocId, reportRef } from '../src/lib/ids.js'
 import { businessDateOf, previousDate } from '../src/lib/dates.js'
 import { HUB_BRANCH_ID } from '../src/config.js'
+import { onlyForMode } from '../src/lib/practice.js'
 
 
 const { projectId } = initAdmin()
@@ -63,7 +64,14 @@ async function buildFor(branchId) {
     branchId,
     businessDate,
     ref: reportRef(businessDate, branchId),
-    sales: salesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    // Real sales only. This query matches on branch and date, both of
+    // which a practice sale carries — so without the filter a training
+    // session would be totalled into the shop's real daily report, and
+    // from there into the P&L and the next order suggestion.
+    sales: onlyForMode(
+      salesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+      'sales',
+    ),
     closing: closingSnap.data(),
     transfersIn: transfersSnap.docs.map((d) => d.data()).filter((t) => t.direction !== 'return'),
     production: productionSnap.exists ? productionSnap.data() : null,

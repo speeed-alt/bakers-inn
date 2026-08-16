@@ -10,7 +10,9 @@ globalThis.localStorage = {
 }
 
 const { businessDateOf, previousDate } = await import('../src/lib/dates.js')
-const { isPractising, practiceStamp, visibleInMode } = await import('../src/lib/practice.js')
+const { isPractising, onlyForMode, practiceStamp, visibleInMode } = await import(
+  '../src/lib/practice.js'
+)
 const { closingDocId, demandDocId, productionDocId, rateDocId, transferDocId } = await import(
   '../src/lib/ids.js'
 )
@@ -98,6 +100,47 @@ test('a fault thrown while practising is still a real fault', () => {
   // in real code, and stamping it would hide it from the owner for good.
   assert.equal(visibleInMode(real, 'clientErrors', true), true)
   assert.equal(visibleInMode(real, 'clientErrors', false), true)
+})
+
+// --- the server side, which does not pass through useSnapshot --------------
+
+test('the morning compile never bakes a trainee’s order', () => {
+  // The hole this closes. The 05:00 job reads every demand for the date, and a
+  // practice order carries the same businessDate as a real one — so without
+  // this the kitchen would have been handed a list built partly from an order
+  // somebody sent while being taught how to send one.
+  const demands = [
+    { id: 'D-20260814-B2', branchId: 'B2', status: 'submitted' },
+    { id: 'D-20260814-B2-P', branchId: 'B2', status: 'submitted', demo: true },
+  ]
+  const live = onlyForMode(demands, 'demands', false)
+  assert.deepEqual(live.map((d) => d.id), ['D-20260814-B2'])
+})
+
+test('a practice run builds from practice orders and nothing else', () => {
+  const demands = [
+    { id: 'D-20260814-B2', branchId: 'B2', status: 'submitted' },
+    { id: 'D-20260814-B2-P', branchId: 'B2', status: 'submitted', demo: true },
+  ]
+  const practice = onlyForMode(demands, 'demands', true)
+  assert.deepEqual(practice.map((d) => d.id), ['D-20260814-B2-P'])
+})
+
+test('a training session is never totalled into the real daily report', () => {
+  // Worse than the compile, because it is money: the report feeds the P&L and
+  // the next order suggestion, so practice sales would have inflated both.
+  const sales = [
+    { id: 'S-1', branchId: 'B2', total: 500 },
+    { id: 'S-2', branchId: 'B2', total: 99999, demo: true },
+  ]
+  const live = onlyForMode(sales, 'sales', false)
+  assert.equal(live.length, 1)
+  assert.equal(live[0].total, 500)
+})
+
+test('an empty list and a missing collection name do not throw', () => {
+  assert.deepEqual(onlyForMode([], 'sales', false), [])
+  assert.deepEqual(onlyForMode(undefined, 'sales', false), [])
 })
 
 // --- the natural keys ------------------------------------------------------

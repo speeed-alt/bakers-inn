@@ -27,6 +27,7 @@ import {
   transferRef,
 } from '../src/lib/ids.js'
 import { addDays, businessDateOf } from '../src/lib/dates.js'
+import { onlyForMode } from '../src/lib/practice.js'
 import { HISTORY_WEEKS } from '../src/config.js'
 
 
@@ -63,7 +64,14 @@ async function main() {
   ])
 
   const branches = branchesSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  const demands = demandsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  // Only the demands belonging to the mode this run is building for. A
+  // practice order carries the same businessDate as a real one, and this
+  // query matches on that field alone.
+  const demands = onlyForMode(
+    demandsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    'demands',
+    DEMO,
+  )
   const existing = existingSnap.exists ? { id: existingSnap.id, ...existingSnap.data() } : null
 
   const fallbacks = {}
@@ -137,7 +145,13 @@ async function main() {
     .where('businessDate', '==', targetDate)
     .get()
   const alreadyMoving = new Set(
-    existingTransfers.docs.filter((d) => d.data().status !== 'draft').map((d) => d.id),
+    onlyForMode(
+      existingTransfers.docs.map((d) => ({ id: d.id, ...d.data() })),
+      'transfers',
+      DEMO,
+    )
+      .filter((t) => t.status !== 'draft')
+      .map((t) => t.id),
   )
 
   for (const transfer of result.transfers) {

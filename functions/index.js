@@ -20,6 +20,7 @@ import {
   transferRef,
 } from './shared/lib/ids.js'
 import { addDays, previousDate } from './shared/lib/dates.js'
+import { onlyForMode } from './shared/lib/practice.js'
 import { COMPILE_HOUR, HISTORY_WEEKS, HUB_BRANCH_ID, TIME_ZONE } from './shared/config.js'
 
 // The one piece of server code in the system: every morning, add the outlets'
@@ -75,7 +76,13 @@ export async function runCompile(targetDate) {
   ])
 
   const branches = branchesSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  const demands = demandsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  // Real orders only. A practice tablet writes demands with the same
+  // businessDate, and this query matches on that field — so without the
+  // filter a trainee's order would be compiled into the real morning bake.
+  const demands = onlyForMode(
+    demandsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    'demands',
+  )
   const existing = existingSnap.exists ? { id: existingSnap.id, ...existingSnap.data() } : null
 
   // An outlet that missed the cutoff has last week repeated for it, so the
@@ -152,7 +159,12 @@ export async function runCompile(targetDate) {
     .where('businessDate', '==', targetDate)
     .get()
   const alreadyMoving = new Set(
-    existingTransfers.docs.filter((d) => d.data().status !== 'draft').map((d) => d.id),
+    onlyForMode(
+      existingTransfers.docs.map((d) => ({ id: d.id, ...d.data() })),
+      'transfers',
+    )
+      .filter((t) => t.status !== 'draft')
+      .map((t) => t.id),
   )
 
   for (const transfer of result.transfers) {
@@ -262,11 +274,19 @@ export async function buildReportFor(branchId, businessDate) {
     branchId,
     businessDate,
     ref: reportRef(businessDate, branchId),
-    sales: salesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    // Real sales only. This query matches on branch and date, both of
+    // which a practice sale carries — so without the filter a training
+    // session would be totalled into the shop's real daily report, and
+    // from there into the P&L and the next order suggestion.
+    sales: onlyForMode(
+      salesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+      'sales',
+    ),
     closing: closingSnap.data(),
-    transfersIn: transfersSnap.docs
-      .map((d) => d.data())
-      .filter((t) => t.direction !== 'return'),
+    transfersIn: onlyForMode(
+      transfersSnap.docs.map((d) => d.data()),
+      'transfers',
+    ).filter((t) => t.direction !== 'return'),
     production: productionSnap.exists ? productionSnap.data() : null,
     carriedIn: carryoverFrom(previousSnap.exists ? previousSnap.data() : null),
     products: productsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),

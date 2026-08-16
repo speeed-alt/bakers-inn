@@ -99,6 +99,35 @@ export function visibleInMode(record, collectionName, practising) {
 }
 
 /**
+ * The same split, for code running on a server rather than on a tablet.
+ *
+ * The tablets filter at `useSnapshot`, which every read in the app passes
+ * through. Nothing on the server passes through it: the scheduled compile, the
+ * report rebuild and the scripts all query Firestore directly with the Admin
+ * SDK, which bypasses the rules and knows nothing about modes.
+ *
+ * That was a hole straight through the middle of practice mode. The 05:00
+ * compile reads every demand for the date, so a trainee sending "tomorrow's
+ * order" from a practice tablet would have had it added into the real baking
+ * list, and the kitchen would have baked against an invented order. The report
+ * rebuild reads every sale for the day, so practice sales would have been
+ * totalled into the real daily report — and from there into the P&L and into
+ * the next order suggestion.
+ *
+ * Id-based reads were never affected: `closingDocId` and friends ask the
+ * tablet whether it is practising, and in Node the answer is always no, so they
+ * already fetch the real documents. It is only the list queries — the ones that
+ * match on a field rather than a name — that could pick up both.
+ *
+ * @param docs        plain objects read out of a query snapshot
+ * @param collection  which collection they came from
+ * @param practising  true only for a run deliberately building practice data
+ */
+export function onlyForMode(docs = [], collection, practising = false) {
+  return docs.filter((d) => visibleInMode(d, collection, practising))
+}
+
+/**
  * Switch this tablet into practice, or back to live.
  *
  * Both reload the page, deliberately. Every Firestore listener on screen was
