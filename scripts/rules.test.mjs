@@ -250,6 +250,114 @@ test('collections nobody declared are closed by default', async () => {
   await assertFails(setDoc(doc(as(OWNER), 'secretStuff', 'x'), { a: 1 }))
 })
 
+// --- making the baking list without waiting for 5am ------------------------
+//
+// This used to be `allow create: if false`, which meant a morning the job had
+// not run was a morning nobody in the building could do anything about. The
+// kitchen can now run the same compile from the app — so these tests exist to
+// keep that opening exactly as narrow as it was meant to be.
+
+const bakingList = (uid) => ({
+  businessDate: '2026-08-20',
+  ref: 'PO-0820',
+  status: 'open',
+  items: [{ productId: 'bread-small', qtyNeeded: 40, perOutlet: { MAIN: 40 } }],
+  compiledBy: uid,
+})
+
+test('the kitchen can make the day’s list when 5am did not', async () => {
+  await assertSucceeds(
+    setDoc(doc(as(SPECIALIST), 'productionOrders', 'PO-20260820'), bakingList(SPECIALIST)),
+  )
+})
+
+test('the owner can make it too', async () => {
+  await assertSucceeds(
+    setDoc(doc(as(OWNER), 'productionOrders', 'PO-20260821'), {
+      ...bakingList(OWNER),
+      businessDate: '2026-08-21',
+    }),
+  )
+})
+
+test('a cashier cannot decide what the bakery bakes', async () => {
+  await assertFails(
+    setDoc(doc(as(CASHIER_MAIN), 'productionOrders', 'PO-20260822'), bakingList(CASHIER_MAIN)),
+  )
+})
+
+test('a baking list cannot be signed with someone else’s name', async () => {
+  // Same reasoning as a void: the stamp is the only record that a list was
+  // built by hand rather than by the job, so it has to be true.
+  await assertFails(
+    setDoc(doc(as(SPECIALIST), 'productionOrders', 'PO-20260823'), bakingList(OWNER)),
+  )
+})
+
+test('a list still has to look like a list', async () => {
+  await assertFails(
+    setDoc(doc(as(SPECIALIST), 'productionOrders', 'PO-20260824'), {
+      businessDate: '2026-08-24',
+      items: 'lots of bread',
+      compiledBy: SPECIALIST,
+    }),
+  )
+})
+
+test('compiling closes the orders it was built from', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(ctx.firestore().doc('demands/D-20260820-B2'), {
+      branchId: 'B2',
+      businessDate: '2026-08-20',
+      status: 'submitted',
+      items: [{ productId: 'bread-small', qty: 40 }],
+    })
+  })
+  await assertSucceeds(
+    updateDoc(doc(as(SPECIALIST), 'demands', 'D-20260820-B2'), { status: 'locked' }),
+  )
+})
+
+test('but the kitchen cannot rewrite what an outlet asked for', async () => {
+  // Locking is part of compiling. Changing the order is not.
+  await assertFails(
+    updateDoc(doc(as(SPECIALIST), 'demands', 'D-20260820-B2'), {
+      status: 'locked',
+      items: [{ productId: 'bread-small', qty: 400 }],
+    }),
+  )
+})
+
+test('the delivery notes that come with the list start as drafts', async () => {
+  await assertSucceeds(
+    setDoc(doc(as(SPECIALIST), 'transfers', 'T-20260820-B2'), {
+      ref: 'T-0820-B2',
+      fromBranch: 'MAIN',
+      toBranchId: 'B2',
+      businessDate: '2026-08-20',
+      direction: 'out',
+      status: 'draft',
+      items: [],
+    }),
+  )
+})
+
+test('nobody can create a note that is already on its way', async () => {
+  // Dispatch is a deliberate act on the Dispatch screen, with somebody
+  // confirming what actually went in the van.
+  await assertFails(
+    setDoc(doc(as(SPECIALIST), 'transfers', 'T-20260820-B3'), {
+      ref: 'T-0820-B3',
+      fromBranch: 'MAIN',
+      toBranchId: 'B3',
+      businessDate: '2026-08-20',
+      direction: 'out',
+      status: 'dispatched',
+      items: [],
+    }),
+  )
+})
+
 // --- the stamp has to name whoever actually did it -------------------------
 //
 // There are no approval queues anywhere in this system: anyone may void a sale

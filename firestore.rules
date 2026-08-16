@@ -213,15 +213,45 @@ service cloud.firestore {
                         && resource.data.status != 'locked'
                         && request.resource.data.status in ['draft', 'submitted']);
 
+      // Locking is part of compiling, not a thing anyone does on its own: once
+      // the bake has been planned from an order, that order has to stop moving.
+      // So whoever may build the list may close the orders it was built from,
+      // and may change nothing else about them.
+      allow update: if active() && role() == 'specialist'
+                    && request.resource.data.status == 'locked'
+                    && changedOnly(['status']);
+
+      // An outlet that did not order at all gets last week's repeated for it,
+      // exactly as the scheduled job does. `auto` marks it as nobody's typing.
+      allow create: if active() && role() == 'specialist'
+                    && request.resource.data.status == 'locked'
+                    && request.resource.data.auto == true;
+
       allow delete: if false;
     }
 
     match /productionOrders/{orderId} {
       allow read: if staff();
 
-      // Nobody types the baking list. Only the scheduled compile writes it,
-      // and that runs with admin rights, outside these rules.
-      allow create: if false;
+      // Nobody *types* the baking list — it is still only ever added up from
+      // the outlets' own orders. But somebody in the building has to be able to
+      // ask for that addition to happen.
+      //
+      // This used to be `if false`, on the reasoning that the 05:00 job writes
+      // it with admin rights and nothing else should. The cost of that landed
+      // entirely on the kitchen: if the job had not run by 05:15 there was no
+      // list, no one on the premises could create one, and the documented
+      // remedy was to telephone the developer. A bakery cannot wait on a phone
+      // call to find out what to bake.
+      //
+      // So the owner or a specialist may run the same compile from the app.
+      // The arithmetic is `compileDemands` either way — the identical module
+      // the scheduled job uses through functions/shared — so a list built by
+      // hand at 05:15 is the list the job would have built at 05:00.
+      allow create: if (isOwner() || (active() && role() == 'specialist'))
+                    && request.resource.data.businessDate is string
+                    && request.resource.data.items is list
+                    && request.resource.data.compiledBy == request.auth.uid;
 
       // The kitchen adds how many came out of the oven — kept in its own map
       // precisely so this rule can name the fields it may touch. A rule cannot
@@ -256,6 +286,15 @@ service cloud.firestore {
                     && request.resource.data.direction == 'return'
                     && request.resource.data.fromBranch == myBranch()
                     && request.resource.data.status == 'dispatched'
+                    && request.resource.data.businessDate is string;
+
+      // The other exception: the delivery notes that come with a baking list
+      // compiled from the app rather than by the 05:00 job. They are created
+      // as drafts, which is the same state the job leaves them in — nothing is
+      // on its way until the hub presses send on Dispatch.
+      allow create: if (isOwner() || (active() && role() == 'specialist'))
+                    && request.resource.data.direction == 'out'
+                    && request.resource.data.status == 'draft'
                     && request.resource.data.businessDate is string;
 
       allow update: if isOwner()

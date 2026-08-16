@@ -58,6 +58,9 @@ export default function CloseDay({ branchId, isMain }) {
   const [step, setStep] = useState(1)
   const [countedText, setCountedText] = useState('')
   const [floatText, setFloatText] = useState('')
+  // Only used on a shop's very first close, when there is no yesterday to
+  // carry a float from and the figure has to be asked for.
+  const [openingText, setOpeningText] = useState('')
   const [counts, setCounts] = useState({})
   const [dispositions, setDispositions] = useState({})
   const [reasons, setReasons] = useState({})
@@ -133,7 +136,16 @@ export default function CloseDay({ branchId, isMain }) {
   }
 
   const counted = parseMoney(countedText)
-  const openingFloat = previous.data?.nextFloat ?? 0
+
+  // The first close a shop ever does has no yesterday to carry a float from.
+  //
+  // This was `?? 0`, which quietly claimed the drawer had started empty — so
+  // every outlet's very first close reported the whole float as a surplus, on
+  // the one day nobody yet trusts the system. Worse, a blank float carries
+  // forward: tomorrow starts from today's `nextFloat` and the error repeats
+  // until somebody notices. On a first close the figure is simply asked for.
+  const firstClose = !previous.loading && !previous.data
+  const openingFloat = firstClose ? (parseMoney(openingText) ?? 0) : (previous.data?.nextFloat ?? 0)
   const nextFloat = floatText.trim() === '' ? openingFloat : parseMoney(floatText)
   const expected = openingFloat + summary.cashTotal
   const difference = counted === null ? null : counted - expected
@@ -222,6 +234,9 @@ export default function CloseDay({ branchId, isMain }) {
           floatText={floatText}
           setFloatText={setFloatText}
           difference={difference}
+          firstClose={firstClose}
+          openingText={openingText}
+          setOpeningText={setOpeningText}
         />
       )}
 
@@ -302,9 +317,36 @@ export default function CloseDay({ branchId, isMain }) {
   )
 }
 
-function CashStep({ summary, openingFloat, expected, countedText, setCountedText, floatText, setFloatText, difference }) {
+function CashStep({ summary, openingFloat, expected, countedText, setCountedText, floatText, setFloatText, difference, firstClose, openingText, setOpeningText }) {
   return (
     <>
+      {firstClose && (
+        <div className="card">
+          <h3>What was in the drawer this morning</h3>
+          <p className="muted small">
+            This is the first close for this shop, so there is no yesterday to carry the float
+            from. Enter the cash that was in the drawer before the first customer — after tonight
+            it carries itself forward and you will not be asked again.
+          </p>
+          <div className="field">
+            <label>Opening float</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={openingText}
+              onChange={(e) => setOpeningText(e.target.value)}
+              placeholder="e.g. 5000"
+            />
+          </div>
+          {openingText.trim() === '' && (
+            <p className="muted small" style={{ marginBottom: 0 }}>
+              Left blank this counts as an empty drawer, and the whole float will read as a
+              surplus tonight.
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="card">
         <h3>What the system expects</h3>
         <table>

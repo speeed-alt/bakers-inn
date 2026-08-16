@@ -225,8 +225,8 @@ Owner-only.
 | any time | Owner | **Dashboard** |
 
 The two automatic steps are the only things that do not have a person behind
-them. If the 05:00 one has not run by 05:15, **there will be no baking list and
-nobody can create one by hand** — that is a stop-everything problem. See §7.
+them. If the 05:00 one has not run by 05:15, the kitchen makes the list itself
+from the Bake screen — same calculation, one tap. See §7.
 
 ---
 
@@ -304,13 +304,18 @@ numbers for years. Do not renumber them.
 
 ### There is no baking list at 05:15
 
-The worst one, and it stops the day. No client can create the baking list by
-hand — the database refuses it.
+**The kitchen fixes this itself now.** Open **Bake** and tap **Make the list
+now**. It adds up whatever the outlets sent last night — the identical
+calculation the 05:00 job runs, so it produces the list the job would have
+produced. Nobody types what to bake; it is still only ever the shops' own
+orders added up.
 
-- Check GitHub Actions, or Cloud Functions if they have been deployed.
-- The fix is to run the compile manually. Until Blaze billing is on, that is
-  `node scripts/compile-now.mjs` with a service-account key.
-- **This is a developer job.** The shops cannot work round it.
+If no outlet has ordered, it repeats each shop's last same weekday, and says so.
+If nothing at all can be found it says that too, and the shops need chasing.
+
+It is stamped with who pressed it, and it shows on the owner's dashboard —
+worth telling the developer afterwards, since a morning the job did not run is
+a fault, but it is no longer an emergency and nobody is waiting on a phone call.
 
 ### A cashier says nothing is saving
 

@@ -7,6 +7,7 @@ import { businessDateOf, formatDate } from '../lib/dates.js'
 import { extrasList, extrasTotal, productionProgress } from '../lib/compile.js'
 import {
   addExtra,
+  compileNow,
   markOrderDone,
   productionDoc,
   recordProduced,
@@ -38,22 +39,9 @@ export default function Bake() {
   }
 
   if (!order.data) {
-    const waiting = demands.data ?? []
     return (
       <div className="page">
-        <div className="card">
-          <h2>No baking list for {formatDate(today)} yet</h2>
-          <p className="muted">
-            The list is put together automatically at 5am from what the outlets ordered the evening
-            before. Nobody has to make it.
-          </p>
-          {waiting.length > 0 && (
-            <p className="muted small">
-              {waiting.filter((d) => d.status !== 'draft').length} of {waiting.length} outlet orders
-              are in so far.
-            </p>
-          )}
-        </div>
+        <MakeTheList today={today} demands={demands.data ?? []} user={profile} />
       </div>
     )
   }
@@ -191,6 +179,101 @@ export default function Bake() {
  * Anything added here shows up on the Dispatch screen, where whoever is loading
  * the van decides which outlet it goes to. Nobody rations it behind their back.
  */
+/**
+ * No list yet — and, now, something the kitchen can do about it.
+ *
+ * The 05:00 job is still the normal way this happens and nobody should have to
+ * think about it. But when it has not run, this screen used to be the end of
+ * the road: no list, no way to make one, and a handbook that said to telephone
+ * the developer. At quarter past five in the morning that is not a plan.
+ *
+ * The button runs the identical compile — `compileDemands`, the same module the
+ * scheduled job uses — so the list it produces is the list the job would have
+ * produced. It is not an override or a manual entry screen: nobody types what
+ * to bake, it is still only ever the outlets' own orders added up.
+ */
+function MakeTheList({ today, demands, user }) {
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState(null)
+  const [failed, setFailed] = useState(null)
+
+  const orders = demands.filter((d) => d.status !== 'draft')
+
+  async function build() {
+    setBusy(true)
+    setFailed(null)
+    try {
+      setResult(await compileNow({ businessDate: today, user }))
+    } catch (error) {
+      // Said out loud. A silent failure here reads as "the button does nothing",
+      // and the next thing that happens is somebody bakes from memory.
+      console.error('[bakery] manual compile failed', error)
+      setFailed(error?.message ?? 'It did not work.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (result?.items > 0) {
+    return (
+      <div className="card">
+        <h2>Baking list ready</h2>
+        <p className="muted">
+          {result.items} lines from {result.fromOutlets} outlet{' '}
+          {result.fromOutlets === 1 ? 'order' : 'orders'}
+          {result.transfers > 0 && `, and ${result.transfers} delivery notes on Dispatch`}.
+        </p>
+        {result.autoFilled?.length > 0 && (
+          <p className="muted small">
+            Repeated last week for: {result.autoFilled.join(', ')} — they had not ordered.
+          </p>
+        )}
+        <button className="btn primary" onClick={() => window.location.reload()}>
+          Open the list
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="card">
+      <h2>No baking list for {formatDate(today)} yet</h2>
+      <p className="muted">
+        The list is put together automatically at 5am from what the outlets ordered the evening
+        before, so most mornings it is simply here.
+      </p>
+
+      {orders.length > 0 ? (
+        <p className="muted small">
+          {orders.length} of {demands.length} outlet orders are in. You can add them up now rather
+          than waiting — it makes exactly the list 5am would have made.
+        </p>
+      ) : (
+        <p className="muted small">
+          No outlet has sent an order for today yet. Adding up now would repeat last week for all
+          three, which is worth doing only if you know they are not coming.
+        </p>
+      )}
+
+      <button className="btn primary big" disabled={busy} onClick={build}>
+        {busy ? 'Adding up the orders…' : 'Make the list now'}
+      </button>
+
+      {result?.items === 0 && (
+        <p className="small" style={{ fontWeight: 600 }}>
+          There is nothing to bake — no outlet has ordered today and none of them ordered on this
+          weekday recently either. Ask the shops to send their orders.
+        </p>
+      )}
+      {failed && (
+        <p className="small" style={{ fontWeight: 600 }}>
+          The list could not be made — {failed} Check the connection and try again.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function Extras({ order, today, user, products }) {
   const [productId, setProductId] = useState('')
   const [qty, setQty] = useState(1)

@@ -169,14 +169,18 @@ accepting the number on the note.
 
 ### If there is no list at 05:15
 
-**Phone whoever looks after the system.** Nobody in the building can create the
-baking list by hand — the system will not allow it. This is the one problem the
-kitchen cannot work around, and every minute counts.
+**Tap "Make the list now" on the Bake screen.** It adds up the orders the shops
+sent last night and gives you exactly the list 5am would have given you. Take
+thirty seconds to check it looks like a normal morning, then bake.
+
+Tell whoever looks after the system afterwards — a morning the list did not
+appear on its own is a fault worth fixing — but do not wait for them.
 
 ### The card for the kitchen
 
 > **The bake**
-> - The list is ready by 05:00. If it is not there by 05:15, **phone [name]**.
+> - The list is ready by 05:00. If it is not there by 05:15, tap **Make the list now** —
+>   then tell [name] afterwards.
 > - Record what actually came out, not what was asked for.
 > - Short is fine. Record it honestly and carry on.
 > - Extra trays go under **Also baked today**.
