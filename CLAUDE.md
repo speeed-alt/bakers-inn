@@ -93,7 +93,7 @@ so the customer can send money to it; there is no transaction-id field. Those
 account details are per outlet (`branch.payTo`), blank until the owner supplies
 them, and the till refuses the method while they are blank.
 
-**Two traps this cost real time to find, both worth remembering:**
+**Traps this cost real time to find, all worth remembering:**
 
 - A `writeBatch` is atomic, so one refused write fails all of them with
   "Missing or insufficient permissions" and no indication which. The compile
@@ -102,10 +102,58 @@ them, and the till refuses the method while they are blank.
   does exactly that.
 - Windows is case-insensitive. `Bakers-Inn-walkthrough.html` silently
   overwrote `bakers-inn-walkthrough.html`.
+- **Two browser tabs signed in as different people share one Firestore
+  connection.** `persistentMultipleTabManager` elects one tab to own the
+  network, and every read goes out under *that* tab's token. Testing two roles
+  side by side produced a flood of permission-denied errors on rules that were
+  perfectly correct, and the reported branch in the failure was the other tab's.
+  One tab per person. A real till is one tab, so this is a testing hazard rather
+  than a shop one — but it costs an hour if you do not know it.
+- Test fixtures for transfers must carry `fromBranch` and `businessDate`. The
+  rules refuse to create a note without a date, and every real note records
+  where it left from, so a fixture missing either is testing a document that
+  cannot exist — and it will fail the moment the code starts asking.
 
 Everything still outstanding is in [GOLIVE.md](GOLIVE.md), and none of it is
 code: the owner's real prices, his people and their PINs, the opening floats,
 the shop addresses and payment accounts, the tablets, and one full dry day.
+
+## How goods move, and which day they belong to
+
+This is the part that was broken in five separate places, so it is worth stating
+once, plainly.
+
+**Outbound follows the list; inbound follows the goods.** A delivery note is
+created by the compile and carries the business date of the *baking list* it
+came from. The hub dispatches a particular list and picks which one on the
+Dispatch screen. But anything *arriving* is looked for across yesterday, today
+and tomorrow — `arrivalDays` in `src/data/arrivals.js` — because a crate in the
+room does not care what is written on its paperwork, and there are three
+ordinary reasons the date will not be today:
+
+- the baker bakes tomorrow's bread tonight, so the note says tomorrow;
+- an outlet sends its leftovers back at closing, so the note says the day that
+  just ended, and the hub confirms it after 04:00 the next morning;
+- a delivery dispatched at 03:30 and not counted in by 04:00.
+
+**Stock arrives on the day somebody takes it in, not the day on the note.**
+`receiveTransfer` stamps `receivedOn`, and `receivedAt` counts a note against
+that day. Without it a shop that had taken in seventy-two items closed its day
+having received none. Notes written before the stamp existed fall back to their
+own date.
+
+**`hubStock` replaced `mainShare`.** The hub keeps what it made — including
+trays nobody ordered — less what is on a note, where a draft counts at what was
+asked for and a sent note at what actually went (`committedOut`). Scoped to the
+list's own day: what the hub kept out of Tuesday's bake is Tuesday's bake less
+Tuesday's notes. `mainShare` asked a different question, took a `dispatched`
+argument no caller passed, capped the hub at what it had ordered for itself, and
+knew nothing about extras.
+
+**Stock that moves between outlets is not new stock.** A return leaves the
+sending shop's shelf when the note is written, arrives on the hub's when it is
+confirmed, and the group's "had to sell" nets it off — otherwise the same twelve
+rusks are twenty-four for having spent an afternoon in a van.
 
 ## Traps that have already cost time
 
