@@ -337,6 +337,35 @@ two and expensive to unpick on day thirty.
 
 ---
 
+## From the full dry run, 2026-08-20
+
+A whole day was run from an empty database through the screens: three outlets
+ordering, a bake with a shortfall and a spare tray, two vans, a short delivery,
+sales by cash/card/weight/one-off, three closes, a return confirmed at the hub,
+and the owner's screens at the end. Fixed on the day: weighed goods (see the
+commit "Let the whole bakery count in kilograms"). These two are still open.
+
+**The owner's daily sheet cannot see a bake filed under tomorrow.** The
+dashboard feeds it `transfers` and `production` pinned to *today*, while a shop
+orders at closing for the next day — which is the normal path the Bake screen
+now steers towards. After a full night's work the sheet read Distribution Rs 0
+for all three outlets, Production "—", and "the kitchen has not made it yet".
+The money half was perfect (takings Rs 4,360, cash/card split correct). The
+stock report does **not** have this problem because it uses `arrivalDays()`, so
+two of the owner's own screens disagree about the same day. Deciding the fix
+means deciding what a line on his pad covers: the day's *clock*, or the day's
+*bake*. Worth asking him.
+
+**Money and goods can land on different business days.** `receivedOn` is
+stamped from the clock; the hub's own share comes from the bake's date. A
+delivery counted in before 04:00 on the day it was baked *for* splits one bake
+across two days — in the run, the shops booked their deliveries on the 19th
+while the hub's own 30 loaves stayed on the 20th, so Susan Road sold 5 loaves it
+had never "received". A normal morning delivery (van after 04:00) avoids it
+entirely; an overnight one does not. The stock report caught it and said so in
+plain words — "5 sold that never showed up as delivered" — which is the system
+behaving as designed, but the underlying split is still there.
+
 ## Still open, found 2026-08-19 and not yet fixed
 
 Every screen was audited and then driven by hand. The faults that would have
