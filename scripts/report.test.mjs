@@ -173,20 +173,12 @@ test('a card sale prints how it was paid and no cash lines', () => {
   assert.equal(r.changeGiven, null)
 })
 
-test('a wallet payment prints its name and its reference', () => {
+test('a wallet payment prints its name on the slip', () => {
   const r = receiptModel(
-    {
-      businessDate: '2026-08-14',
-      status: 'normal',
-      payment: 'jazzcash',
-      paymentRef: 'TID9931204',
-      total: 600,
-      items: [],
-    },
+    { businessDate: '2026-08-14', status: 'normal', payment: 'jazzcash', total: 600, items: [] },
     'Gulberg',
   )
   assert.equal(r.payment, 'JazzCash')
-  assert.equal(r.paymentRef, 'TID9931204')
 })
 
 test('a cash sale does not repeat the payment type it already shows', () => {

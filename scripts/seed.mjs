@@ -52,10 +52,15 @@ const auth = getAuth()
 // `address` and `phone` are printed on that shop's own receipts. Blank until
 // the owner gives them — the app falls back to the one in config.js, and they
 // can be filled in under Catalogue → Outlets without touching this file.
+//
+// `payTo` is what the till shows a customer who wants to pay by wallet or
+// transfer. Blank until the owner gives the real numbers — the till refuses
+// that payment method rather than showing an empty box.
+const noAccounts = { jazzcash: '', easypaisa: '', bank: '' }
 const BRANCHES = [
-  { id: 'MAIN', name: 'Susan Road', isMain: true, address: '', phone: '' },
-  { id: 'B2', name: 'Gulberg', isMain: false, address: '', phone: '' },
-  { id: 'B3', name: 'Gulistan Colony', isMain: false, address: '', phone: '' },
+  { id: 'MAIN', name: 'Susan Road', isMain: true, address: '', phone: '', payTo: { ...noAccounts } },
+  { id: 'B2', name: 'Gulberg', isMain: false, address: '', phone: '', payTo: { ...noAccounts } },
+  { id: 'B3', name: 'Gulistan Colony', isMain: false, address: '', phone: '', payTo: { ...noAccounts } },
 ]
 
 // `devPin` is a development convenience and nothing more. It is used only

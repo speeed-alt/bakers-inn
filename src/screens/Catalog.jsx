@@ -9,6 +9,7 @@ import { PRODUCT_CATEGORIES, ROLES } from '../config.js'
 import { archiveProduct, saveBranch, saveProduct, setUserActive } from '../data/catalog.js'
 import { changeStaffPin, createStaff, updateStaff } from '../data/staff.js'
 import { isValidPin } from '../lib/pin.js'
+import { PAYMENT_METHODS } from '../config.js'
 import { Empty, Loading, Modal, Money } from '../components/ui.jsx'
 
 const TABS = ['Products', 'People', 'Outlets']
@@ -730,13 +731,19 @@ function RenameOutlet({ branch, onClose }) {
   const [name, setName] = useState(branch.name ?? '')
   const [address, setAddress] = useState(branch.address ?? '')
   const [phone, setPhone] = useState(branch.phone ?? '')
+  const [payTo, setPayTo] = useState(() => ({ ...(branch.payTo ?? {}) }))
   const [busy, setBusy] = useState(false)
 
+  const wallets = PAYMENT_METHODS.filter((m) => m.account)
+  const payToChanged = wallets.some(
+    (m) => (payTo[m.id] ?? '').trim() !== (branch.payTo?.[m.id] ?? ''),
+  )
   const changed =
     name.trim() &&
     (name.trim() !== branch.name ||
       address.trim() !== (branch.address ?? '') ||
-      phone.trim() !== (branch.phone ?? ''))
+      phone.trim() !== (branch.phone ?? '') ||
+      payToChanged)
 
   return (
     <Modal title={branch.name} onClose={onClose}>
@@ -768,6 +775,31 @@ function RenameOutlet({ branch, onClose }) {
         />
       </div>
 
+      {/* Shown on the till when a customer chooses to pay this way, so they
+          can send the money. A wrong number here sends somebody's payment to a
+          stranger, which is why the till refuses the method entirely rather
+          than showing a blank. */}
+      <h3 style={{ marginTop: 18 }}>Where customers send money</h3>
+      <p className="muted small">
+        Shown on the till screen for this shop. Include the account name as well as the number, so
+        the customer can check it before sending.
+      </p>
+      {wallets.map((m) => (
+        <div className="field" key={m.id}>
+          <label>{m.label}</label>
+          <input
+            type="text"
+            value={payTo[m.id] ?? ''}
+            onChange={(e) => setPayTo((c) => ({ ...c, [m.id]: e.target.value }))}
+            placeholder={
+              m.id === 'bank'
+                ? 'e.g. Meezan Bank · Baker&apos;s Inn · PK00 MEZN 0001 2345 6789'
+                : "e.g. 0300-1234567 — Baker's Inn"
+            }
+          />
+        </div>
+      ))}
+
       <p className="muted small">
         The code <b className="mono">{branch.id}</b> does not change. It is printed on every receipt
         this shop has ever issued and cannot be altered without losing that history.
@@ -784,6 +816,9 @@ function RenameOutlet({ branch, onClose }) {
                 name: name.trim(),
                 address: address.trim(),
                 phone: phone.trim(),
+                payTo: Object.fromEntries(
+                  wallets.map((m) => [m.id, (payTo[m.id] ?? '').trim()]),
+                ),
               })
               onClose()
             } finally {

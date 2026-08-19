@@ -103,8 +103,12 @@ The main screen for a cashier, and the most-used screen in the business.
 - The total sticks to the bottom of the screen so it is always visible.
 - **Pay** asks how: cash, card, JazzCash, Easypaisa or bank transfer. For cash,
   type what the customer handed over and the change is worked out. For a wallet
-  or a transfer, type the transaction id the customer shows you — it is the only
-  thing that lets the money be matched against the account later.
+  or a transfer, **the till shows the shop's own account details** — turn the
+  screen round, the customer sends the money, then confirm it arrived.
+- Those details are set per shop under **Catalogue → Outlets**. Until they are
+  filled in, the till refuses that payment method rather than showing a blank
+  box — a cashier reciting an account number from memory is how a customer's
+  money reaches a stranger.
 - Only **cash** is counted against the drawer at closing. A JazzCash payment is
   real money and real takings, but it is not in the till, so it never makes the
   drawer read short.

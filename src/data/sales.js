@@ -39,7 +39,7 @@ export function salesForDay(branchId, businessDate) {
   )
 }
 
-export function recordSale({ branchId, cashier, lines, payment, cashGiven = null, paymentRef = '' }) {
+export function recordSale({ branchId, cashier, lines, payment, cashGiven = null }) {
   const businessDate = businessDateOf()
   const letter = deviceLetter()
   const seq = nextSaleSeq(businessDate)
@@ -56,10 +56,6 @@ export function recordSale({ branchId, cashier, lines, payment, cashGiven = null
     cashierName: cashier.name,
     device: letter,
     payment,
-    // The transaction id off the customer's phone, for the wallet and bank
-    // payments. Only written when there is one — an empty string on every cash
-    // sale is a field that means nothing on nine records out of ten.
-    ...(paymentRef ? { paymentRef } : {}),
     status: 'normal',
     items: lines.map((l) => ({
       productId: l.productId,
@@ -133,11 +129,10 @@ export function recordRefund({ original, cashier, payment }) {
 }
 
 /** One stamped tap to correct a mis-keyed payment type. */
-export function changePaymentType(sale, payment, user, paymentRef = '') {
+export function changePaymentType(sale, payment, user) {
   fireAndForget(
     updateDoc(doc(db, 'sales', sale.id), {
       payment,
-      ...(paymentRef ? { paymentRef } : {}),
       paymentChangedBy: user.id,
       paymentChangedAt: Timestamp.fromDate(new Date()),
     }),

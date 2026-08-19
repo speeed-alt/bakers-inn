@@ -1,4 +1,4 @@
-import { PAYMENT_METHODS } from '../config.js'
+import { PAYMENT_ACCOUNTS, PAYMENT_METHODS } from '../config.js'
 
 // How the customer paid.
 //
@@ -36,9 +36,26 @@ export function inDrawer(id) {
   return methodOf(id).drawer === true
 }
 
-/** The prompt for the transaction id, or null when the method needs none. */
-export function referenceLabel(id) {
-  return methodOf(id).reference ?? null
+/** Does the till have to show the customer where to send the money? */
+export function needsAccount(id) {
+  return methodOf(id).account === true
+}
+
+/**
+ * Where a customer sends money for this method, at this shop.
+ *
+ * The outlet's own details first, then the business-wide fallback. Per-outlet
+ * is worth having — a transfer that lands in Gulberg's account is a transfer
+ * you can attribute to Gulberg — but one account for the whole bakery is the
+ * normal arrangement and this handles both.
+ *
+ * Empty means nobody has filled it in. The till says so rather than showing a
+ * blank space beside an amount, because a customer staring at an empty screen
+ * asks the cashier for a number and the cashier recites one from memory.
+ */
+export function accountFor(id, branch = null) {
+  const own = branch?.payTo?.[id]
+  return (own && String(own).trim()) || String(PAYMENT_ACCOUNTS[id] ?? '').trim()
 }
 
 export function isKnownMethod(id) {

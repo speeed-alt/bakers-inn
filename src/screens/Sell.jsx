@@ -29,7 +29,7 @@ import {
 import { customLine, lastCustomPrice, rememberCustomPrice, validCustom } from '../lib/custom.js'
 import { Empty, Loading, Modal, Money, Stepper } from '../components/ui.jsx'
 import { PAYMENT_METHODS, QUICK_CASH_STEPS, VOID_REASONS } from '../config.js'
-import { inDrawer, labelOf, referenceLabel } from '../lib/payments.js'
+import { accountFor, inDrawer, labelOf, needsAccount } from '../lib/payments.js'
 import Receipt from '../components/Receipt.jsx'
 import { printReceipt } from '../lib/paper.js'
 
@@ -190,13 +190,12 @@ export default function Sell({ branchId, branch }) {
     entry.current?.focus()
   }
 
-  function takePayment(payment, cashGiven = null, paymentRef = '') {
+  function takePayment(payment, cashGiven = null) {
     const sale = recordSale({
       branchId,
       cashier: { id: profile.id, name: profile.name },
       lines,
       payment,
-      paymentRef,
       cashGiven,
     })
     setLines([])
@@ -421,7 +420,12 @@ export default function Sell({ branchId, branch }) {
       )}
 
       {paying && (
-        <PaymentModal total={total} onClose={() => setPaying(false)} onTake={takePayment} />
+        <PaymentModal
+          total={total}
+          branch={branch}
+          onClose={() => setPaying(false)}
+          onTake={takePayment}
+        />
       )}
 
       {receipt && (
@@ -450,8 +454,8 @@ export default function Sell({ branchId, branch }) {
             setVoidTarget(null)
             setReceipt(refund)
           }}
-          onRepay={(method, ref) => {
-            changePaymentType(voidTarget, method, { id: profile.id }, ref)
+          onRepay={(method) => {
+            changePaymentType(voidTarget, method, { id: profile.id })
             setVoidTarget(null)
           }}
         />
@@ -637,10 +641,9 @@ function RecentSales({ sales, onVoid, onReprint }) {
   )
 }
 
-function PaymentModal({ total, onClose, onTake }) {
+function PaymentModal({ total, branch, onClose, onTake }) {
   const [method, setMethod] = useState(null)
   const [givenText, setGivenText] = useState('')
-  const [reference, setReference] = useState('')
 
   // The bill rounded up to each note the customer is likely to hand over.
   // These are shortcuts that fill the box below — never the only way to pay.
@@ -677,37 +680,43 @@ function PaymentModal({ total, onClose, onTake }) {
     )
   }
 
-  // Everything that is not cash: a card terminal, or a wallet transfer the
-  // customer shows on their phone. No change to work out, so the only question
-  // is whether it actually arrived — and, where the method has a reference, the
-  // number that lets the owner match it against the statement tonight.
+  // Everything that is not cash. A card terminal needs nothing from this
+  // screen; a wallet or a bank transfer needs the opposite of what the till
+  // first asked for. The customer is not carrying a receipt to be typed in —
+  // they are standing there wanting to know where to send the money.
+  //
+  // So the till turns round and shows them. Large enough to read at arm's
+  // length across a counter, because that is the actual posture.
   if (!inDrawer(method)) {
-    const refLabel = referenceLabel(method)
+    const account = needsAccount(method) ? accountFor(method, branch) : null
+
     return (
       <Modal title={`${labelOf(method)} · ${formatMoney(total)}`} onClose={onClose}>
-        <p className="muted small">
-          {refLabel
-            ? `Take the payment, then type the ${refLabel.toLowerCase()} the customer shows you.`
-            : 'Run the card, then confirm here.'}
-        </p>
-
-        {refLabel && (
-          <div className="field">
-            <label>{refLabel} — optional, but it is what proves the money arrived</label>
-            <input
-              type="text"
-              autoFocus
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && onTake(method, null, reference.trim())}
-              placeholder="From the customer's phone"
-            />
-          </div>
+        {needsAccount(method) ? (
+          account ? (
+            <>
+              <p className="muted small">
+                Show this to the customer. They send {formatMoney(total)} to:
+              </p>
+              <div className="pay-to">{account}</div>
+            </>
+          ) : (
+            // Never a blank space beside an amount: a customer looking at an
+            // empty screen asks the cashier, and the cashier recites a number
+            // from memory.
+            <p className="small" style={{ fontWeight: 600 }}>
+              No {labelOf(method)} details have been set for this shop yet. Ask the owner to add
+              them under Catalogue → Outlets before taking payment this way.
+            </p>
+          )
+        ) : (
+          <p className="muted small">Run the card, then confirm here.</p>
         )}
 
         <button
           className="btn primary big block"
-          onClick={() => onTake(method, null, reference.trim())}
+          disabled={needsAccount(method) && !account}
+          onClick={() => onTake(method)}
         >
           {labelOf(method)} received
         </button>
@@ -768,9 +777,7 @@ function PaymentModal({ total, onClose, onTake }) {
 
 function VoidModal({ sale, onClose, onVoid, onRefund, onRepay }) {
   const [reason, setReason] = useState(null)
-  const [payRef, setPayRef] = useState('')
   const [newMethod, setNewMethod] = useState(null)
-  const refLabel = newMethod ? referenceLabel(newMethod) : null
 
   return (
     <Modal title={`Fix ${sale.ref}`} onClose={onClose}>
@@ -799,17 +806,7 @@ function VoidModal({ sale, onClose, onVoid, onRefund, onRepay }) {
           </button>
         ))}
       </div>
-      {refLabel && (
-        <div className="field">
-          <label>{refLabel}</label>
-          <input type="text" value={payRef} onChange={(e) => setPayRef(e.target.value)} />
-        </div>
-      )}
-      <button
-        className="btn block"
-        disabled={!newMethod}
-        onClick={() => onRepay(newMethod, payRef.trim())}
-      >
+      <button className="btn block" disabled={!newMethod} onClick={() => onRepay(newMethod)}>
         {newMethod ? `It was paid by ${labelOf(newMethod)}` : 'Pick how it was really paid'}
       </button>
 

@@ -450,6 +450,24 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .pindots i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border-strong); }
 .pindots i.on { background: var(--ink); border-color: var(--ink); }
 
+/* Where the customer sends the money.
+   Shown to somebody standing on the other side of the counter, often reading
+   it onto their own phone — so it is set large, spaced, and selectable rather
+   than styled to match the rest of the dialogue. */
+.pay-to {
+  font-size: clamp(19px, 4.5vw, 26px);
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  word-break: break-word;
+  user-select: all;
+}
+
 /* The daily register — the owner's pad, printed on a sheet.
    Ruled like the pad, and tight enough that a fortnight and eleven columns fit
    across A4 without anybody reaching for the scale in the print dialog. */

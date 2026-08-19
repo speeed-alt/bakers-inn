@@ -105,9 +105,6 @@ export function receiptModel(sale, branch) {
     // Shown whenever there is no cash line to imply it — which is now every
     // method except cash.
     payment: !inDrawer(sale.payment) && sale.status !== 'refund' ? labelOf(sale.payment) : null,
-    // The transaction id, on the customer's own copy. It is the only thing
-    // that lets either side prove the transfer later.
-    paymentRef: sale.paymentRef ?? null,
 
     // Under the figures, where it can be checked against them. A figure can be
     // altered with a pen; a line of words cannot.

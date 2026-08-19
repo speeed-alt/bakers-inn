@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { inDrawer, labelOf, methodOf, referenceLabel, splitByMethod } from '../src/lib/payments.js'
+import { accountFor, inDrawer, labelOf, methodOf, needsAccount, splitByMethod } from '../src/lib/payments.js'
 import { summariseDay } from '../src/lib/report.js'
 
 // One question decides everything downstream: is this money in the drawer
@@ -31,14 +31,32 @@ test('methods are named, not shown as stored ids', () => {
   assert.equal(labelOf('bank'), 'Bank transfer')
 })
 
-test('the wallets and the bank ask for a reference; cash and card do not', () => {
-  // A line reading "JazzCash Rs 5,000" with no transaction id cannot be
-  // matched against the account statement, so it proves nothing.
-  assert.equal(referenceLabel('jazzcash'), 'Transaction ID')
-  assert.equal(referenceLabel('easypaisa'), 'Transaction ID')
-  assert.equal(referenceLabel('bank'), 'Reference')
-  assert.equal(referenceLabel('cash'), null)
-  assert.equal(referenceLabel('card'), null)
+test('the wallets and the bank have to show the customer where to send it', () => {
+  // The customer is not carrying a receipt to be typed in — they want to know
+  // the number to send to. Cash and a card terminal need nothing shown.
+  assert.equal(needsAccount('jazzcash'), true)
+  assert.equal(needsAccount('easypaisa'), true)
+  assert.equal(needsAccount('bank'), true)
+  assert.equal(needsAccount('cash'), false)
+  assert.equal(needsAccount('card'), false)
+})
+
+test('a shop shows its own account before the business one', () => {
+  // A transfer that lands in Gulberg's account is one you can attribute to
+  // Gulberg, so an outlet with its own details uses them.
+  const gulberg = { payTo: { jazzcash: '0300-1111111 — Gulberg' } }
+  assert.equal(accountFor('jazzcash', gulberg), '0300-1111111 — Gulberg')
+})
+
+test('a shop with no details of its own falls back to the business account', () => {
+  assert.equal(accountFor('jazzcash', { payTo: {} }), accountFor('jazzcash', null))
+})
+
+test('blank details read as blank, so the till can refuse to take the payment', () => {
+  // Never a blank space beside an amount: the cashier would recite a number
+  // from memory, and a customer's money would go to a stranger.
+  assert.equal(accountFor('jazzcash', { payTo: { jazzcash: '   ' } }), accountFor('jazzcash', null))
+  assert.equal(typeof accountFor('bank', null), 'string')
 })
 
 // --- the day's split --------------------------------------------------------

@@ -19,7 +19,6 @@ export default function Receipt({ sale, branch, branchName }) {
   const totals = [
     { label: 'Total', value: r.total, grand: true },
     ...(r.payment ? [{ label: 'Paid by', value: r.payment }] : []),
-    ...(r.paymentRef ? [{ label: 'Ref', value: r.paymentRef }] : []),
     ...(r.cashGiven ? [{ label: 'Cash', value: r.cashGiven }] : []),
     ...(r.changeGiven ? [{ label: 'Change', value: r.changeGiven }] : []),
   ]

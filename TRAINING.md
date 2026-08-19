@@ -69,8 +69,9 @@ Then the payment:
 - **Cash** — type what the customer handed over. The change is on screen. Read
   it out loud; that is the habit that catches a mis-key.
 - **Card** — run it, then confirm.
-- **JazzCash, Easypaisa, bank** — take the payment, then type the transaction id
-  off the customer's phone. Without it nobody can prove later that it arrived.
+- **JazzCash, Easypaisa, bank** — the screen shows the shop's account. Turn the
+  tablet round so the customer can read it, wait until they say it is sent, then
+  confirm. Never read an account number out from memory.
 - **Print the receipt.**
 
 - **Something not on the list.** Type `coke`. Nothing matches — so tap **Sell

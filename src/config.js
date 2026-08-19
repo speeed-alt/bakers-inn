@@ -39,19 +39,34 @@ export const MINOR_UNITS = 10 ** CURRENCY_DECIMALS
 // Getting that wrong makes every drawer read short by the day's transfers, and
 // a cashier gets accused of it.
 //
-// `reference` asks the cashier for the transaction id the customer shows them.
-// Without it a line reading "JazzCash Rs 5,000" cannot be matched against the
-// account statement, and an evening's transfers are unverifiable.
+// `account` means the till has to show the customer where to send the money —
+// the shop's own JazzCash number, or its bank details. That is the whole
+// interaction: the cashier turns the screen round, the customer reads it off
+// and sends, and the cashier confirms it arrived.
 //
-// To add a method — another wallet, another bank — add a row. Nothing else in
-// the system needs to know about it.
+// To add a method — another wallet, another bank — add a row here and fill in
+// its details under Catalogue → Outlets. Nothing else needs to know about it.
 export const PAYMENT_METHODS = [
   { id: 'cash', label: 'Cash', drawer: true },
   { id: 'card', label: 'Card', drawer: false },
-  { id: 'jazzcash', label: 'JazzCash', drawer: false, reference: 'Transaction ID' },
-  { id: 'easypaisa', label: 'Easypaisa', drawer: false, reference: 'Transaction ID' },
-  { id: 'bank', label: 'Bank transfer', drawer: false, reference: 'Reference' },
+  { id: 'jazzcash', label: 'JazzCash', drawer: false, account: true },
+  { id: 'easypaisa', label: 'Easypaisa', drawer: false, account: true },
+  { id: 'bank', label: 'Bank transfer', drawer: false, account: true },
 ]
+
+// Where customers send money, when the shop has not set its own.
+//
+// Each outlet can carry its own — takings are far easier to reconcile when
+// every shop has its own number — but a single business account is normal, and
+// this is what every shop falls back to.
+//
+// CONFIRM WITH THE OWNER. These are blank on purpose: a wrong account number
+// on a till screen sends a customer's money to a stranger.
+export const PAYMENT_ACCOUNTS = {
+  jazzcash: '',
+  easypaisa: '',
+  bank: '',
+}
 
 // Sales rung before this hour count towards the previous business day, so a
 // late shift that runs past midnight lands on the right day's report.
