@@ -2,290 +2,164 @@
 
 Everything between "it is deployed" and "the bakery runs on it".
 
-The app is deployed at **https://bakers-inn-pk.web.app** and has never traded.
-This file is the list of what stands between that and a real first day, in the
-order it has to happen, because several steps destroy the work of later ones if
-run early.
+The app is deployed at **https://bakers-inn-pk.web.app** and has never traded a
+real day. This file is what stands between that and a first morning, in the
+order it has to happen — several steps destroy the work of later ones if run
+early.
 
-**"Deployed and tested" is not the same as "works", and this file said
-otherwise for eleven days.** It read "built, tested and deployed", and below it
-claimed the developer's work was finished and only the owner's steps remained.
-Both were false. The unit tests passed and the deploy succeeded while the chain
-from the oven to the shop's shelf was broken in six places at once — a delivery
-the receiving shop could not see, a return nobody could confirm on any day since
-the feature shipped, spare bread that dispatched as a quantity of zero, stock
-that vanished when it was sent back, a shop that could not close its day, and a
-Bake screen that promised delivery notes which did not exist. None of it was
-visible from a passing test suite, because each part was tested in the shape it
-was written, and every one of those failures lives *between* the parts or across
-the 04:00 date boundary.
-
-They were all found in a single afternoon by signing in as a baker, then as a
-cashier at Gulberg, and doing the day. That is the only test that counts here,
-and until 2026-08-19 nobody had run it.
-
-Realistically: **one phone call, one long session with the owner, and about two
-focused days of work.**
-
-Each step is marked **[owner]** or **[dev]**. Steps marked *destructive* touch
-live data with an admin key that bypasses every security rule — do not run one
-without step 4 done first.
+**Last updated 2026-08-20**, after a full simulated day was run through the
+screens from an empty database.
 
 ---
 
-> **Done on 2026-08-14:** Blaze is on, all five Cloud Functions are deployed
-> and verified, delete protection and point-in-time recovery are enabled
-> (7-day window), 1,900 demo records are cleared, and the kitchen can now
-> build the baking list itself. Steps 1–6 below are complete.
+## Where it stands
+
+**The developer's side is done, as far as anything can be proved without a real
+shop.** Blaze is on, five Cloud Functions are live in `asia-south1`, the rules
+and hosting are deployed, delete protection and 7-day point-in-time recovery are
+enabled, and the daily loop has been walked end to end across all three roles.
+350 logic tests, 76 rules tests, and a linter, all green in CI on every push.
+
+**What is left is the owner's data, one dry day, and two decisions.** None of it
+can be done from a keyboard here.
+
+> ### Read this before trusting anything below
 >
-> **Corrected on 2026-08-19.** This note used to end "what is left is steps 7
-> onward — and those are the owner's". That was wrong. The daily loop was
-> broken from the oven to the shelf, and the owner would have hit it on his
-> first morning. It has since been walked end to end across three roles against
-> the emulator, and the stock figures reconcile — but that is a seeded shop on
-> one machine, not his shop with his staff and his tablets. **Step 12, the dry
-> day, is not optional and is not a formality. It is the first time this system
-> will have been asked to do a day's work.**
-
-## The one thing that unblocks the most
-
-**Blaze billing has never been enabled on `bakers-inn-pk`, so `functions/` has
-never been deployed.** That single fact is the root of two of the five blockers
-and two of the risks below.
-
-`functions/index.js` already contains all five jobs, correctly written —
-including the timezone handling that the GitHub Actions substitute had to have
-patched into it by hand. The load for three outlets sits inside the free tier;
-Blaze is a card on file and a spending cap, not a bill.
-
-Cloud Functions cannot be deployed without it. This is not Firebase charging for
-them — it is that Cloud Build and Artifact Registry refuse to enable on the free
-plan, so a bakery that would sit inside the free quota forever is still blocked
-by a card.
+> For eleven days this file said "built, tested and deployed" and that only the
+> owner's steps remained. Both were false. The suite was green and the deploy
+> succeeded while the chain from the oven to the shelf was broken in six places
+> at once. Everything found since was found by *signing in as a person and doing
+> the day* — never by reading code and never by a passing test.
+>
+> **Step 5, the dry day, is not a formality at the end of a list. It is the
+> first time this system will be asked to do a day's work.**
 
 ---
 
-## What is actually broken
+## The short version
 
-Five things stop a real trading day. Four have been fixed in code as of
-2026-08-13; the fifth is the billing above. The fixes still have to be deployed
-and the database still has to be cleaned.
+| | What | Who | Rough |
+|---|---|---|---|
+| 1 | Clear the trial data now sitting in the live database | dev | 15 min |
+| 2 | The data session — prices, people, floats, accounts | owner + dev | 2–3 hrs |
+| 3 | Everyone picks their own PIN, and the owner's is rotated | owner | 40 min |
+| 4 | Set up each tablet at its counter | dev | 30 min each |
+| 5 | **One full dry day** | both | a day |
+| 6 | Train, hand out the counter cards | owner | 2 hrs |
+| 7 | Watch the first week | dev | daily |
 
-| | What | State |
-|---|---|---|
-| 1 | The 05:00 job had never run, and would have built **yesterday's** baking list when it did | fixed, needs the secret |
-| 2 | The live database is **demo data** — every figure on every screen is fiction | fixed the cleanup; still to run |
-| 3 | The **dev PINs are almost certainly live**. Owner is probably still `1111` | needs re-seeding |
-| 4 | Nobody the owner adds through the app can work, and nobody he removes is stopped | needs Blaze, or a script |
-| 5 | A cleared tablet minted a sale id that already existed — and the **new sale was the one destroyed** | fixed |
-
-### 1 · The morning jobs
-
-Two separate faults, same job.
-
-`FIREBASE_SERVICE_ACCOUNT` does not exist as a repository secret, so the
-workflow dies at its second step every morning. It **is** firing on schedule —
-run 31664009726 at 03:28 UTC on 2026-08-13 failed in 23 seconds with
-`FIREBASE_SERVICE_ACCOUNT is not set` — so the alarm has been going off daily
-since it was committed, into an inbox nobody reads. Paste the service-account
-JSON in as that secret and the step passes.
-
-And the cron fires at 00:00 UTC, which *is* 05:00 in Faisalabad — but both
-scripts fall back to `businessDateOf()`, which reads the **process** clock
-against the 04:00 rollover. On a UTC runner that instant is hour 0, under the
-rollover, so it handed back yesterday. The kitchen would have got yesterday's
-baking list every single morning, and the vans yesterday's delivery notes.
-
-Fixed by `TZ: Asia/Karachi` on the job, and covered by
-`scripts/dates.test.mjs` so it cannot come back quietly. `compile-now.mjs` now
-also exits non-zero when it produces no list, rather than painting a morning
-with no baking list green on GitHub and telling nobody.
-
-Deploying the real Cloud Functions makes all of this moot — they never had
-either fault.
-
-### 2 · The live database is demo data
-
-Measured against `bakers-inn-pk`: **1681 of 1682 sales**, and every one of the
-93 closings, 93 daily reports, 12 expenses, 8 purchases and 4 transfers, carry
-`demo: true`. Nothing in `src/` filters that flag.
-
-This is not cosmetic. `src/lib/suggest.js` builds tomorrow's baking quantities
-out of those invented closing reports — real flour and real money ordered
-against imaginary demand — and the P&L, the margin card and the days-left
-figures all read the same fiction.
-
-`scripts/demo-day.mjs --clear` did not finish the job either: it omitted
-`expenses` entirely, leaving around **Rs 346,000** of fabricated wages and bills
-in the owner's profit figure *after reporting success*, and the raw-material
-counts it writes carry no flag to find them by. Both fixed, plus the clear now
-prints what is **left** in every trading collection instead of only what it
-removed, and exits non-zero if anything is.
-
-### 3 · The PINs
-
-Production was seeded once, on 2026-08-04 — four days *before* the commit that
-made seeding a live project refuse to run without PINs from the environment. The
-seed committed at that time hardcoded `pin: '1111'` for the owner.
-
-There is no PIN-change screen anywhere in the app, and the Auth password is a
-hash of the PIN, so it cannot have been rotated from the console. `/users` is
-world-readable by design (the login screen lists staff before anyone signs in)
-and the Owner button appears on every outlet's tablet.
-
-**Do not test this to find out.** It has to be rotated either way, so the answer
-changes nothing. Step 9 rotates it.
-
-### 4 · Staff permissions
-
-Every security rule reads the **token**, not the `/users` document. The only
-thing that writes those custom claims is `syncStaffClaims`, which is undeployed,
-and the seed, which only knows five hardcoded ids.
-
-So "Add person" in Catalog creates a real, permanent, undeletable account that
-signs in perfectly and then has every write refused. Until 2026-08-13 that
-refusal went to `console.error` on a tablet nobody will ever open the console
-of, so a cashier got a printed receipt for a sale that never reached the server.
-It now reaches the owner's Faults card — but the underlying fault is still there
-until the claims sync runs.
-
-The mirror image is as bad: "Turn off" writes `active: false` to the document
-only, so a dismissed cashier's existing session keeps full write access at their
-branch until the token expires.
-
-### 5 · The sale id — fixed
-
-`saleDocId` was the till letter (defaulting to `'A'`) plus a `localStorage`
-counter. Each shop runs one till, so two tablets never collided in practice —
-but "Reset this tablet", or cleared browser data, restarts that counter at 1
-over ids that already exist, which needs no second tablet at all. The next write
-landed on an id that already existed. `setDoc` with no merge reads as an update,
-the rules allow only a void or a payment fix to change a sale, so it was
-refused — and Firestore rolled the **new** sale back out of the local cache.
-The earlier sale survived. The one just rung up vanished from the till's own
-list and from the close, with no message to anyone. Cash in the drawer, no
-record, and a drawer that read over at close with nothing to explain it.
-
-Sale ids now carry a per-install token that a storage wipe re-mints, which makes
-the collision structurally impossible. `scripts/ids.test.mjs` covers all three
-ways it used to happen.
+Two decisions are needed from the owner along the way: **which printer**, and
+**what a line on his daily pad covers**. Both are described under Open questions.
 
 ---
 
-## The order to do it in
+## 1 · [dev] Clear the trial data · 15 min · *destructive*
 
-### 1 · [owner] Enable Blaze, with a budget alert · 15 min
+**The live database is not empty.** Testing over the past fortnight has left
+real-looking records in `bakers-inn-pk`:
 
-On `bakers-inn-pk`. Set a spending cap — three outlets sit inside the free tier,
-so an alert that ever fires means something is wrong, not that the bakery grew.
+    sales             9   (five from 17 Aug flagged demo, four from 19 Aug NOT flagged)
+    closings          3   (two reopened, one flagged demo)
+    demands           2   (one locked for 20 Aug)
+    productionOrders  1   (PO-20260820, marked done)
+    dailyReports      2   (17 and 19 Aug)
+    purchases         1
+    expenses          1
+    products         45   (44 seeded plus one added while testing)
 
-Everything below assumes this is done. If it is refused, step 3 becomes about
-two hours of workaround instead of ten minutes, and the bakery depends on
-GitHub's free cron permanently.
+The four sales from 19 Aug and both closings from 19 Aug carry **no `demo`
+flag**, so `demo-day.mjs --clear` will not find them — it queries
+`where('demo', '==', true)` and nothing else. They have to go by hand, or the
+owner's very first dashboard shows **Rs 4,900** of takings that never happened
+and a bake that never came out of an oven.
 
-### 2 · [dev] Deploy the fixes · 5 min
-
-```bash
-npm test && npm run build && firebase deploy --only hosting --project bakers-inn-pk
-```
-
-### 3 · [dev] Deploy the server code · 10 min
-
-```bash
-firebase deploy --only functions --project bakers-inn-pk
-firebase functions:list --project bakers-inn-pk
-```
-
-Five functions should be listed. This kills the wrong-date compile, the
-wrong-date reports, the missing claims sync and the missing on-close report in
-one command. Then either delete `.github/workflows/daily.yml`, or keep it as a
-documented backup — it is correct now either way.
-
-*If Blaze was refused:* add the service-account JSON as a repository secret
-named `FIREBASE_SERVICE_ACCOUNT`, then write `scripts/set-claims.mjs` mirroring
-`functions/index.js` across all of `/users` and add it as a third step in the
-workflow, exposed on `workflow_dispatch` so a same-day hire can be made to work.
-
-### 4 · [dev] Turn on the safety net · 20 min
-
-**Before touching any data.** Steps 6 to 10 all run with an admin key that
-bypasses every security rule.
+The script does at least say so: it prints what is left with no flag to remove
+it by, and exits non-zero if anything is. Read that list rather than the
+"Removed N records" line above it.
 
 ```bash
-firebase firestore:databases:update "(default)" --delete-protection ENABLED --point-in-time-recovery ENABLED --project bakers-inn-pk
+SEED_PROJECT=bakers-inn-pk GOOGLE_APPLICATION_CREDENTIALS=…/key.json \
+  node scripts/demo-day.mjs --clear
 ```
 
-Then take a full read-only JSON dump of every collection to a local file. The
-recovery window on this database is currently **one hour**.
+Then delete what is left by hand and confirm every trading collection reads
+zero: `sales`, `closings`, `demands`, `productionOrders`, `transfers`,
+`dailyReports`, `purchases`, `expenses`, `stockMovements`, `dailyRates`.
+Check `products` is back to the real count and archive the stray one.
 
-### 5 · [dev] Deploy the rules and indexes · 2 min
+**Do not go past this step until every trading collection is empty.**
 
-```bash
-firebase deploy --only firestore:rules,firestore:indexes --project bakers-inn-pk
-```
+---
 
-### 6 · [dev] Clear the demo data · 1 hr · *destructive*
-
-```bash
-SEED_PROJECT=bakers-inn-pk GOOGLE_APPLICATION_CREDENTIALS=…/key.json node scripts/demo-day.mjs --clear
-```
-
-It now prints anything left behind with no `demo` flag to remove it by, and
-exits non-zero if there is any. Expect it to name a few: a sale and two demands
-written by hand while testing, and a product "Sweet Candy" (code 54) that would
-otherwise appear on all three tills — archive that one in Catalog.
-
-**Do not go past this step until it reports every collection empty.**
-
-### 7 · [owner + dev] The data session · 2–3 hrs
+## 2 · [owner + dev] The data session · 2–3 hrs
 
 Sit down together. Write it on paper first — it doubles as the owner's training.
 
-- ~~The three **real outlet names**.~~ Settled from his own sheet: **Susan
-  Road** (the hub), **Gulberg**, **Gulistan Colony**. Already in `seed.mjs`.
-  Confirm the mapping is right — Susan Road is `MAIN` because it keeps half the
-  bake rather than being delivered to.
-- Every **staff member**: real name, role (owner / cashier / specialist), outlet.
-- The **real selling price** for all 44 items. The seeded prices are
-  round-number guesses.
-- The **real cost per unit** for the 9 raw materials.
-- The **opening cash float** for each outlet.
-- Which items are **sold by weight**, and in what unit. No product currently has
-  this set.
-- Which items are **re-priced each morning** (eggs and bread were the example).
-- `sellsNextDay` per item — what is still sellable tomorrow versus what is stale
-  tonight. **This is currently a developer's guess** and it decides what gets
-  counted as waste every single night.
+- **Every staff member**: real name, role (owner / cashier / specialist), outlet.
+- **The real selling price for all 44 items.** The seeded prices are
+  round-number guesses and every figure in the system is built on them.
+- **`sellsNextDay` per item** — what is still sellable tomorrow versus what is
+  stale tonight. This is currently a developer's guess and it decides what gets
+  counted as waste every night.
+- **Which items are sold by weight**, and in what unit. Only Biscuits (code 35)
+  is set today. The whole system now counts these in the unit they are sold in,
+  so getting the list right matters.
+- **Which items are re-priced each morning** (eggs and bread were the example).
+- **The opening cash float** for each outlet.
+- **Each outlet's address and phone** — these print on every receipt.
+- **Each outlet's JazzCash / Easypaisa / bank details.** The till refuses those
+  methods until they are set, deliberately: a wrong account number on a till
+  sends a customer's money to a stranger.
+- **The real cost per unit** for the 9 raw materials, and the opening stock of
+  each. Until stock is entered the dashboard says so rather than pretending.
 
-### 8 · [owner] Everyone chooses their own PIN · 20 min
+Outlet names are already settled from the owner's own sheet: **Susan Road** (the
+hub), **Gulberg**, **Gulistan Colony**. Susan Road is `MAIN` because it keeps
+part of the bake rather than being delivered to.
 
-Privately, one person at a time, told only to whoever is doing step 9. Not four
-digits anyone at the counter could guess, and **not over WhatsApp**.
-
-A forgotten PIN is no longer a crisis: the owner sets a new one from
-Catalogue → People → Edit. Nobody can look an existing one up.
-
-### 9 · [dev] Re-seed with the real roster · 40 min · *destructive*
-
-Edit `BRANCHES` and `STAFF` in `scripts/seed.mjs`, then run with every `PIN_*`
-supplied in the environment — it refuses to touch a live project otherwise, and
-existing accounts are updated in place. This is what rotates the owner off
-`1111`.
-
-Then confirm every person's claims actually synced before anyone relies on it.
-
-### 10 · [owner + dev] Enter the catalogue through the app · 1–2 hrs
-
-Not through the seed. Prices, weighed items, daily rates, `sellsNextDay` — doing
-it in Catalog means every change is stamped, and the owner learns the screen
-while doing it.
+Enter the catalogue **through the app**, not the seed — every change is stamped,
+and the owner learns the screen while doing it.
 
 Then write **one closing document per outlet, dated the day before opening**,
-carrying that outlet's real float. Without it the float is zero, every outlet's
-first close reports a large unexplained surplus, and a blank field propagates
-forward.
+carrying that outlet's real float. Without it the float reads as zero and every
+outlet's first close reports a large unexplained surplus.
 
-### 11 · [dev] Set up each tablet · 30 min each
+---
+
+## 3 · [owner] PINs · 40 min
+
+Everyone chooses their own, privately, one person at a time, told only to
+whoever is doing the seeding. Not four digits anyone at the counter could guess,
+and **not over WhatsApp**.
+
+**The owner's PIN must be rotated.** Production was seeded on 2026-08-04, before
+the seed refused to run against a live project without PINs from the
+environment, and that seed hardcoded `1111`. It has never been changed. Do not
+test whether it still works — it has to be rotated either way.
+
+```bash
+PIN_OWNER=**** PIN_… SEED_PROJECT=bakers-inn-pk \
+  GOOGLE_APPLICATION_CREDENTIALS=…/key.json npm run seed
+```
+
+Edit `BRANCHES` and `STAFF` in `scripts/seed.mjs` first. Existing accounts are
+updated in place. Never put a real PIN in that file — git keeps every version
+for as long as the repository exists.
+
+Then confirm every person's claims synced, because the rules read the token and
+not the document:
+
+```bash
+SEED_PROJECT=bakers-inn-pk GOOGLE_APPLICATION_CREDENTIALS=…/key.json \
+  node scripts/check-claims.mjs
+```
+
+A forgotten PIN is no longer a crisis: Catalogue → People → Edit sets a new one.
+Nobody can look an existing one up.
+
+---
+
+## 4 · [dev] Set up each tablet · 30 min each
 
 On the wifi **at the counter**, not by the door:
 
@@ -296,123 +170,165 @@ On the wifi **at the counter**, not by the door:
 4. Sign in once, so the catalogue caches.
 5. **Turn the wifi off and ring a test sale.** A tablet that has never been
    online has an empty product list and cannot sell.
+6. Void that test sale, or clear it in step 1's sweep.
 
-If a shop ever gets a second till, give that one letter **B** at setup. Sale
-ids no longer depend on it being unique — they carry a per-install token — but
-the letter is what tells the two apart on a receipt.
+**One tablet, one person, one tab.** Two tabs signed in as different people
+share a single Firestore connection, and every read goes out under whichever tab
+owns it — which produces a flood of permission errors on rules that are
+perfectly correct. A real till is one tab; this is a hazard for whoever is
+testing, not for the shop.
 
-### 12 · [both] One full dry day · a day
+If a shop ever gets a second till, give it letter **B** at setup.
 
-The only step that proves the whole loop, and the one thing no amount of code
-reading substitutes for.
+---
 
-- **Evening:** submit tomorrow's order from each outlet through the close wizard.
-- **Next morning:** confirm the 05:00 job produced `PO-<today>` — *today's* date,
-  not yesterday's — that Bake shows the list, and that Dispatch shows delivery
-  notes for both shops.
-- Ring ten sales, void one, refund one, close the day.
-- Check the owner's dashboard, and the 06:00 report the following morning.
-- **Then delete every document the dry run created**, with the admin key.
+## 5 · [both] One full dry day
 
-### 13 · [owner] Train, and hand out one card per outlet · 2 hrs
+The only step that proves the loop, and the one thing no amount of code reading
+substitutes for. Run it exactly as a real day, with the paper pad going
+alongside, and **nothing depending on the result**.
+
+**The evening before**
+
+- Each outlet sends tomorrow's order — Stock tab, or step 3 of the close.
+
+**Overnight or first thing**
+
+- The baker opens **Bake** and presses *Make the list*. There is no scheduled
+  job any more: he chooses which day he is baking for, and the screen shows how
+  many orders are in for each. Tomorrow is the normal answer, because a shop
+  sends its order at closing time.
+- He records what actually came out of the oven, line by line. Deliberately
+  record one line **short** to see the shortfall appear on Dispatch.
+- Add a tray nobody ordered, so the extras path gets used.
+- Press *All recorded — send to Dispatch*.
+
+**The van**
+
+- On **Dispatch**, adjust the short line between the two shops by hand and send
+  both notes. Give some of the spare tray to one shop.
+- Each shop should see a banner and a count on its **Stock** tab.
+
+**At the shops**
+
+- Count the delivery in. Change one line so it does not match, and check it
+  demands a reason.
+- Ring ten sales: cash, card, something sold by weight, a one-off typed into the
+  search bar. **Void one. Refund one.**
+- Check the shelf figure on the Stock tab moves as things sell.
+
+**Closing**
+
+- Count the drawer. Put a deliberate error in on one till and check it reports
+  over or short.
+- Count the leftovers, send some back to the hub, order for tomorrow, close.
+- At the hub, confirm what came back on **Dispatch**.
+- Close the hub last.
+
+**The morning after**
+
+- The owner's **Dashboard** and **Stock** report — do the figures agree with the
+  paper pad? Print the register and check the fortnight.
+- Check the 06:00 report ran.
+
+**Then delete every document the dry run created**, with the admin key, and
+confirm the collections are empty again before the real first day.
+
+---
+
+## 6 · [owner] Train, and hand out one card per outlet · 2 hrs
 
 The four screens staff actually touch: Sell, Close Day, Bake, Dispatch. Use the
 words already on the shop's own printed sheet — Existing Stock, Addition Stock,
 Stale, Remaining Stock, Closing Sale — because the close wizard does.
 
+There is a **practice mode** for teaching on: a tablet wired to the real system
+where nothing counts. Everything it writes is stamped and hidden from every live
+figure, and it goes back to normal on its own the next day. The catalogue, the
+rates, Materials and Money are all locked while it is on, so a lesson cannot
+change a real price.
+
 One card at each counter:
 
-> - Never clear this tablet's data or storage. Never sign out.
+> - Never clear this tablet's data or storage. Never sign out mid-shift.
 > - If the app says it cannot start, tap **Try again** first, not Reset.
-> - If Bake is empty at 05:15, phone [dev].
-> - The day's takings are safe even with no internet. Do not re-ring a sale
->   because the screen looked slow.
-
-### 14 · [dev] Watch the first week
-
-Every morning, check the daily report against what each outlet says it took, and
-check the owner's Faults card. The first week is when a wrong price, a missing
-rate sheet or a mis-lettered till shows up, and all three are cheap to fix on day
-two and expensive to unpick on day thirty.
+> - If Bake is empty when you start, press *Make the list* — nothing is waiting
+>   on a clock.
+> - The day's takings are safe with no internet. Do not re-ring a sale because
+>   the screen looked slow.
+> - Do not sign out while the offline strip is showing. It will say so.
 
 ---
 
-## From the full dry run, 2026-08-20
+## 7 · [dev] Watch the first week
 
-A whole day was run from an empty database through the screens: three outlets
-ordering, a bake with a shortfall and a spare tray, two vans, a short delivery,
-sales by cash/card/weight/one-off, three closes, a return confirmed at the hub,
-and the owner's screens at the end. Fixed on the day: weighed goods (see the
-commit "Let the whole bakery count in kilograms"). These two are still open.
+Every morning: the daily report against what each outlet says it took, and the
+owner's Faults card. The first week is when a wrong price, a missing rate sheet
+or a mis-lettered till shows up, and all three are cheap to fix on day two and
+expensive to unpick on day thirty.
 
-**The owner's daily sheet cannot see a bake filed under tomorrow.** The
-dashboard feeds it `transfers` and `production` pinned to *today*, while a shop
-orders at closing for the next day — which is the normal path the Bake screen
-now steers towards. After a full night's work the sheet read Distribution Rs 0
-for all three outlets, Production "—", and "the kitchen has not made it yet".
-The money half was perfect (takings Rs 4,360, cash/card split correct). The
-stock report does **not** have this problem because it uses `arrivalDays()`, so
-two of the owner's own screens disagree about the same day. Deciding the fix
-means deciding what a line on his pad covers: the day's *clock*, or the day's
-*bake*. Worth asking him.
+---
 
-**Money and goods can land on different business days.** `receivedOn` is
-stamped from the clock; the hub's own share comes from the bake's date. A
-delivery counted in before 04:00 on the day it was baked *for* splits one bake
-across two days — in the run, the shops booked their deliveries on the 19th
-while the hub's own 30 loaves stayed on the 20th, so Susan Road sold 5 loaves it
-had never "received". A normal morning delivery (van after 04:00) avoids it
-entirely; an overnight one does not. The stock report caught it and said so in
-plain words — "5 sold that never showed up as delivered" — which is the system
-behaving as designed, but the underlying split is still there.
+## Open questions for the owner
 
-## Still open, found 2026-08-19 and not yet fixed
+**Which printer?** Printing is `window.print()` and the app is set to A5. Three
+options: a network printer Android can already see (works today, change
+nothing), an 80mm roll printer that speaks Android print, or a Bluetooth/USB
+thermal printer (needs new code). If the answer is 80mm, note that
+`@page { size: 80mm auto }` in `src/lib/paper.js` is invalid CSS and is silently
+dropped — it needs two lengths, e.g. `80mm 297mm` — and that the type sizes in
+`config.js`'s comment do not match the numbers the code applies. **Whichever is
+chosen, run fifty real receipts through it.**
 
-Every screen was audited and then driven by hand. The faults that would have
-stopped the shop working or lost money in week one are fixed. These are the
-rest — all real, all confirmed in the code, none of them likely to bite on the
-first morning. In rough order of how much they would cost.
+**What does a line on the daily pad cover — the day's clock, or the day's bake?**
+The dashboard's daily sheet reads today's transfers and today's production. A
+shop orders at closing for the next day, so a normal night's work is filed under
+tomorrow, and after a full bake the sheet showed Distribution Rs 0 and "the
+kitchen has not made it yet" while the money half was perfect. The stock report
+does not have this problem because it looks across three days, so two of his own
+screens currently disagree about the same day. Fixing it means deciding what the
+line means. Worth ten minutes with him and the pad.
+
+---
+
+## Still open, and known
+
+Confirmed defects, none of which stops a first day. In rough order of what they
+would cost.
 
 **Money**
 
 - **Only the last ten sales of the day can be corrected.** The till's recent
   list is capped at ten rows and the Fix button lives on those rows, so a
   mistake spotted after a busy hour cannot be voided, refunded or re-keyed
-  anywhere in the app. A Saturday morning passes ten sales quickly.
-- **A refund always goes back by the method the customer originally paid.**
-  A card sale refunded in cash is recorded as money returned to the card, so
-  the drawer count and the card statement both disagree with reality.
-- **Voids are stamped and never shown.** The system's stated bargain is that
-  nothing needs approval because everything is visible to the owner — but the
-  void reason and who did it appear on no screen. They are in the accountant
-  export only. A cashier can void a cash sale and pocket the notes, and the
-  count still balances.
-- **Money's "on course for" figure scales by days *traded*, not days elapsed.**
-  Going live mid-month projects a wildly high month until the month turns.
+  anywhere in the app.
+- **A refund always goes back by the method the customer originally paid.** A
+  card sale refunded in cash is recorded as money returned to the card, so the
+  drawer and the statement both disagree with reality.
+- **Voids are stamped and never shown.** The system's bargain is that nothing
+  needs approval because everything is visible to the owner — but the void
+  reason and who did it appear on no screen, only in the accountant export.
+- **Money's "on course for" scales by days *traded*, not days elapsed**, so
+  going live mid-month projects a wildly high month until the month turns.
 
 **Reports and paper**
 
 - **The printed register values past days at today's prices.** Raise a rate on
-  Thursday and Monday's production and distribution columns quietly go up,
-  while the sale figures stay historical, so the sheet stops adding up.
-- **`@page { size: 80mm auto }` is invalid CSS and is silently dropped.** It
-  only matters if `RECEIPT_PAPER` is switched to `'80mm'`, which is still `'a5'`
-  — but the moment somebody follows the thermal-printer note below, the page
-  size will not be set and nobody will know why. Use `80mm 297mm`.
-- **The "By outlet today" table labels a transaction count "Sales"** and shows
-  only cash and card columns, so wallet takings are missing from a row of
-  rupee figures.
+  Thursday and Monday's production and distribution columns quietly go up while
+  the sale figures stay historical, so the sheet stops adding up.
+- **Money and goods can land on different business days.** A delivery counted in
+  before 04:00 on the day it was baked *for* splits one bake across two days.
+  A normal morning van avoids it; an overnight one does not. The stock report
+  catches it and says so in plain words rather than hiding it.
 
 **Screens on a bad connection**
 
 - **The till ignores read errors.** Every other screen in the chain now says
-  when it could not read; the till still renders a refused or uncached read as
-  an ordinary empty day, and a day that was closed on another tablet can be
-  sold into.
+  when it could not read; the till renders a refused or uncached read as an
+  ordinary empty day, and a day closed on another tablet can be sold into.
 - **Materials and the catalogue show an empty list as "nothing here yet"** on a
-  cold cache, inviting the owner to add duplicates of things that already exist.
-- **The stale-sign-in check reports "fine" when it could not complete.** Offline
-  it cannot refresh the token, and the failure is treated as agreement.
+  cold cache, inviting duplicates of things that already exist.
+- **The stale-sign-in check reports "fine" when it could not complete.**
 
 **Catalogue**
 
@@ -421,11 +337,8 @@ first morning. In rough order of how much they would cost.
   `isMain` to false, which cannot be undone from inside the app.
 - **Merging prices twice loses the first merge's alternative names.**
 
-## Known and accepted
+**Accepted, not defects**
 
-Not blockers. Worth knowing before somebody reports one as a bug.
-
-- ~~No PIN reset.~~ Done 2026-08-14 — Catalogue → People → Edit sets a new one.
 - **A four-digit PIN with no lockout**, and the Owner button on every outlet's
   tablet. Worth dropping Owner from the outlet lists and adding a backoff.
 - **The order suggestion ignores stock already on the shelf.** It answers "how
@@ -433,18 +346,33 @@ Not blockers. Worth knowing before somebody reports one as a bug.
   that carry over it reads slightly high.
 - **Gross margin is business-wide, not per outlet.** Without recipes there is no
   honest way to split a sack of flour. The card says so on screen.
-- **There is no thermal-printer support.** Printing is `window.print()` and the
-  app is set up for A5. Options: a network printer Android can already see
-  (works today, change nothing), an 80mm roll printer that speaks Android print
-  (flip `RECEIPT_PAPER` in `src/config.js`), or a Bluetooth/USB thermal printer
-  (needs new code). Whichever is chosen, run fifty real receipts through it.
-- **The Flutter app in `mobile/` has no till, close, bake or dispatch** — every
-  screen it offers already exists in the web app, which is installable on the
-  owner's phone. It has four open defects and its tests have been red since
-  2026-08-12. Decide whether to keep it before spending anything on it.
-- **A late close cannot be finished through the wizard's Next button.** Once the
-  05:00 job locks today's demand there is no Send button to press, so the step-3
-  gate never satisfies. Tapping step 4 directly works.
-- **GitHub disables scheduled workflows after 60 days of repository
-  inactivity** — which is exactly what a finished handover looks like. Another
-  reason to be on real Cloud Functions.
+- **The Flutter app in `mobile/` has no till, close, bake or dispatch.** Every
+  screen it offers already exists in the web app, which installs on the owner's
+  phone. Four open defects, tests red since 2026-08-12. Decide whether to keep
+  it before spending anything on it.
+
+---
+
+## Already done
+
+Kept short, because none of it needs doing again.
+
+- **2026-08-14** — Blaze enabled; five Cloud Functions deployed and verified in
+  `asia-south1`; delete protection and 7-day point-in-time recovery on; 1,900
+  demo records cleared; the GitHub Actions cron deleted.
+- **The 05:00 job is gone.** The baker makes the list from the Bake screen and
+  chooses which day. A clock should not decide when a bakery starts work, and
+  the old job silently built *yesterday's* list on a UTC runner.
+- **Sale ids** carry a per-install token, so a cleared tablet can no longer mint
+  an id that already exists — which used to destroy the sale just rung up.
+- **Staff permissions** sync to the token automatically, and turning somebody
+  off revokes their session rather than leaving it live until the token expires.
+- **PIN reset** exists: Catalogue → People → Edit.
+- **The goods loop** — delivery visible to the shop it is for, returns
+  confirmable, extras dispatched at their real quantity, stock that comes back
+  landing on the hub's books, a shop able to close its day.
+- **Weighed goods** are counted in kilograms everywhere, not just on the till.
+- **The till** caps a line, warns when it sells past what the shop is thought to
+  have, and asks once before taking a bill that looks like a slipped finger.
+- **A linter** in CI catches undefined names, which the build never did — it has
+  caught three in one day, one of which had already shipped a blank till.
