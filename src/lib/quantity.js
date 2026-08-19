@@ -90,3 +90,23 @@ export function roundQuantity(qty, product) {
   if (!isWeighed(product)) return Math.round(n)
   return Number(n.toFixed(3))
 }
+
+/**
+ * The most one line may carry.
+ *
+ * The stepper's own default is 9,999, which for a counted item is silly and for
+ * a weighed one is nine and a half tonnes of biscuits — a single stuck `+` or a
+ * mistyped digit put Rs 13,998,600 on a bill, and from there into the day's
+ * takings, the daily report and the P&L. Nothing anywhere said a word.
+ *
+ * Generous rather than tight, because the till must never be the reason a real
+ * order cannot be rung: five hundred loaves for a wedding is a real morning,
+ * and so is fifty kilos of biscuits for a shop. What it stops is the order of
+ * magnitude that is never real.
+ */
+export function maxFor(product) {
+  return isWeighed(product) ? MAX_WEIGHED_UNITS : MAX_COUNTED_UNITS
+}
+
+export const MAX_COUNTED_UNITS = 999
+export const MAX_WEIGHED_UNITS = 100

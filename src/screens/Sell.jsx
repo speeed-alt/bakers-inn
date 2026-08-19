@@ -15,6 +15,11 @@ import {
   voidSale,
 } from '../data/sales.js'
 import { closingDoc } from '../data/closings.js'
+import { productionDoc } from '../data/production.js'
+import { transfersFrom } from '../data/transfers.js'
+import { useArrivals } from '../data/arrivals.js'
+import { stockAt } from '../lib/stock.js'
+import { oddLines } from '../lib/oddities.js'
 import { isClosed, tillBlocked } from '../lib/closing.js'
 import { priceOf, ratesNotSet, ratesOf } from '../lib/rates.js'
 import { lineNameFor, variantsOf } from '../lib/grouping.js'
@@ -22,6 +27,7 @@ import { rateDoc } from '../data/rates.js'
 import {
   formatQuantity,
   isWeighed,
+  maxFor,
   parseQuantity,
   roundQuantity,
   stepFor,
@@ -61,9 +67,23 @@ export default function Sell({ branchId, branch }) {
   const yesterdayClosing = useSnapshot(() => closingDoc(branchId, yesterday), [branchId, yesterday])
   const todayClosing = useSnapshot(() => closingDoc(branchId, today), [branchId, today])
 
+  // What the system believes is on the shelf, so a line can *say* when it is
+  // selling past it. Never to refuse a sale — the belief is worked out rather
+  // than counted, and it is wrong most often early in the morning, exactly when
+  // a shop is busiest. The inputs are the same ones the Stock tab and the
+  // owner's report use, so all three agree by construction rather than by luck.
+  //
+  // Every one of these is served from the tablet's own cache when the line is
+  // down, like the rest of the till.
+  const arrivals = useArrivals(branchId, today)
+  const production = useSnapshot(() => productionDoc(today), [today])
+  const sentOut = useSnapshot(() => transfersFrom(branchId, today), [branchId, today])
+
   const [text, setText] = useState('')
   const [lines, setLines] = useState([])
   const [paying, setPaying] = useState(false)
+  // Set when Pay was pressed on a bill with something odd on it.
+  const [checking, setChecking] = useState(false)
   const [receipt, setReceipt] = useState(null)
   const [voidTarget, setVoidTarget] = useState(null)
   // The name typed into the entry box when the cashier asked to sell it as a
@@ -92,6 +112,30 @@ export default function Sell({ branchId, branch }) {
 
   // Yesterday had takings but was never closed: that has to be fixed before a
   // new day's cash can be counted against the drawer.
+  // Product by product, from `stockAt`. Null until it can be worked out, which
+  // reads as "no opinion" downstream rather than as "none".
+  const onShelf = useMemo(() => {
+    if (products.loading || arrivals.loading || todaySales.loading) return null
+    const shelf = stockAt({
+      products: products.data ?? [],
+      branch: { id: branchId, name: branchName, isMain: branch?.isMain ?? false },
+      transfers: [...(arrivals.data ?? []), ...(sentOut.data ?? [])],
+      production: branch?.isMain ? production.data : null,
+      sales: todaySales.data ?? [],
+      previousClosing: yesterdayClosing.data,
+      businessDate: today,
+    })
+    return Object.fromEntries(shelf.lines.map((l) => [l.productId, l.expected]))
+  }, [
+    products.loading, products.data, arrivals.loading, arrivals.data, sentOut.data,
+    production.data, todaySales.loading, todaySales.data, yesterdayClosing.data,
+    branchId, branchName, branch, today,
+  ])
+
+  // What on this bill is worth a second look. Never blocks; asks once.
+  const odd = useMemo(() => oddLines(lines, { onShelf }), [lines, onShelf])
+  const oddOf = (productId) => odd.find((o) => o.productId === productId)
+
   // Which of today's sales already have a refund against them. `refundOf` was
   // being written and read by nothing; this is the read.
   const refundedRefs = new Set(
@@ -308,7 +352,7 @@ export default function Sell({ branchId, branch }) {
 
       <div className="till-body">
         <div className="till-left">
-          <Bill lines={lines} onQty={setQty} />
+          <Bill lines={lines} onQty={setQty} oddOf={oddOf} />
           <RecentSales sales={todaySales.data ?? []} onVoid={setVoidTarget} onReprint={setReceipt} />
         </div>
 
@@ -378,7 +422,12 @@ export default function Sell({ branchId, branch }) {
               <button
                 className="btn primary"
                 disabled={!lines.length}
-                onClick={() => setPaying(true)}
+                // Asked once, and only when something on the bill is worth
+                // asking about — a line past what the shop is thought to have,
+                // or one big enough that it is more likely a slipped finger
+                // than an order. On every ordinary bill this is a single tap,
+                // exactly as before.
+                onClick={() => (odd.length > 0 ? setChecking(true) : setPaying(true))}
               >
                 Pay
               </button>
@@ -424,6 +473,51 @@ export default function Sell({ branchId, branch }) {
             onClick={() => setPicking(null)}
           >
             Cancel
+          </button>
+        </Modal>
+      )}
+
+      {checking && (
+        <Modal title="Does this look right?" onClose={() => setChecking(false)}>
+          <p className="muted small">
+            Nothing is wrong with taking this — the shelf figure is worked out rather than counted,
+            so it is often behind. This is only here so a slipped finger does not become a day's
+            takings.
+          </p>
+          <div className="bill" style={{ margin: '12px 0' }}>
+            {odd.map((o) => (
+              <div className="bill-row" key={o.productId}>
+                <span></span>
+                <span className="bill-name">{o.name}</span>
+                <span className="small bad">{o.say}</span>
+                <span className="bill-amount">
+                  {formatMoney(
+                    lineTotal(lines.find((l) => l.productId === o.productId) ?? {}),
+                    { symbol: false },
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="total" style={{ marginBottom: 14 }}>
+            <span className="muted">Bill total</span>
+            <b>{formatMoney(total)}</b>
+          </div>
+          <button
+            className="btn primary big block"
+            onClick={() => {
+              setChecking(false)
+              setPaying(true)
+            }}
+          >
+            Yes — take {formatMoney(total)}
+          </button>
+          <button
+            className="btn ghost block"
+            style={{ marginTop: 12 }}
+            onClick={() => setChecking(false)}
+          >
+            Go back and fix it
           </button>
         </Modal>
       )}
@@ -561,7 +655,7 @@ function CustomModal({ initialName, onAdd, onClose }) {
   )
 }
 
-function Bill({ lines, onQty }) {
+function Bill({ lines, onQty, oddOf = () => null }) {
   return (
     <div className="bill">
       <div className="bill-row bill-head">
@@ -584,6 +678,14 @@ function Bill({ lines, onQty }) {
               {formatMoney(l.price, { symbol: false })} {l.soldByWeight ? `per ${l.unit}` : 'each'}
               {l.custom && ' · one-off'}
             </span>
+            {/* Said on the line itself, where the number that caused it is.
+                It never stops the sale: what is on the shelf is worked out,
+                not counted, so it is wrong most often first thing — and a till
+                that argues with a customer holding real bread is worse than
+                one whose figure is out. */}
+            {oddOf(l.productId) && (
+              <div className="small bad">{oddOf(l.productId).say}</div>
+            )}
           </span>
           {/* The line carries its own kind, so the stepper takes a quarter kilo
               at a time for biscuits and one at a time for loaves without the
@@ -593,6 +695,10 @@ function Bill({ lines, onQty }) {
             onChange={(q) => onQty(index, q)}
             label={`quantity of ${l.name}`}
             step={stepFor(l)}
+            // Not the stepper's own 9,999, which for a per-kilo line is nine
+            // and a half tonnes of biscuits — one stuck `+` away from putting
+            // Rs 13,998,600 into the day's takings.
+            max={maxFor(l)}
             parse={(raw) => parseQuantity(raw, l)}
             format={(n) => (l.soldByWeight ? String(Number(Number(n ?? 0).toFixed(3))) : String(Math.round(n ?? 0)))}
           />
