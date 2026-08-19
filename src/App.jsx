@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { doc } from 'firebase/firestore'
 import { db } from './firebase.js'
 import { clearDeviceBranchId, deviceBranchId, useAuth } from './auth.jsx'
@@ -176,6 +176,34 @@ export default function App() {
   const updateWaiting = useUpdateWaiting()
 
   const branch = useSnapshot(() => (branchId ? doc(db, 'branches', branchId) : null), [branchId])
+
+  // Whoever signs in lands on their own screen, not on the last person's.
+  //
+  // `Only` sends somebody home when a route is not theirs, which covers a
+  // cashier who finds herself on /dashboard. It does nothing at a shift change,
+  // because the owner is *allowed* on /sell, /stock and /close — so signing in
+  // after a cashier left the tablet on the close wizard put the owner straight
+  // into her half-finished close, on his own tablet, with no sign anything had
+  // changed but the name in the corner. Whatever he tapped next was recorded
+  // against him.
+  //
+  // Only on a change of who is signed in. A tablet that restarts — which they
+  // do, and offline — leaves the same person exactly where they were.
+  const navigate = useNavigate()
+  const signedInAs = useRef(undefined)
+  useEffect(() => {
+    if (loading) return
+    // Wait for the staff record before deciding where home is.
+    if (user && !profile) return
+    const who = user?.uid ?? null
+    if (signedInAs.current === undefined) {
+      signedInAs.current = who
+      return
+    }
+    if (signedInAs.current === who) return
+    signedInAs.current = who
+    if (who && profile) navigate(HOME[profile.role] ?? '/sell', { replace: true })
+  }, [loading, user, profile, navigate])
 
   // Somebody has to be watching for the van.
   //
