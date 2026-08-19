@@ -46,6 +46,7 @@ export default function Bake() {
   // baking for tomorrow; one that starts at five in the morning is baking for
   // today. Both are normal and the system should not have an opinion.
   const [bakeFor, setBakeFor] = useState(today)
+  const [dayChosen, setDayChosen] = useState(false)
 
   const order = useSnapshot(() => productionDoc(bakeFor), [bakeFor])
   const todayOrders = useSnapshot(() => demandsForDate(today), [today])
@@ -55,6 +56,30 @@ export default function Bake() {
   const [draft, setDraft] = useState({})
 
   const sent = (snap) => (snap.data ?? []).filter((d) => d.status !== 'draft')
+  const todaySent = sent(todayOrders)
+  const tomorrowSent = sent(tomorrowOrders)
+
+  /** The baker picks the day; this only decides which one he is shown first. */
+  const chooseDay = (date) => {
+    setDayChosen(true)
+    setBakeFor(date)
+  }
+
+  // Open on the day that actually has orders waiting.
+  //
+  // Shops send at closing time, filed under tomorrow. So on any evening the
+  // orders that have just arrived are tomorrow's, and opening on today would
+  // show "no orders" to a baker who watched three come in an hour ago. Only
+  // until he picks for himself — after that the choice is his.
+  //
+  // Decided here rather than in the child that shows the picker: this is where
+  // `bakeFor` lives, and setting a parent's state while a child renders is the
+  // one thing React genuinely objects to. It worked, and it warned, and a
+  // warning in a bakery's console is a warning nobody will ever read.
+  if (!dayChosen && todaySent.length === 0 && tomorrowSent.length > 0 && bakeFor !== tomorrow) {
+    setDayChosen(true)
+    setBakeFor(tomorrow)
+  }
 
   if (order.loading) {
     return <div className="page"><div className="card"><Loading>Reading the baking list…</Loading></div></div>
@@ -67,9 +92,9 @@ export default function Bake() {
           today={today}
           tomorrow={tomorrow}
           bakeFor={bakeFor}
-          setBakeFor={setBakeFor}
-          todaySent={sent(todayOrders)}
-          tomorrowSent={sent(tomorrowOrders)}
+          chooseDay={chooseDay}
+          todaySent={todaySent}
+          tomorrowSent={tomorrowSent}
           user={profile}
         />
       </div>
@@ -105,7 +130,7 @@ export default function Bake() {
         </p>
         <button
           className="btn ghost small"
-          onClick={() => setBakeFor(bakeFor === today ? tomorrow : today)}
+          onClick={() => chooseDay(bakeFor === today ? tomorrow : today)}
         >
           {bakeFor === today ? "Bake for tomorrow instead" : "Back to today's bake"}
         </button>
@@ -218,24 +243,12 @@ export default function Bake() {
  * own orders added up — just triggered by the person about to light the ovens.
  * It is not a manual entry screen: nobody types what to bake.
  */
-function MakeTheList({ today, tomorrow, bakeFor, setBakeFor, todaySent, tomorrowSent, user }) {
+function MakeTheList({ today, tomorrow, bakeFor, chooseDay, todaySent, tomorrowSent, user }) {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
   const [failed, setFailed] = useState(null)
-  const [chosen, setChosen] = useState(false)
 
   const orders = bakeFor === today ? todaySent : tomorrowSent
-
-  // Point at the day that actually has orders waiting.
-  //
-  // Shops send at closing time, filed under tomorrow. So on any evening the
-  // orders that have just arrived are tomorrow's, and defaulting to today
-  // would show "no orders" to a baker who watched three come in an hour ago.
-  // Only until he picks for himself — after that the choice is his.
-  if (!chosen && todaySent.length === 0 && tomorrowSent.length > 0 && bakeFor !== tomorrow) {
-    setChosen(true)
-    setBakeFor(tomorrow)
-  }
 
   async function build() {
     setBusy(true)
@@ -306,10 +319,7 @@ function MakeTheList({ today, tomorrow, bakeFor, setBakeFor, todaySent, tomorrow
             <button
               key={day.date}
               className={`chip ${bakeFor === day.date ? 'on' : ''}`}
-              onClick={() => {
-                setChosen(true)
-                setBakeFor(day.date)
-              }}
+              onClick={() => chooseDay(day.date)}
             >
               {day.label} · {formatDate(day.date)} · {day.sent.length} order
               {day.sent.length === 1 ? '' : 's'}

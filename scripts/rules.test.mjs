@@ -737,6 +737,46 @@ test('no part of the cycle can ever be deleted', async () => {
   await assertFails(deleteDoc(doc(as(OWNER), 'transfers', 'T-draft')))
 })
 
+// --- the reads a compile makes before it writes anything --------------------
+//
+// The batch was the obvious suspect and it was not the only one. `compileNow`
+// reads four things first, and one of them asked a question the rules do not
+// allow: "every transfer for this date", with no branch pinned. The owner has
+// a blanket list rule, so it passed every time it was tried as the owner — and
+// was refused for the baker, who is the person actually pressing the button.
+
+test('the kitchen can make every read a compile starts with', async () => {
+  const db = as(SPECIALIST)
+  await assertSucceeds(getDocs(collection(db, 'branches')))
+  await assertSucceeds(
+    getDocs(query(collection(db, 'demands'), where('businessDate', '==', '2026-08-20'))),
+  )
+  // Both of these are misses on purpose: no list has been built for that date
+  // and there is no order from a week ago to repeat. A rule that reaches into
+  // resource.data refuses a document that is not there, and the compile asks
+  // for both by name on a bakery with no history.
+  await assertSucceeds(getDoc(doc(db, 'productionOrders', 'PO-20260820')))
+  await assertSucceeds(getDoc(doc(db, 'demands', 'D-20260813-B3')))
+  await assertSucceeds(
+    getDocs(
+      query(
+        collection(db, 'transfers'),
+        where('fromBranch', '==', 'MAIN'),
+        where('businessDate', '==', '2026-08-20'),
+      ),
+    ),
+  )
+})
+
+test('the bare "every transfer today" query stays refused for the kitchen', async () => {
+  // Kept as a test rather than a note in a comment: the per-branch rule is
+  // deliberate, and whoever writes that query next should hear it from a red
+  // test rather than from a baker at four in the morning.
+  await assertFails(
+    getDocs(query(collection(as(SPECIALIST), 'transfers'), where('businessDate', '==', '2026-08-20'))),
+  )
+})
+
 // --- the whole compile, write by write, as the owner ------------------------
 //
 // `compileNow` sends every one of these in a single writeBatch, and a batch is

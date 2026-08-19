@@ -16,6 +16,7 @@ import { compileDemands } from '../lib/compile.js'
 import { addDays } from '../lib/dates.js'
 import { HISTORY_WEEKS } from '../config.js'
 import { practiceStamp } from '../lib/practice.js'
+import { transfersFrom } from './transfers.js'
 import {
   demandDocId,
   demandRef,
@@ -112,9 +113,14 @@ export function reopenOrder({ businessDate }) {
  * orders. Two implementations of "what should we bake" would eventually give
  * two answers, and the kitchen would be the last to find out.
  *
- * Safe to run twice, and safe to run after the job has already run: the list is
- * a natural key so a second compile lands on the same document, orders already
- * locked stay locked, and a delivery note already on its way is left alone.
+ * The list is a natural key, so a second compile lands on the same document
+ * rather than making another; orders already locked stay locked, and a delivery
+ * note already on its way is left alone. The Bake screen only offers this when
+ * there is no list for the day, which is just as well for the kitchen: the
+ * rules let a specialist *create* a list and then only touch the counts, so a
+ * baker recompiling over one that exists would be refused. That narrowness is
+ * deliberate — it is what stops a list being typed rather than added up — so
+ * only the owner can rebuild a list that is already there.
  *
  * Returns what it built, so the screen can say what happened rather than just
  * going quiet.
@@ -206,9 +212,18 @@ export async function compileNow({ businessDate, user }) {
   }
 
   // A note already dispatched is somebody's van. Never overwrite one.
-  const movingSnap = await getDocs(
-    query(collection(db, 'transfers'), where('businessDate', '==', businessDate)),
-  )
+  //
+  // Asked through `transfersFrom`, which pins the hub as well as the date, and
+  // not as a bare "every transfer today". Firestore rules are not filters: a
+  // query is refused outright unless its own constraints prove the read rule,
+  // and the transfer rules are written one branch at a time. So "every
+  // transfer today" is a question only the owner is allowed to ask — which is
+  // why this line worked every time it was tried as the owner, and refused the
+  // whole compile for the baker, who is the person actually pressing the
+  // button at four in the morning. Every note a compile could overwrite leaves
+  // the hub, so naming the hub costs nothing and asks a question the rules
+  // recognise.
+  const movingSnap = await getDocs(transfersFrom(result.mainId, businessDate))
   const moving = new Set(
     movingSnap.docs.filter((d) => d.data().status !== 'draft').map((d) => d.id),
   )

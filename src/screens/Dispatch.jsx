@@ -3,7 +3,7 @@ import { collection } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
 import { useAuth } from '../auth.jsx'
-import { businessDateOf, formatDate, formatTime } from '../lib/dates.js'
+import { businessDateOf, formatDate, formatTime, nextDate } from '../lib/dates.js'
 import { extrasList, shortfalls } from '../lib/compile.js'
 import { productionDoc } from '../data/production.js'
 import { dispatchTransfer, receiveTransfer, transfersFrom, transfersTo } from '../data/transfers.js'
@@ -20,19 +20,46 @@ import { Empty, Loading, Stepper } from '../components/ui.jsx'
 export default function Dispatch({ branchId }) {
   const { profile } = useAuth()
   const today = businessDateOf()
+  const tomorrow = nextDate(today)
 
-  const order = useSnapshot(() => productionDoc(today), [today])
-  const transfers = useSnapshot(() => transfersFrom(branchId, today), [branchId, today])
-  const inbound = useSnapshot(() => transfersTo(branchId, today), [branchId, today])
+  // Dispatch follows the bake, not the clock.
+  //
+  // The baker chooses which day he is baking for, because a shop's order sent
+  // at closing time is filed under tomorrow. A bakery that lights its ovens at
+  // eleven at night is making tomorrow's bread while the business date still
+  // says today — and the van it loads at midnight was carrying delivery notes
+  // this screen could not see until four in the morning. It said "the baking
+  // list has not been made yet" to somebody who had just finished making it.
+  //
+  // So it looks for today's list and falls back to tomorrow's, and only offers
+  // a choice when both exist. Nobody has to know which day a note is filed
+  // under; that is bookkeeping, and bookkeeping is the software's job.
+  const todayList = useSnapshot(() => productionDoc(today), [today])
+  const tomorrowList = useSnapshot(() => productionDoc(tomorrow), [tomorrow])
+  const [chosen, setChosen] = useState(null)
+
+  const bothDays = Boolean(todayList.data && tomorrowList.data)
+  const day = chosen ?? (todayList.data || !tomorrowList.data ? today : tomorrow)
+  const order = day === today ? todayList : tomorrowList
+
+  const transfers = useSnapshot(() => transfersFrom(branchId, day), [branchId, day])
+  const inbound = useSnapshot(() => transfersTo(branchId, day), [branchId, day])
   const branches = useSnapshot(() => collection(db, 'branches'), [])
+
+  /** Shown only when there is genuinely a choice to make. */
+  const dayToggle = bothDays ? (
+    <button className="btn ghost small" onClick={() => setChosen(day === today ? tomorrow : today)}>
+      {day === today ? "Send tomorrow's instead" : "Back to today's delivery"}
+    </button>
+  ) : null
 
   // branches is included here, not just order/transfers: without it, every
   // card headed by nameOf(...) below could briefly render a raw branch id
   // ("B2 — DN-0142") instead of a name while branches is still in flight —
   // on shop wifi that reads as a bug, not as a loading state, because a raw
   // id looks exactly like real data.
-  if (order.loading || transfers.loading || branches.loading) {
-    return <div className="page"><div className="card"><Loading>Reading today's delivery notes…</Loading></div></div>
+  if (todayList.loading || tomorrowList.loading || transfers.loading || branches.loading) {
+    return <div className="page"><div className="card"><Loading>Reading the delivery notes…</Loading></div></div>
   }
 
   const po = order.data
@@ -48,8 +75,8 @@ export default function Dispatch({ branchId }) {
         <div className="card">
           <h2>Nothing to send yet</h2>
           <p className="muted">
-            Today's baking list has not been made yet. The kitchen makes it from the outlets'
-            orders.
+            No baking list has been made for {formatDate(today)} or {formatDate(tomorrow)}. The
+            kitchen makes it from the outlets' orders.
           </p>
         </div>
       </div>
@@ -62,9 +89,10 @@ export default function Dispatch({ branchId }) {
         <div className="card">
           <h2>Still baking</h2>
           <p className="muted">
-            The delivery notes for {formatDate(today)} are ready and waiting, but the baking list is
+            The delivery notes for {formatDate(day)} are ready and waiting, but the baking list is
             not finished yet. Record the last lines on the Bake screen and they will open here.
           </p>
+          {dayToggle}
         </div>
       </div>
     )
@@ -76,6 +104,20 @@ export default function Dispatch({ branchId }) {
 
   return (
     <div className="page">
+      {/* Said out loud only when it is not the obvious answer. On a normal
+          morning the notes are today's and naming the day is noise; the moment
+          a van is loading tomorrow's bread at midnight it is the single most
+          important thing on the screen. */}
+      {(bothDays || day !== today) && (
+        <div className="card">
+          <h2>
+            Sending for {formatDate(day)}
+            {day !== today && <span className="muted"> · tomorrow</span>}
+          </h2>
+          {dayToggle}
+        </div>
+      )}
+
       {returns.map((transfer) => (
         <ReturnCard
           key={transfer.id}
@@ -87,7 +129,7 @@ export default function Dispatch({ branchId }) {
 
       {short.length > 0 && (
         <div className="card">
-          <h3>Short today</h3>
+          <h3>Short</h3>
           <p className="muted small">
             Less came out of the oven than the outlets asked for. Decide who gets what — the notes
             below still show what each outlet ordered.
@@ -110,7 +152,7 @@ export default function Dispatch({ branchId }) {
 
       {drafts.length === 0 && sent.length === 0 && (
         <div className="card">
-          <Empty>No deliveries needed today — no other outlet ordered anything.</Empty>
+          <Empty>No deliveries needed for {formatDate(day)} — no other outlet ordered anything.</Empty>
         </div>
       )}
 
