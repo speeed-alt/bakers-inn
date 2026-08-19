@@ -14,7 +14,8 @@ import {
   salesForDay,
   voidSale,
 } from '../data/sales.js'
-import { closingDoc, isClosed } from '../data/closings.js'
+import { closingDoc } from '../data/closings.js'
+import { isClosed, tillBlocked } from '../lib/closing.js'
 import { priceOf, ratesNotSet, ratesOf } from '../lib/rates.js'
 import { lineNameFor, variantsOf } from '../lib/grouping.js'
 import { rateDoc } from '../data/rates.js'
@@ -93,8 +94,10 @@ export default function Sell({ branchId, branch }) {
   // new day's cash can be counted against the drawer.
   const mustCloseYesterday =
     !yesterdayClosing.loading &&
-    !isClosed(yesterdayClosing.data) &&
-    (yesterdaySales.data?.length ?? 0) > 0
+    tillBlocked({
+      closing: yesterdayClosing.data,
+      salesYesterday: yesterdaySales.data?.length ?? 0,
+    })
 
   function addProduct(p, variant = null) {
     // Several names can share one id — five cakes at the same price are one

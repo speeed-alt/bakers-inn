@@ -69,7 +69,8 @@ export function useSnapshot(build, deps) {
       },
     )
     return unsubscribe
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // The dependency list is the caller's to get right: `build` is a closure
+  // rebuilt on every render, so listing it would resubscribe on each one.
   }, deps)
 
   return state

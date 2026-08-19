@@ -31,7 +31,7 @@ import { onlyForMode } from '../src/lib/practice.js'
 import { HISTORY_WEEKS } from '../src/config.js'
 
 
-const { projectId } = initAdmin()
+initAdmin()
 const db = getFirestore()
 
 const SUBMITTED = ['submitted', 'locked']

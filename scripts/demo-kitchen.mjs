@@ -12,13 +12,13 @@
 // screens exist for, and a demo where everything reconciles never shows them.
 
 import { initAdmin } from './admin.mjs'
-import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
+import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 
 import { businessDateOf } from '../src/lib/dates.js'
 import { productionDocId } from '../src/lib/ids.js'
 
 
-const { projectId } = initAdmin()
+initAdmin()
 const db = getFirestore()
 
 const TODAY = process.argv[2] || businessDateOf()

@@ -16,7 +16,7 @@
 import { initializeApp, applicationDefault } from 'firebase-admin/app'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 
-import { addDays, businessDateOf, compactDate, shortDate } from '../src/lib/dates.js'
+import { addDays, businessDateOf, compactDate } from '../src/lib/dates.js'
 import {
   closingDocId,
   demandDocId,
@@ -25,8 +25,6 @@ import {
   reportRef,
   saleDocId,
   saleRef,
-  transferDocId,
-  transferRef,
 } from '../src/lib/ids.js'
 
 // Defaults to the emulator, exactly as `seed.mjs` does.

@@ -18,6 +18,79 @@ const closed = (branchId, businessDate, salesTotal, extra = {}) => ({
   branchId, businessDate, salesTotal, status: 'closed', ...extra,
 })
 
+test('a material nobody has entered yet is not an emergency', () => {
+  // Day one: every material reads zero, so all six fired as "running out" and
+  // filled the whole section. Said once, and as the thing it actually is.
+  const materials = [
+    { id: 'flour', name: 'Flour', unit: 'kg', onHand: 0, reorderLevel: 50 },
+    { id: 'butter', name: 'Butter', unit: 'kg', onHand: 0, reorderLevel: 10 },
+  ]
+  const problems = findProblems({
+    today: '2026-08-19',
+    branches: [],
+    closings: [],
+    materials,
+    purchased: new Set(),
+  })
+  assert.equal(problems.length, 1)
+  assert.match(problems[0].what, /2 raw materials have no stock recorded/)
+  assert.match(problems[0].where, /Not the same as running out/)
+})
+
+test('a material that was bought and has since run down is still an emergency', () => {
+  const problems = findProblems({
+    today: '2026-08-19',
+    branches: [],
+    closings: [],
+    materials: [{ id: 'flour', name: 'Flour', unit: 'kg', onHand: 4, reorderLevel: 50 }],
+    purchased: new Set(['flour']),
+  })
+  assert.equal(problems.length, 1)
+  assert.match(problems[0].what, /Flour is running out/)
+})
+
+test('zero on hand after a purchase means it genuinely ran out', () => {
+  const problems = findProblems({
+    today: '2026-08-19',
+    branches: [],
+    closings: [],
+    materials: [{ id: 'flour', name: 'Flour', unit: 'kg', onHand: 0, reorderLevel: 50 }],
+    purchased: new Set(['flour']),
+  })
+  assert.match(problems[0].what, /Flour is running out/)
+})
+
+test('a shop that took nothing yesterday is not reported as blocked', () => {
+  // Day one, and every Monday after a Sunday closure. The warning used to fire
+  // on any outlet with no closing, so a system that had never traded announced
+  // three blocked tills — none of which were blocked. The till itself has
+  // always had the right rule; the dashboard was inventing its own.
+  const branches = [{ id: 'MAIN', name: 'Susan Road' }, { id: 'B2', name: 'Gulberg' }]
+  const quiet = findProblems({ today: '2026-08-19', branches, closings: [], yesterdaySales: [] })
+  assert.equal(quiet.filter((p) => p.what === 'Yesterday was never counted').length, 0)
+
+  // But a shop that did take money and never counted the drawer is still named.
+  const traded = findProblems({
+    today: '2026-08-19',
+    branches,
+    closings: [],
+    yesterdaySales: [{ branchId: 'B2', total: 400 }],
+  })
+  const named = traded.filter((p) => p.what === 'Yesterday was never counted')
+  assert.equal(named.length, 1)
+  assert.match(named[0].where, /Gulberg/)
+})
+
+test('a day that was counted and then reopened still blocks the till', () => {
+  const problems = findProblems({
+    today: '2026-08-19',
+    branches: [{ id: 'B2', name: 'Gulberg' }],
+    closings: [{ businessDate: '2026-08-18', branchId: 'B2', status: 'reopened' }],
+    yesterdaySales: [{ branchId: 'B2', total: 400 }],
+  })
+  assert.equal(problems.filter((p) => p.what === 'Yesterday was never counted').length, 1)
+})
+
 test('a reopened day is open again, everywhere', () => {
   assert.equal(isClosed(null), false)
   assert.equal(isClosed(undefined), false)
@@ -83,11 +156,13 @@ test('a reopened day today is flagged, with who and why', () => {
   assert.match(problems[0].where, /Closed by mistake/)
 })
 
-test('an outlet that never counted yesterday is flagged', () => {
+test('an outlet that took money yesterday and never counted it is flagged', () => {
+  // Both shops traded; only Susan Road counted its drawer.
   const problems = findProblems({
     today: TODAY,
     branches: BRANCHES,
     closings: [closed('MAIN', YESTERDAY, 100)],
+    yesterdaySales: [{ branchId: 'MAIN', total: 100 }, { branchId: 'B2', total: 400 }],
   })
   assert.equal(problems.length, 1)
   assert.match(problems[0].where, /Gulberg/)
@@ -98,6 +173,7 @@ test('a day reopened yesterday and left open still counts as uncounted', () => {
     today: TODAY,
     branches: [BRANCHES[1]],
     closings: [{ branchId: 'B2', businessDate: YESTERDAY, status: 'reopened' }],
+    yesterdaySales: [{ branchId: 'B2', total: 400 }],
   })
   assert.equal(problems.length, 1, 'a reopened yesterday is not a closed yesterday')
 })

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
-import { addDays, businessDateOf, formatDate, formatTime } from '../lib/dates.js'
+import { addDays, businessDateOf, formatDate, formatTime, previousDate } from '../lib/dates.js'
 import { formatMoney, parseMoney } from '../lib/money.js'
 import { useAuth } from '../auth.jsx'
 import { dailyRateProducts, ratesNotSet, ratesOf } from '../lib/rates.js'
@@ -51,6 +51,12 @@ export default function Dashboard() {
     () => query(collection(db, 'transfers'), where('businessDate', '==', today)),
     [today],
   )
+  // Yesterday's sales, so the "till is blocked" warning can be true rather than
+  // assumed. Owner-only, and the same unfiltered shape as today's above.
+  const yesterdaySales = useSnapshot(
+    () => query(collection(db, 'sales'), where('businessDate', '==', previousDate(today))),
+    [today],
+  )
   const order = useSnapshot(() => productionDoc(today), [today])
   const demands = useSnapshot(() => demandsForDate(today), [today])
   const reports = useSnapshot(
@@ -92,12 +98,18 @@ export default function Dashboard() {
         today,
         branches: branchList,
         closings: closings.data ?? [],
+        yesterdaySales: yesterdaySales.data ?? [],
         transfers: transfers.data ?? [],
         order: order.data,
         materials: materials.data ?? [],
+        // Everything ever bought, so a material sitting at zero because nobody
+        // has entered it yet is not reported as an emergency.
+        purchased: new Set(
+          (purchases.data ?? []).flatMap((p) => (p.items ?? []).map((i) => i.materialId)),
+        ),
         nameOf,
       }),
-    [today, branchList, closings.data, transfers.data, order.data, materials.data],
+    [today, branchList, closings.data, yesterdaySales.data, transfers.data, order.data, materials.data, purchases.data],
   )
 
   const best = week.filter((d) => d.total > 0)

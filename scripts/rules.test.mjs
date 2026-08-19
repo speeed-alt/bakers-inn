@@ -3,7 +3,6 @@
 //
 // Needs the emulators running: npm run emulators
 import test, { after, before } from 'node:test'
-import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'

@@ -33,7 +33,7 @@ import { HUB_BRANCH_ID } from '../src/config.js'
 import { onlyForMode } from '../src/lib/practice.js'
 
 
-const { projectId } = initAdmin()
+initAdmin()
 const db = getFirestore()
 
 const dateArg = process.argv.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a))

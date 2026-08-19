@@ -35,6 +35,13 @@ jobs:
 
       - run: npm ci
 
+      # Cheapest first, and it catches the one class of fault that has actually
+      # reached a screen: a name left dangling by an edited import. `npm run
+      # build` bundles happily around it and the screen is a blank error
+      # boundary. It happened to the till.
+      - name: Names that exist
+        run: npm run lint
+
       - name: The arithmetic
         run: npm test
 
