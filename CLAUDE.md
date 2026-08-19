@@ -15,12 +15,12 @@ person's role decides what they see.
 The daily cycle, which is the spine of the whole thing:
 
 ```
-1 Purchase → 2 Outlets order → 3 System compiles ONE baking list
+1 Purchase → 2 Outlets order → 3 Baker compiles ONE baking list
            → 4 Kitchen bakes → 5 Deliver out → 6 Close & report → repeat
 ```
 
-All five phases of PLAN.md are built and verified, deployed on Blaze with all
-five Cloud Functions live. What remains is mostly not code: the owner's real
+All five phases of PLAN.md are built and verified, deployed on Blaze with the
+Cloud Functions live. What remains is mostly not code: the owner's real
 prices and PINs, hardware, training, rollout. See [GOLIVE.md](GOLIVE.md).
 
 ## The owner's rules
@@ -46,8 +46,8 @@ These are commitments to a real, non-technical owner. They outrank your taste.
 npm run emulators   # syncs shared code, then auth + firestore + functions
 npm run seed        # outlets, staff, the real 44-item catalogue, materials
 npm run dev         # the app
-npm test            # 289 pure-logic tests, no emulator needed
-npm run test:rules  # 64 security-rules tests, emulator must be running
+npm test            # 308 pure-logic tests, no emulator needed
+npm run test:rules  # 70 security-rules tests, emulator must be running
 ```
 
 Both suites also run on every push — see `.github/workflows/test.yml`.
@@ -67,6 +67,45 @@ Dev PINs: Owner 1111, Ayesha 2222, Bilal 3333, Hina 4444, Usman 5555. These are
 from the environment (`PIN_OWNER`, `PIN_AYESHA`, …), because a PIN committed once
 stays readable in git history for as long as the repository exists. Never put a
 real PIN back into `scripts/seed.mjs`.
+
+## Where it stands (2026-08-19)
+
+Blaze is on. Five Cloud Functions deployed in `asia-south1` — `syncStaffClaims`,
+`reportOnClose`, the 06:00 `rebuildYesterdaysReports`, the owner-only callable
+`setStaffPin`, and the key-protected `compileNow`. Delete protection and point-in-time recovery are on; the recovery
+window is seven days. The GitHub Actions cron is deleted.
+
+**The 05:00 compile is gone.** The baker makes the list from the Bake screen,
+choosing which day he is baking for. That choice matters and is not cosmetic: a
+shop sends "tomorrow's order" at closing time and it is filed under *tomorrow's*
+business date, so the orders that just arrived are never today's. The schedule
+used to hide that alignment; without it the screen has to ask.
+
+**Production holds one user (the owner) and no trading records at all.** The
+demo data, the placeholder staff and the test sales were cleared on 2026-08-14.
+Outlets are named Susan Road / Gulberg / Gulistan Colony. 44 products, of which
+Biscuits (code 35) is the only one marked sold by weight.
+
+Payment methods live in `config.js` — cash, card, JazzCash, Easypaisa, bank.
+The field that matters is `drawer`: only cash is counted against the till at
+closing. For the wallets and the bank the till *shows* the shop's own account
+so the customer can send money to it; there is no transaction-id field. Those
+account details are per outlet (`branch.payTo`), blank until the owner supplies
+them, and the till refuses the method while they are blank.
+
+**Two traps this cost real time to find, both worth remembering:**
+
+- A `writeBatch` is atomic, so one refused write fails all of them with
+  "Missing or insufficient permissions" and no indication which. The compile
+  writes four different kinds of document; when it breaks, assert each write
+  separately as the role that actually makes it. `scripts/rules.test.mjs` now
+  does exactly that.
+- Windows is case-insensitive. `Bakers-Inn-walkthrough.html` silently
+  overwrote `bakers-inn-walkthrough.html`.
+
+Everything still outstanding is in [GOLIVE.md](GOLIVE.md), and none of it is
+code: the owner's real prices, his people and their PINs, the opening floats,
+the shop addresses and payment accounts, the tablets, and one full dry day.
 
 ## Traps that have already cost time
 
@@ -133,7 +172,7 @@ believing a screen.
 | `src/data/` | Firestore reads and writes, one file per record type. |
 | `src/screens/` | One file per screen. |
 | `src/components/` | Shared UI. `TomorrowsOrder` is used by both Stock and the close wizard — do not duplicate it. |
-| `functions/` | The only server code: `syncStaffClaims`, the 05:00 compile, `reportOnClose`, the 06:00 report rebuild, and `compileNow` for testing. |
+| `functions/` | Server code: `syncStaffClaims`, `reportOnClose`, the 06:00 report rebuild, `setStaffPin`, and `compileNow`. The 05:00 compile was removed — the baker makes the list. |
 | `firestore.rules` | The real permission system. The UI only hides buttons. |
 
 Three things added after the first deploy, each worth knowing about:
