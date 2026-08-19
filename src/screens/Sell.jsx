@@ -92,6 +92,12 @@ export default function Sell({ branchId, branch }) {
 
   // Yesterday had takings but was never closed: that has to be fixed before a
   // new day's cash can be counted against the drawer.
+  // Which of today's sales already have a refund against them. `refundOf` was
+  // being written and read by nothing; this is the read.
+  const refundedRefs = new Set(
+    (todaySales.data ?? []).filter((x) => x.refundOf).map((x) => x.refundOf),
+  )
+
   const mustCloseYesterday =
     !yesterdayClosing.loading &&
     tillBlocked({
@@ -444,6 +450,7 @@ export default function Sell({ branchId, branch }) {
       {voidTarget && (
         <VoidModal
           sale={voidTarget}
+          refunded={refundedRefs.has(voidTarget.ref)}
           onClose={() => setVoidTarget(null)}
           onVoid={(reason) => {
             voidSale(voidTarget, reason, { id: profile.id })
@@ -778,7 +785,7 @@ function PaymentModal({ total, branch, onClose, onTake }) {
   )
 }
 
-function VoidModal({ sale, onClose, onVoid, onRefund, onRepay }) {
+function VoidModal({ sale, onClose, onVoid, onRefund, onRepay, refunded = false }) {
   const [reason, setReason] = useState(null)
   const [newMethod, setNewMethod] = useState(null)
 
@@ -829,9 +836,23 @@ function VoidModal({ sale, onClose, onVoid, onRefund, onRepay }) {
 
       <hr style={{ margin: '20px 0', border: 0, borderTop: '1px solid var(--border)' }} />
 
-      <button className="btn block" onClick={onRefund}>
-        Refund instead ({formatMoney(sale.total)} back)
-      </button>
+      {/* A refund already given cannot be given again.
+          `refundOf` has been written on every refund since the feature
+          shipped and read by nothing, so the button stayed live: tapping Fix
+          twice — which is exactly what somebody does when they are not sure
+          the first one went through, since the write is never awaited — handed
+          the money back a second time and left the day's takings short by the
+          full amount, with two refund slips and no warning anywhere. */}
+      {refunded ? (
+        <p className="muted small" style={{ margin: 0 }}>
+          This sale has already been refunded. The refund is on today's list as its own slip —
+          nothing more to do here.
+        </p>
+      ) : (
+        <button className="btn block" onClick={onRefund}>
+          Refund instead ({formatMoney(sale.total)} back)
+        </button>
+      )}
 
       <button className="btn ghost block" style={{ marginTop: 12 }} onClick={onClose}>
         Cancel

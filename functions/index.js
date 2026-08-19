@@ -20,6 +20,7 @@ import {
   transferRef,
 } from './shared/lib/ids.js'
 import { addDays, previousDate } from './shared/lib/dates.js'
+import { arrivalDays } from './shared/lib/dispatch.js'
 import { isValidPin, pinPassword } from './shared/lib/pin.js'
 import { onlyForMode } from './shared/lib/practice.js'
 import { HISTORY_WEEKS, HUB_BRANCH_ID, TIME_ZONE } from './shared/config.js'
@@ -272,7 +273,15 @@ export const syncStaffClaims = onDocumentWritten('users/{uid}', async (event) =>
  * first version of the report would be missing them.
  */
 export async function buildReportFor(branchId, businessDate) {
-  const [closingSnap, salesSnap, transfersSnap, productionSnap, previousSnap, productsSnap] =
+  const [
+    closingSnap,
+    salesSnap,
+    transfersSnap,
+    outboundSnap,
+    productionSnap,
+    previousSnap,
+    productsSnap,
+  ] =
     await Promise.all([
       db.collection('closings').doc(closingDocId(businessDate, branchId)).get(),
       db
@@ -280,9 +289,20 @@ export async function buildReportFor(branchId, businessDate) {
         .where('branchId', '==', branchId)
         .where('businessDate', '==', businessDate)
         .get(),
+      // Inbound across the same three days the shops look at, because a note
+      // carries the day it was made *for*: a delivery baked for tomorrow and
+      // counted in tonight is stamped tomorrow. `receivedAt` then narrows it
+      // to what actually landed on this day, by `receivedOn`.
       db
         .collection('transfers')
         .where('toBranchId', '==', branchId)
+        .where('businessDate', 'in', arrivalDays(businessDate))
+        .get(),
+      // And what this outlet sent out, which only the hub has any of — what it
+      // kept is what it made less what it put on a note.
+      db
+        .collection('transfers')
+        .where('fromBranch', '==', branchId)
         .where('businessDate', '==', businessDate)
         .get(),
       db.collection('productionOrders').doc(productionDocId(businessDate)).get(),
@@ -308,10 +328,19 @@ export async function buildReportFor(branchId, businessDate) {
       'sales',
     ),
     closing: closingSnap.data(),
+    // Returns are no longer filtered out. `receivedAt` — which both this and
+    // the close wizard now use — already narrows to notes addressed to this
+    // outlet, so what is left of a return here is the hub taking crates off a
+    // van, which is an arrival. Dropping them made the permanent record
+    // disagree with the figures the cashier had just confirmed.
     transfersIn: onlyForMode(
       transfersSnap.docs.map((d) => d.data()),
       'transfers',
-    ).filter((t) => t.direction !== 'return'),
+    ),
+    transfersOut: onlyForMode(
+      outboundSnap.docs.map((d) => d.data()),
+      'transfers',
+    ),
     production: productionSnap.exists ? productionSnap.data() : null,
     carriedIn: carryoverFrom(previousSnap.exists ? previousSnap.data() : null),
     products: productsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),

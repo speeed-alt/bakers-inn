@@ -123,6 +123,8 @@ test('a shop’s day reconciles from delivery to shelf', () => {
     sales: [sale([{ productId: 'bread', name: 'Milk Bread', price: 220, qty: 17 }])],
     transfersIn: [
       {
+        toBranchId: 'B2',
+        businessDate: '2026-07-28',
         status: 'received',
         items: [{ productId: 'bread', qtySent: 20, qtyReceived: 20 }],
       },
@@ -155,7 +157,7 @@ test('a count that does not add up is reported, not hidden', () => {
     businessDate: '2026-07-28',
     products: PRODUCTS,
     sales: [sale([{ productId: 'bread', name: 'Milk Bread', price: 220, qty: 17 }])],
-    transfersIn: [{ status: 'received', items: [{ productId: 'bread', qtySent: 20, qtyReceived: 20 }] }],
+    transfersIn: [{ toBranchId: 'B2', businessDate: '2026-07-28', status: 'received', items: [{ productId: 'bread', qtySent: 20, qtyReceived: 20 }] }],
     // Only two binned, but three are unaccounted for.
     closing: { wasteItems: [{ productId: 'bread', qty: 2 }], carry: [], returns: [] },
   })
@@ -170,7 +172,7 @@ test('a short delivery is valued and never counted as the shop’s waste', () =>
     products: PRODUCTS,
     sales: [],
     transfersIn: [
-      { status: 'received', items: [{ productId: 'patty', qtySent: 11, qtyReceived: 9 }] },
+      { toBranchId: 'B2', businessDate: '2026-07-28', status: 'received', items: [{ productId: 'patty', qtySent: 11, qtyReceived: 9 }] },
     ],
     closing: { wasteItems: [], carry: [{ productId: 'patty', qty: 9 }], returns: [] },
   })
@@ -180,7 +182,10 @@ test('a short delivery is valued and never counted as the shop’s waste', () =>
   assert.equal(report.byProduct[0].received, 9, 'only what actually arrived')
 })
 
-test('the hub counts its own share of the bake, capped by what was made', () => {
+test('the hub counts what it made and did not put on a note', () => {
+  // The compile writes Gulberg's note in the same batch as the list, so its 8
+  // loaves are spoken for from the moment the list exists. Nobody ordered the
+  // patties, so all 14 that came out of the oven stay here.
   const report = buildDailyReport({
     branchId: 'MAIN',
     mainId: 'MAIN',
@@ -188,17 +193,27 @@ test('the hub counts its own share of the bake, capped by what was made', () => 
     products: PRODUCTS,
     sales: [],
     production: {
+      businessDate: '2026-07-28',
       items: [
         { productId: 'bread', perOutlet: { MAIN: 12, B2: 8 } },
         { productId: 'patty', perOutlet: { MAIN: 20 } },
       ],
       produced: { bread: 20, patty: 14 },
     },
+    transfersOut: [
+      {
+        fromBranch: 'MAIN',
+        toBranchId: 'B2',
+        businessDate: '2026-07-28',
+        status: 'draft',
+        items: [{ productId: 'bread', qtyDemanded: 8, qtySent: null }],
+      },
+    ],
     closing: { wasteItems: [], carry: [], returns: [] },
   })
   const rows = Object.fromEntries(report.byProduct.map((r) => [r.productId, r.received]))
-  assert.equal(rows.bread, 12, 'its own share')
-  assert.equal(rows.patty, 14, 'capped: only 14 were baked of the 20 it wanted')
+  assert.equal(rows.bread, 12, 'its own share, because Gulberg’s eight are on a note')
+  assert.equal(rows.patty, 14, 'only 14 came out of the oven of the 20 it wanted')
 })
 
 test('stock sent back to the hub is neither sold nor wasted', () => {
@@ -207,7 +222,7 @@ test('stock sent back to the hub is neither sold nor wasted', () => {
     businessDate: '2026-07-28',
     products: PRODUCTS,
     sales: [],
-    transfersIn: [{ status: 'received', items: [{ productId: 'rusk', qtySent: 6, qtyReceived: 6 }] }],
+    transfersIn: [{ toBranchId: 'B2', businessDate: '2026-07-28', status: 'received', items: [{ productId: 'rusk', qtySent: 6, qtyReceived: 6 }] }],
     closing: { wasteItems: [], carry: [], returns: [{ productId: 'rusk', qty: 6 }] },
   })
   const rusk = report.byProduct[0]
@@ -223,7 +238,7 @@ test('a delivery still on its way counts for nothing yet', () => {
     businessDate: '2026-07-28',
     products: PRODUCTS,
     sales: [],
-    transfersIn: [{ status: 'dispatched', items: [{ productId: 'bread', qtySent: 20 }] }],
+    transfersIn: [{ toBranchId: 'B2', businessDate: '2026-07-28', status: 'dispatched', items: [{ productId: 'bread', qtySent: 20 }] }],
     closing: { wasteItems: [], carry: [], returns: [] },
   })
   assert.equal(report.byProduct.length, 0, 'nothing arrived, nothing to report')

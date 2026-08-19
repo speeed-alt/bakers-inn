@@ -1,4 +1,5 @@
 import { summariseDay } from './report.js'
+import { receivedAt } from './stock.js'
 
 // One outlet's day, closed off into a single record.
 //
@@ -6,31 +7,36 @@ import { summariseDay } from './report.js'
 // produce byte-identical figures — a report the owner reads at night and a
 // screen the cashier saw at closing time must never disagree.
 
-/** Everything the outlet had to sell today, per product. */
-function receivedFor({ branchId, mainId, transfersIn = [], production = null }) {
-  const received = {}
-
-  // A shop receives a delivery; the hub keeps back its own share of the bake.
-  for (const transfer of transfersIn) {
-    if (transfer.status !== 'received') continue
-    for (const item of transfer.items ?? []) {
-      const qty = item.qtyReceived ?? item.qtySent ?? 0
-      received[item.productId] = (received[item.productId] ?? 0) + qty
-    }
-  }
-
-  if (branchId === mainId && production) {
-    const produced = production.produced ?? {}
-    for (const item of production.items ?? []) {
-      const share = item.perOutlet?.[branchId] ?? 0
-      if (!share) continue
-      // Never claim more than actually came out of the oven.
-      const madeHere = Math.min(share, produced[item.productId] ?? 0)
-      received[item.productId] = (received[item.productId] ?? 0) + madeHere
-    }
-  }
-
-  return received
+/**
+ * Everything the outlet had to sell today, per product.
+ *
+ * Through `receivedAt` — the same function the close wizard and the owner's
+ * stock screen use. It had its own copy, and the copy had been left behind:
+ * it still worked the hub's share out as "the part of the order MAIN placed
+ * for itself that actually got baked", which the rest of the system abandoned
+ * because it is wrong the moment a short bake is sent out in full. The cashier
+ * was shown one figure at closing time and this wrote a different one into the
+ * permanent record the owner reads afterwards — the exact disagreement this
+ * codebase keeps saying it will not have.
+ *
+ * Needs the hub's outbound notes as well as its inbound ones, because what the
+ * hub kept is what it made less what it put on a note.
+ */
+function receivedFor({
+  branchId,
+  mainId,
+  transfersIn = [],
+  transfersOut = [],
+  production = null,
+  businessDate = null,
+}) {
+  return receivedAt({
+    branchId,
+    isMain: branchId === mainId,
+    transfers: [...transfersIn, ...transfersOut],
+    production,
+    businessDate,
+  })
 }
 
 const toQtyMap = (rows = []) =>
@@ -43,6 +49,9 @@ export function buildDailyReport({
   sales = [],
   closing = null,
   transfersIn = [],
+  // The hub's outgoing notes. Only the hub has any, and without them what it
+  // kept back cannot be worked out.
+  transfersOut = [],
   production = null,
   carriedIn = {},
   products = [],
@@ -53,7 +62,7 @@ export function buildDailyReport({
   const nameOf = new Map(products.map((p) => [p.id, p.name]))
   const codeOf = new Map(products.map((p) => [p.id, p.code ?? '']))
 
-  const received = receivedFor({ branchId, mainId, transfersIn, production })
+  const received = receivedFor({ branchId, mainId, transfersIn, transfersOut, production, businessDate })
   const wasted = toQtyMap(closing?.wasteItems)
   const returned = toQtyMap(closing?.returns)
   const carried = toQtyMap(closing?.carry)

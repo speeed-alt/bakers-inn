@@ -2,6 +2,9 @@ import { useMemo } from 'react'
 import { useSnapshot } from '../lib/hooks.js'
 import { businessDateOf, nextDate, previousDate } from '../lib/dates.js'
 import { transfersTo } from './transfers.js'
+import { arrivalDays } from '../lib/dispatch.js'
+
+export { arrivalDays }
 
 /**
  * Goods that have turned up for this outlet and have not been dealt with yet.
@@ -33,9 +36,6 @@ import { transfersTo } from './transfers.js'
  * equality would need a composite index deployed before it would run at all.
  * Three equality listeners need nothing and cost a few kilobytes.
  */
-export function arrivalDays(today = businessDateOf()) {
-  return [previousDate(today), today, nextDate(today)]
-}
 
 /**
  * Every note addressed to this outlet across that window, oldest first.

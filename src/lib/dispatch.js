@@ -1,3 +1,5 @@
+import { businessDateOf, nextDate, previousDate } from './dates.js'
+
 // What a delivery note says after somebody has acted on it.
 //
 // Pure, and separate from the Firestore write, for the reason every other
@@ -80,4 +82,23 @@ export function committedOut(branchId, transfers = [], businessDate = null) {
     }
   }
   return out
+}
+
+/**
+ * The days a note that is still open could plausibly be filed under.
+ *
+ * A note carries the day it was made *for*, and there are three ordinary
+ * reasons that is not today: the baker bakes tomorrow's bread tonight; an
+ * outlet sends its leftovers back under the day that just ended and the hub
+ * confirms them after 04:00; a delivery dispatched at half past three is
+ * counted in at ten past four. Goods do not care what is written on their
+ * paperwork, so anything arriving is looked for across all three.
+ *
+ * Here rather than beside the React hook that uses it, because the scheduled
+ * report has to ask the same question, and two answers to "which days count"
+ * is how the owner's permanent record comes to disagree with the screen the
+ * cashier signed off.
+ */
+export function arrivalDays(today = businessDateOf()) {
+  return [previousDate(today), today, nextDate(today)]
 }
