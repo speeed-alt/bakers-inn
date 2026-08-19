@@ -67,7 +67,7 @@ export default function CloseDay({ branchId, isMain }) {
   // Whether tomorrow's order has actually been sent during this visit to the
   // wizard, not merely reached. Nothing else in the UI caught a cashier
   // clicking through step 3 without pressing Send — the kitchen would simply
-  // find no order at 5am, with no warning anywhere before then.
+  // find no order when it came to bake, with no warning anywhere before then.
   const [orderSent, setOrderSent] = useState(false)
 
   const summary = useMemo(() => summariseDay(sales.data ?? []), [sales.data])

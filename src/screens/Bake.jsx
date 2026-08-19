@@ -3,7 +3,7 @@ import { collection } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
 import { useAuth } from '../auth.jsx'
-import { businessDateOf, formatDate } from '../lib/dates.js'
+import { businessDateOf, formatDate, nextDate } from '../lib/dates.js'
 import { extrasList, extrasTotal, productionProgress } from '../lib/compile.js'
 import {
   addExtra,
@@ -27,21 +27,51 @@ import { Empty, Loading, Stepper } from '../components/ui.jsx'
 export default function Bake() {
   const { profile } = useAuth()
   const today = businessDateOf()
+  const tomorrow = nextDate(today)
 
-  const order = useSnapshot(() => productionDoc(today), [today])
-  const demands = useSnapshot(() => demandsForDate(today), [today])
+  // Which day is being baked for, which is not always today.
+  //
+  // A shop sends its order at closing time and files it under *tomorrow* —
+  // that is what "tomorrow's order" means, and it has always been so. While a
+  // 05:00 job existed that was invisible: the orders sent on Monday evening
+  // were compiled on Tuesday morning, when Tuesday was "today", and it lined
+  // up on its own.
+  //
+  // Taking the schedule away broke that quietly. The baker was left able to
+  // compile only today — and today's orders came in yesterday. An order sent
+  // an hour ago could not be reached at all, and the screen simply said no
+  // orders, which looks exactly like the send having failed.
+  //
+  // So the day is his to choose. A bakery that starts at eleven at night is
+  // baking for tomorrow; one that starts at five in the morning is baking for
+  // today. Both are normal and the system should not have an opinion.
+  const [bakeFor, setBakeFor] = useState(today)
+
+  const order = useSnapshot(() => productionDoc(bakeFor), [bakeFor])
+  const todayOrders = useSnapshot(() => demandsForDate(today), [today])
+  const tomorrowOrders = useSnapshot(() => demandsForDate(tomorrow), [tomorrow])
   const products = useSnapshot(() => collection(db, 'products'), [])
 
   const [draft, setDraft] = useState({})
 
+  const sent = (snap) => (snap.data ?? []).filter((d) => d.status !== 'draft')
+
   if (order.loading) {
-    return <div className="page"><div className="card"><Loading>Reading today's baking list…</Loading></div></div>
+    return <div className="page"><div className="card"><Loading>Reading the baking list…</Loading></div></div>
   }
 
   if (!order.data) {
     return (
       <div className="page">
-        <MakeTheList today={today} demands={demands.data ?? []} user={profile} />
+        <MakeTheList
+          today={today}
+          tomorrow={tomorrow}
+          bakeFor={bakeFor}
+          setBakeFor={setBakeFor}
+          todaySent={sent(todayOrders)}
+          tomorrowSent={sent(tomorrowOrders)}
+          user={profile}
+        />
       </div>
     )
   }
@@ -59,17 +89,26 @@ export default function Bake() {
     <div className="page">
       <div className="card">
         <div className="row between wrap">
-          <h2 style={{ margin: 0 }}>{po.ref} — {formatDate(po.businessDate)}</h2>
+          <h2 style={{ margin: 0 }}>
+            Baking for {formatDate(po.businessDate)}
+            {po.businessDate === tomorrow && <span className="muted small"> · tomorrow</span>}
+          </h2>
           <span className="muted small">
             {progress.linesRecorded} of {progress.lines} lines recorded
           </span>
         </div>
-        <p className="muted small" style={{ marginBottom: 0 }}>
-          Added up from {po.compiledFrom?.length ?? 0} outlet orders.
+        <p className="muted small">
+          {po.ref} · added up from {po.compiledFrom?.length ?? 0} outlet orders.
           {po.autoFilled?.length
-            ? ` ${po.autoFilled.join(', ')} missed the cutoff, so last week's order was used.`
+            ? ` ${po.autoFilled.join(', ')} did not order, so last week's was used.`
             : ''}
         </p>
+        <button
+          className="btn ghost small"
+          onClick={() => setBakeFor(bakeFor === today ? tomorrow : today)}
+        >
+          {bakeFor === today ? "Bake for tomorrow instead" : "Back to today's bake"}
+        </button>
       </div>
 
       <div className="bill">
@@ -101,7 +140,7 @@ export default function Bake() {
                   className={`btn small ${isDone ? 'ghost' : 'primary'}`}
                   onClick={() =>
                     recordProduced({
-                      businessDate: today,
+                      businessDate: bakeFor,
                       productId: item.productId,
                       qty: value,
                       user: profile,
@@ -119,7 +158,7 @@ export default function Bake() {
 
       <Extras
         order={po}
-        today={today}
+        today={bakeFor}
         user={profile}
         products={products.data ?? []}
       />
@@ -136,7 +175,7 @@ export default function Bake() {
               Marked finished by {po.doneByName}. The delivery notes are ready on the Dispatch
               screen.
             </p>
-            <button className="btn" onClick={() => reopenOrder({ businessDate: today })}>
+            <button className="btn" onClick={() => reopenOrder({ businessDate: bakeFor })}>
               Still baking — reopen
             </button>
           </>
@@ -154,7 +193,7 @@ export default function Bake() {
             <button
               className="btn primary big block"
               disabled={!progress.complete}
-              onClick={() => markOrderDone({ businessDate: today, user: profile })}
+              onClick={() => markOrderDone({ businessDate: bakeFor, user: profile })}
             >
               {progress.complete
                 ? 'All recorded — send to Dispatch'
@@ -179,22 +218,34 @@ export default function Bake() {
  * own orders added up — just triggered by the person about to light the ovens.
  * It is not a manual entry screen: nobody types what to bake.
  */
-function MakeTheList({ today, demands, user }) {
+function MakeTheList({ today, tomorrow, bakeFor, setBakeFor, todaySent, tomorrowSent, user }) {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
   const [failed, setFailed] = useState(null)
+  const [chosen, setChosen] = useState(false)
 
-  const orders = demands.filter((d) => d.status !== 'draft')
+  const orders = bakeFor === today ? todaySent : tomorrowSent
+
+  // Point at the day that actually has orders waiting.
+  //
+  // Shops send at closing time, filed under tomorrow. So on any evening the
+  // orders that have just arrived are tomorrow's, and defaulting to today
+  // would show "no orders" to a baker who watched three come in an hour ago.
+  // Only until he picks for himself — after that the choice is his.
+  if (!chosen && todaySent.length === 0 && tomorrowSent.length > 0 && bakeFor !== tomorrow) {
+    setChosen(true)
+    setBakeFor(tomorrow)
+  }
 
   async function build() {
     setBusy(true)
     setFailed(null)
     try {
-      setResult(await compileNow({ businessDate: today, user }))
+      setResult(await compileNow({ businessDate: bakeFor, user }))
     } catch (error) {
       // Said out loud. A silent failure here reads as "the button does nothing",
       // and the next thing that happens is somebody bakes from memory.
-      console.error('[bakery] manual compile failed', error)
+      console.error('[bakery] compile failed', error)
       setFailed(error?.message ?? 'It did not work.')
     } finally {
       setBusy(false)
@@ -206,7 +257,7 @@ function MakeTheList({ today, demands, user }) {
       <div className="card">
         <h2>Baking list ready</h2>
         <p className="muted">
-          {result.items} lines from {result.fromOutlets} outlet{' '}
+          For {formatDate(bakeFor)} — {result.items} lines from {result.fromOutlets} outlet{' '}
           {result.fromOutlets === 1 ? 'order' : 'orders'}
           {result.transfers > 0 && `, and ${result.transfers} delivery notes on Dispatch`}.
         </p>
@@ -224,33 +275,57 @@ function MakeTheList({ today, demands, user }) {
 
   return (
     <div className="card">
-      <h2>Today's baking list</h2>
+      <h2>Make the baking list</h2>
       <p className="muted">
-        The list is what the three shops asked for last night, added up. Make it when you are
-        ready to start — there is nothing to wait for.
+        The list is what the shops asked for, added up. Make it when you are ready to start —
+        there is nothing to wait for.
       </p>
+
+      {/* Which day, said plainly with the orders in hand for each. A bakery
+          starting at eleven at night is baking for tomorrow; one starting at
+          five is baking for today. */}
+      <div className="field">
+        <label>Which day are you baking for?</label>
+        <div className="row wrap">
+          {[
+            { date: today, label: 'Today', sent: todaySent },
+            { date: tomorrow, label: 'Tomorrow', sent: tomorrowSent },
+          ].map((day) => (
+            <button
+              key={day.date}
+              className={`chip ${bakeFor === day.date ? 'on' : ''}`}
+              onClick={() => {
+                setChosen(true)
+                setBakeFor(day.date)
+              }}
+            >
+              {day.label} · {formatDate(day.date)} · {day.sent.length} order
+              {day.sent.length === 1 ? '' : 's'}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {orders.length > 0 ? (
         <p className="muted small">
-          {orders.length} of {demands.length} outlet orders are in.
-          {orders.length < demands.length &&
-            ' The shops that have not sent one get their last same weekday repeated.'}
+          {orders.length} order{orders.length === 1 ? '' : 's'} in for {formatDate(bakeFor)}. Any
+          shop that has not sent one gets its last same weekday repeated.
         </p>
       ) : (
         <p className="muted small">
-          No shop has sent an order for today yet. Making the list now would repeat last week for
-          all three — worth doing only if you know their orders are not coming.
+          No shop has sent an order for {formatDate(bakeFor)}. Making the list now would repeat
+          last week for all three — worth doing only if you know their orders are not coming.
         </p>
       )}
 
-      <button className="btn primary big" disabled={busy} onClick={build}>
-        {busy ? 'Adding up the orders…' : "Make today's list"}
+      <button className="btn primary big block" disabled={busy} onClick={build}>
+        {busy ? 'Adding up the orders…' : `Make the list for ${formatDate(bakeFor)}`}
       </button>
 
       {result?.items === 0 && (
         <p className="small" style={{ fontWeight: 600 }}>
-          There is nothing to bake — no outlet has ordered today and none of them ordered on this
-          weekday recently either. Ask the shops to send their orders.
+          There is nothing to bake — no shop has ordered for {formatDate(bakeFor)} and none of them
+          ordered on this weekday recently either. Ask the shops to send their orders.
         </p>
       )}
       {failed && (

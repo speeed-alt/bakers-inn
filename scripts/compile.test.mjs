@@ -233,3 +233,47 @@ test("the hub's own stock is what it baked for itself, less what went out", () =
   const short = { items: order.items, produced: { patty: 12 } }
   assert.deepEqual(mainShare(short, 'MAIN'), { patty: 12 })
 })
+
+
+// --- which day an order belongs to -----------------------------------------
+//
+// The one that bit. A shop sends "tomorrow's order" at closing time and it is
+// filed under *tomorrow's* business date. While a 05:00 job existed that was
+// invisible — Monday evening's orders were compiled on Tuesday morning, when
+// Tuesday was "today", and it lined up on its own.
+//
+// Removing the schedule broke that quietly: the Bake screen could only compile
+// today, and today's orders had arrived yesterday. An order sent an hour
+// earlier was unreachable, and the screen said "no orders", which looks exactly
+// like the send having failed. The screen now asks the baker which day.
+
+test('a compile only ever sees the orders filed under its own day', () => {
+  const branches = [
+    { id: 'MAIN', name: 'Susan Road', isMain: true },
+    { id: 'B2', name: 'Gulberg' },
+  ]
+  // Sent on the 17th at closing, for the 18th.
+  const sentForTomorrow = [{
+    id: 'D-20260818-B2',
+    branchId: 'B2',
+    businessDate: '2026-08-18',
+    status: 'submitted',
+    items: [{ productId: 'bread-small', code: '01', productName: 'Bread Small', qty: 30 }],
+  }]
+
+  // Compiling the 17th with no orders of its own finds nothing to bake.
+  const today = compileDemands({ branches, demands: [], fallbacks: {}, existing: null })
+  assert.equal(today.items.length, 0)
+
+  // Compiling the 18th picks it up.
+  const tomorrow = compileDemands({
+    branches,
+    demands: sentForTomorrow,
+    fallbacks: {},
+    existing: null,
+  })
+  assert.equal(tomorrow.items.length, 1)
+  assert.equal(tomorrow.items[0].qtyNeeded, 30)
+  // compiledFrom holds the order documents it was built from, not branch ids.
+  assert.deepEqual(tomorrow.compiledFrom, ['D-20260818-B2'])
+})

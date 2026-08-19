@@ -125,7 +125,7 @@ export default function TomorrowsOrder({ branchId, businessDate, bare = false, o
         {saved ? 'Sent ✓' : order?.status === 'submitted' ? 'Send again' : 'Send order'}
       </button>
       <p className="muted small center" style={{ marginBottom: 0 }}>
-        You can change it any time until the kitchen list is made at 5am.
+        You can change it any time until the kitchen makes its list.
       </p>
     </>
   )

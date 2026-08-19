@@ -48,7 +48,7 @@ export default function Dispatch({ branchId }) {
         <div className="card">
           <h2>Nothing to send yet</h2>
           <p className="muted">
-            Today's baking list has not been made. It is put together at 5am from the outlets'
+            Today's baking list has not been made yet. The kitchen makes it from the outlets'
             orders.
           </p>
         </div>

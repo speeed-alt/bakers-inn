@@ -31,8 +31,9 @@ import {
 // touch this and nothing else" — a rule cannot reach inside an array to protect
 // one field of it.
 //
-// The list itself is normally written by the 05:00 job. `compileNow` below is
-// the same compile, run from the app, for the mornings when it has not.
+// The list itself is made by `compileNow` below, from the Bake screen, when
+// the baker starts. There is no scheduled job any more — a clock should not
+// decide when a bakery begins work.
 
 export function productionDoc(businessDate) {
   return doc(db, 'productionOrders', productionDocId(businessDate))
@@ -106,10 +107,9 @@ export function reopenOrder({ businessDate }) {
 /**
  * Build today's baking list now, from the app.
  *
- * The same compile the 05:00 job runs, and deliberately the same module:
- * `compileDemands` is imported from src/lib here and from functions/shared
- * there, so a list built by hand at 05:15 is the list the job would have built
- * at 05:00. Two implementations of "what should we bake" would eventually give
+ * `compileDemands` is imported from src/lib here and from functions/shared by
+ * the server-side `compileNow`, so both produce the same list from the same
+ * orders. Two implementations of "what should we bake" would eventually give
  * two answers, and the kitchen would be the last to find out.
  *
  * Safe to run twice, and safe to run after the job has already run: the list is

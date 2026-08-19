@@ -553,7 +553,7 @@ function TodaysRound({ branches, demands, order, transfers, nameOf }) {
     {
       done: Boolean(order),
       what: 'Baking list made',
-      detail: order ? order.ref : 'waiting for 5am',
+      detail: order ? order.ref : 'the kitchen has not made it yet',
     },
     {
       done: Boolean(order) && order.status === 'done',
