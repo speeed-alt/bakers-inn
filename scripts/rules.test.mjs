@@ -736,3 +736,104 @@ test('no part of the cycle can ever be deleted', async () => {
   await assertFails(deleteDoc(doc(as(OWNER), 'productionOrders', 'PO')))
   await assertFails(deleteDoc(doc(as(OWNER), 'transfers', 'T-draft')))
 })
+
+// --- the whole compile, write by write, as the owner ------------------------
+//
+// `compileNow` sends every one of these in a single writeBatch, and a batch is
+// atomic: one refusal fails all of it with "Missing or insufficient
+// permissions" and no clue which write caused it. So each is asserted on its
+// own, for the role that actually presses the button.
+
+test('the owner can write the baking list', async () => {
+  await assertSucceeds(
+    setDoc(
+      doc(as(OWNER), 'productionOrders', 'PO-20260820'),
+      {
+        ref: 'PO-0820',
+        businessDate: '2026-08-20',
+        status: 'open',
+        items: [{ productId: 'bread-small', qtyNeeded: 30, perOutlet: { B2: 30 } }],
+        compiledBy: OWNER,
+      },
+      { merge: true },
+    ),
+  )
+})
+
+test('the owner can lock the order the list was built from', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(ctx.firestore().doc('demands/D-20260820-B2'), {
+      branchId: 'B2',
+      businessDate: '2026-08-20',
+      status: 'submitted',
+      items: [{ productId: 'bread-small', qty: 30 }],
+    })
+  })
+  await assertSucceeds(
+    updateDoc(doc(as(OWNER), 'demands', 'D-20260820-B2'), { status: 'locked' }),
+  )
+})
+
+test('the owner can write the repeat order for a shop that did not send one', async () => {
+  // The one that actually broke it. A compile writes last week's order in for
+  // any shop that did not send one, flagged `auto`. The rule allowing that was
+  // written for the specialist and never for the owner — so the moment any
+  // shop had not ordered, the owner's batch was refused in full and the screen
+  // said only "Missing or insufficient permissions".
+  await assertSucceeds(
+    setDoc(doc(as(OWNER), 'demands', 'D-20260820-MAIN'), {
+      ref: 'D-0820-MAIN',
+      branchId: 'MAIN',
+      businessDate: '2026-08-20',
+      status: 'locked',
+      auto: true,
+      copiedFrom: 'D-20260813-MAIN',
+      items: [{ productId: 'bread-small', qty: 20 }],
+    }),
+  )
+})
+
+test('the kitchen can write that repeat order too', async () => {
+  await assertSucceeds(
+    setDoc(doc(as(SPECIALIST), 'demands', 'D-20260820-B3'), {
+      ref: 'D-0820-B3',
+      branchId: 'B3',
+      businessDate: '2026-08-20',
+      status: 'locked',
+      auto: true,
+      copiedFrom: 'D-20260813-B3',
+      items: [{ productId: 'bread-small', qty: 20 }],
+    }),
+  )
+})
+
+test('the owner can write the delivery notes that come with it', async () => {
+  await assertSucceeds(
+    setDoc(
+      doc(as(OWNER), 'transfers', 'T-20260820-B2'),
+      {
+        ref: 'T-0820-B2',
+        fromBranch: 'MAIN',
+        toBranchId: 'B2',
+        businessDate: '2026-08-20',
+        direction: 'out',
+        status: 'draft',
+        items: [],
+      },
+      { merge: true },
+    ),
+  )
+})
+
+test('nobody can smuggle a real order in as an automatic one', async () => {
+  // `auto: true` is what the repeat clause allows. Without it the clause must
+  // not apply, or anyone could write a locked order for any shop.
+  await assertFails(
+    setDoc(doc(as(SPECIALIST), 'demands', 'D-20260820-FAKE'), {
+      branchId: 'B2',
+      businessDate: '2026-08-20',
+      status: 'locked',
+      items: [],
+    }),
+  )
+})

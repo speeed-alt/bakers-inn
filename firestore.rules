@@ -222,8 +222,15 @@ service cloud.firestore {
                     && changedOnly(['status']);
 
       // An outlet that did not order at all gets last week's repeated for it,
-      // exactly as the scheduled job does. `auto` marks it as nobody's typing.
-      allow create: if active() && role() == 'specialist'
+      // as part of compiling. `auto` marks it as nobody's typing.
+      //
+      // This said `role() == 'specialist'` and nothing else, which left the
+      // owner out — and the owner is who presses the button on a bakery with
+      // one person running it. Every write in a compile goes in a single
+      // batch, and a batch is atomic, so the moment one shop had not ordered
+      // the whole compile was refused and the screen could say nothing more
+      // useful than "Missing or insufficient permissions".
+      allow create: if (isOwner() || (active() && role() == 'specialist'))
                     && request.resource.data.status == 'locked'
                     && request.resource.data.auto == true;
 

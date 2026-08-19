@@ -245,8 +245,20 @@ function MakeTheList({ today, tomorrow, bakeFor, setBakeFor, todaySent, tomorrow
     } catch (error) {
       // Said out loud. A silent failure here reads as "the button does nothing",
       // and the next thing that happens is somebody bakes from memory.
+      //
+      // "Missing or insufficient permissions" is Firebase's words, and they
+      // tell a baker at five in the morning exactly nothing. The realistic
+      // cause is a sign-in that has gone stale — the rules read the token, not
+      // the staff record, so a token issued before a change still carries the
+      // old answer and every write is refused. Signing out and in fixes it.
       console.error('[bakery] compile failed', error)
-      setFailed(error?.message ?? 'It did not work.')
+      const denied = error?.code === 'permission-denied' ||
+        /insufficient permissions/i.test(error?.message ?? '')
+      setFailed(
+        denied
+          ? 'this tablet is not allowed to make the list. Sign out and back in, and if it still refuses, tell whoever looks after the system.'
+          : `${error?.message ?? 'it did not work.'} Check the connection and try again.`,
+      )
     } finally {
       setBusy(false)
     }
@@ -330,7 +342,7 @@ function MakeTheList({ today, tomorrow, bakeFor, setBakeFor, todaySent, tomorrow
       )}
       {failed && (
         <p className="small" style={{ fontWeight: 600 }}>
-          The list could not be made — {failed} Check the connection and try again.
+          The list could not be made — {failed}
         </p>
       )}
     </div>
