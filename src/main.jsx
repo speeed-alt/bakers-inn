@@ -8,6 +8,7 @@ import { reportClientError } from './data/errors.js'
 import { applyPaperSettings } from './lib/paper.js'
 import { startTheme } from './lib/theme.js'
 import { startUpdates } from './lib/updates.js'
+import { watchPracticeExpiry } from './lib/practice.js'
 import './styles.css'
 
 // Sizes the printed slip to the paper named in config.js, so printing works at
@@ -35,6 +36,10 @@ navigator.storage?.persist?.().catch(() => {})
 // Registers the service worker and starts watching for new versions. Nothing is
 // applied without being asked — see src/lib/updates.js.
 startUpdates()
+// A practice session must not turn live under somebody's hands at 04:00. See
+// src/lib/practice.js — the ids depend on the mode, so half a session in each
+// is how a training close comes to overwrite a real one.
+watchPracticeExpiry()
 
 // The error boundary below only catches faults thrown while React renders.
 // These two cover the rest — a listener that throws, a promise nobody awaited —

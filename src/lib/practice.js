@@ -75,6 +75,33 @@ export function isPractising(today = businessDateOf()) {
   return value?.on === true && value.businessDate === today
 }
 
+/**
+ * Make the overnight expiry an event rather than a silent change of mind.
+ *
+ * The expiry above is read fresh on every call, and `businessDateOf()` is the
+ * clock now — so at four in the morning a tablet that has been practising all
+ * night starts answering "live" halfway through whatever it is doing, with no
+ * reload and nothing said. That is not a safety net, it is a trapdoor: the
+ * document ids carry a `-P` suffix only while the mode says practice, so a
+ * training close begun at 03:58 and finished at 04:01 writes to the *real*
+ * closing document for that outlet and overwrites a day the shop had already
+ * counted. The bakery works overnight; this is not a rare hour for it.
+ *
+ * So a session is all one thing or all the other. When the date rolls under a
+ * practising tablet this clears the flag and reloads, exactly as ending
+ * practice by hand does — every listener resubscribes, every screen repaints
+ * live, and nothing is left half in one mode and half in the other.
+ *
+ * Checked every half minute, which is far finer than the thing it is watching.
+ */
+export function watchPracticeExpiry(everyMs = 30_000) {
+  const timer = setInterval(() => {
+    const value = stored()
+    if (value?.on === true && value.businessDate !== businessDateOf()) goLive()
+  }, everyMs)
+  return () => clearInterval(timer)
+}
+
 /** Spread into any record being written, so it carries the mode it was made in. */
 export function practiceStamp(today = businessDateOf()) {
   return isPractising(today) ? { demo: true } : {}

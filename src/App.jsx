@@ -169,6 +169,8 @@ function StartupTrouble() {
 export default function App() {
   const { user, profile, loading, stalled, claimsStale, signOut } = useAuth()
   const [branchId, setBranchId] = useState(deviceBranchId())
+  // Set when a sign-out is refused because sales have not reached the server.
+  const [unsent, setUnsent] = useState(false)
   const online = useOnline()
   const drift = useClockDrift(online)
   const updateWaiting = useUpdateWaiting()
@@ -257,8 +259,35 @@ export default function App() {
           <span>{profile.role}</span>
         </span>
         <ThemeToggle />
-        <button className="btn ghost small no-print" onClick={signOut}>Sign out</button>
+        {/* Not a plain sign-out: the queue of unsent sales belongs to whoever
+            is signed in, so handing the tablet over with the line down used to
+            throw an afternoon away. See `signOut` in auth.jsx. */}
+        <button
+          className="btn ghost small no-print"
+          onClick={async () => {
+            const result = await signOut()
+            if (!result?.ok) setUnsent(true)
+          }}
+        >
+          Sign out
+        </button>
       </header>
+
+      {unsent && (
+        <div className="strip block no-print">
+          <b>Not signed out — some sales have not reached the server yet.</b>{' '}
+          They are safe on this tablet, but they are saved under {profile.name} and signing out now
+          would strand them. Get the connection back and try again; they go up on their own.{' '}
+          <button className="btn ghost small" onClick={() => setUnsent(false)}>Stay signed in</button>{' '}
+          <button
+            className="btn ghost small"
+            onClick={() => signOut({ force: true })}
+            title="Only if the tablet is being taken away and the sales are being written down instead"
+          >
+            Sign out anyway
+          </button>
+        </div>
+      )}
 
       {/* Above every other banner, and above the stale sign-in, because it is
           the only one that changes what the numbers on screen *mean*. A cashier
@@ -355,7 +384,14 @@ export default function App() {
             path="/catalog"
             element={
               <Only path="/catalog" role={profile.role}>
-                <Catalog />
+                {/* Gated like Materials and Money, and for a sharper reason
+                    than either. The catalogue is shared reference data — a
+                    trainee should be looking at the real products at the real
+                    prices — which means every write from this screen goes
+                    straight to the live catalogue at all three outlets. An
+                    owner demonstrating "this is how you change a price" during
+                    a lesson would have changed it, for real, everywhere. */}
+                {practising ? <NotInPractice what="The catalogue" /> : <Catalog />}
               </Only>
             }
           />

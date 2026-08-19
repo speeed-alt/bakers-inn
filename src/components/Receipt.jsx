@@ -33,6 +33,8 @@ export default function Receipt({ sale, branch, branchName }) {
       </div>
 
       {r.isRefund && <div className="receipt-stamp">** REFUND **</div>}
+      {r.isVoided && <div className="receipt-stamp">** VOIDED — NOT A BILL **</div>}
+      {r.isPractice && <div className="receipt-stamp">** PRACTICE — NOT A REAL SALE **</div>}
 
       <table className="receipt-meta">
         <tbody>

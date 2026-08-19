@@ -29,8 +29,27 @@ export default function Login({ branchId, branchName, onChangeOutlet }) {
     setError('')
     try {
       await signInWithPin(picked.loginId ?? picked.id, nextPin)
-    } catch {
-      setError('That PIN did not match. Try again.')
+    } catch (error) {
+      // Signing in is the one thing in this app that genuinely needs the
+      // internet — everything after it works from the tablet's own copy. So a
+      // dead line and a wrong PIN both arrived here and both said "That PIN
+      // did not match", which sends a cashier who typed it perfectly into
+      // trying again, and again, and eventually fetching somebody with keys.
+      // The two need different sentences because they need different actions.
+      const offline =
+        error?.code === 'auth/network-request-failed' ||
+        error?.code === 'auth/timeout' ||
+        (typeof navigator !== 'undefined' && navigator.onLine === false)
+      const locked =
+        error?.code === 'auth/too-many-requests' || error?.code === 'auth/user-disabled'
+
+      setError(
+        offline
+          ? 'This tablet cannot reach the internet, so it cannot sign anyone new in. Your PIN is probably fine — get the connection back, or keep using the tablet that is already signed in.'
+          : locked
+            ? 'This account cannot sign in at the moment. Tell the owner — it may have been switched off, or blocked after too many wrong tries.'
+            : 'That PIN did not match. Try again.',
+      )
       setPin('')
     } finally {
       setBusy(false)

@@ -20,6 +20,7 @@ import { dailySummaryCsv, downloadCsv, monthRange, purchasesCsv, salesCsv } from
 import { Empty, Loading, Money } from '../components/ui.jsx'
 import DailySheet from '../components/DailySheet.jsx'
 import PracticeCard from '../components/PracticeCard.jsx'
+import { isPractising } from '../lib/practice.js'
 import DailyRegister from '../components/DailyRegister.jsx'
 import { buildRegister, recentDates } from '../lib/register.js'
 import { Modal } from '../components/ui.jsx'
@@ -183,7 +184,6 @@ export default function Dashboard() {
             today={today}
             branches={branchList}
             products={products.data ?? []}
-            closings={closings.data ?? []}
             todaySheet={sheet}
             onClose={() => setRegister(false)}
           />
@@ -457,6 +457,22 @@ function TodaysRates({ today, products }) {
   const [saved, setSaved] = useState(false)
 
   if (items.length === 0) return null
+
+  // Rates are shared reference data, so `saveRates` writes to the live sheet
+  // whatever mode the tablet is in — and the owner demonstrating "this is
+  // where I set the egg rate" during a lesson would have set it, for real, at
+  // every outlet. The one screen where a training tap moves a real price.
+  if (isPractising()) {
+    return (
+      <div className="card">
+        <h3>Today's rates</h3>
+        <p className="muted small" style={{ margin: 0 }}>
+          Not while this tablet is practising. Rates are the real ones every till sells at, so they
+          are never changed from a training session. End practice to set them.
+        </p>
+      </div>
+    )
+  }
   if (rates.loading) {
     return <div className="card"><Loading inline>Reading today's rates…</Loading></div>
   }
@@ -868,7 +884,7 @@ function OffCatalogue({ rows = [], total = 0 }) {
  * presses. The closes are already on the screen and carry each day's takings
  * and waste, so nothing here re-reads a fortnight of individual sales.
  */
-function RegisterSheet({ today, branches, products, closings, todaySheet, onClose }) {
+function RegisterSheet({ today, branches, products, todaySheet, onClose }) {
   const dates = useMemo(() => recentDates(today, 14), [today])
 
   // `in` takes up to 30 values, and 14 dates is well inside that — so this is
@@ -881,8 +897,21 @@ function RegisterSheet({ today, branches, products, closings, todaySheet, onClos
     () => query(collection(db, 'transfers'), where('businessDate', 'in', dates)),
     [dates.join()],
   )
+  // Its own closings, over exactly the dates it prints.
+  //
+  // It used to borrow the dashboard's list, which is `limit(30)` — sized for a
+  // seven-day strip and a dozen recent closes. Three outlets closing nightly
+  // make 42 documents over a fortnight, so the oldest four days arrived with
+  // no closings at all and printed a full Production and Distribution figure
+  // beside a blank Sale and blank Stale. The sheet has a "Checked by" line at
+  // the foot: the owner was signing off a fortnight whose last four days were
+  // quietly missing their takings.
+  const closings = useSnapshot(
+    () => query(collection(db, 'closings'), where('businessDate', 'in', dates)),
+    [dates.join()],
+  )
 
-  if (productions.loading || transfers.loading) {
+  if (productions.loading || transfers.loading || closings.loading) {
     return <Loading>Reading the last fortnight…</Loading>
   }
 
@@ -890,7 +919,7 @@ function RegisterSheet({ today, branches, products, closings, todaySheet, onClos
     dates,
     branches,
     products,
-    closings,
+    closings: closings.data ?? [],
     productions: productions.data ?? [],
     transfers: transfers.data ?? [],
     today,

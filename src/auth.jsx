@@ -4,7 +4,7 @@ import {
   signInWithEmailAndPassword,
   signOut as fbSignOut,
 } from 'firebase/auth'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { doc, onSnapshot, waitForPendingWrites } from 'firebase/firestore'
 import { auth, db } from './firebase.js'
 import { pinPassword, staffEmail } from './lib/pin.js'
 
@@ -127,7 +127,34 @@ export function AuthProvider({ children }) {
       // pinned to the outlet on their own record.
       branchId: profile?.branchId ?? null,
       signInWithPin,
-      signOut: () => fbSignOut(auth),
+
+      /**
+       * Sign out, but not on top of sales that have not reached the server.
+       *
+       * Every write on the selling path is deliberately never awaited — that
+       * is what lets a shop keep trading through a dead line — so they sit in
+       * Firestore's queue until the connection returns. That queue belongs to
+       * the signed-in user. Signing out at the end of a shift with the wifi
+       * down swapped it for the next cashier's empty one, and an afternoon of
+       * real sales, and the close, and the order for tomorrow, were simply
+       * gone: off the till, never on the server, with nothing said.
+       *
+       * So it waits, briefly, for the queue to drain, and if it cannot it
+       * hands the caller the truth to act on rather than signing out anyway.
+       * Ten seconds is long enough for a slow line and short enough that
+       * nobody at a shift change decides the tablet has frozen.
+       */
+      signOut: async ({ force = false, timeoutMs = 10_000 } = {}) => {
+        if (!force) {
+          const drained = await Promise.race([
+            waitForPendingWrites(db).then(() => true),
+            new Promise((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+          ]).catch(() => false)
+          if (!drained) return { ok: false, reason: 'unsent' }
+        }
+        await fbSignOut(auth)
+        return { ok: true }
+      },
     }
   }, [user, profile, loading, stalled, claimsStale])
 

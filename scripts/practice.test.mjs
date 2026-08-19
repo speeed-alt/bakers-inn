@@ -212,3 +212,40 @@ test('a script running in Node is never accidentally practising', () => {
     globalThis.localStorage = saved
   }
 })
+
+// --- the overnight expiry has to be an event ------------------------------
+
+test('a session that outlives the business date is ended, not quietly flipped', async () => {
+  // The bakery works overnight. A practice close begun at 03:58 and finished
+  // at 04:01 used to write to the real closing document, because the ids carry
+  // the -P suffix only while the mode still says practice — and the mode is
+  // recomputed against the clock on every single call. Expiry has to be an
+  // event that reloads, not a silent change of answer halfway through a write.
+  const reloads = []
+  globalThis.window = { location: { reload: () => reloads.push(1) } }
+  practising('1999-01-01')
+
+  const { watchPracticeExpiry } = await import('../src/lib/practice.js')
+  const stop = watchPracticeExpiry(5)
+  await new Promise((r) => setTimeout(r, 60))
+  stop()
+
+  assert.equal(store.get('bakery.practice'), undefined, 'the stale flag is cleared')
+  assert.ok(reloads.length > 0, 'and the tablet reloads rather than drifting')
+  assert.equal(isPractising(), false)
+})
+
+test('a session still inside its own day is left alone', async () => {
+  const reloads = []
+  globalThis.window = { location: { reload: () => reloads.push(1) } }
+  practising(businessDateOf())
+
+  const { watchPracticeExpiry } = await import('../src/lib/practice.js')
+  const stop = watchPracticeExpiry(5)
+  await new Promise((r) => setTimeout(r, 40))
+  stop()
+
+  assert.equal(reloads.length, 0, 'nothing is interrupted mid-lesson')
+  assert.equal(isPractising(), true)
+  store.delete('bakery.practice')
+})

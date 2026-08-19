@@ -235,3 +235,29 @@ test('a long basket stays exact', () => {
   assert.equal(basketTotal(lines), 6993)
   assert.equal(formatMoney(basketTotal(lines)), 'Rs 6,993')
 })
+
+// --- slips that must never pass for a bill --------------------------------
+
+test('a voided sale prints as a void, not as a bill', () => {
+  // Nothing is ever deleted here, so a voided sale keeps its Receipt button.
+  // Tapping it printed a clean ordinary bill for a sale that had been taken
+  // out of every total — proof of a purchase the books say never happened.
+  const r = receiptModel(sale({ status: 'voided' }), { name: 'Susan Road' })
+  assert.equal(r.isVoided, true)
+  assert.equal(r.isRefund, false)
+})
+
+test('a practice sale prints as practice', () => {
+  // A practice tablet is a real till on the real catalogue, which is the point
+  // of it — so a customer walking up mid-lesson gets a slip for a sale that
+  // exists nowhere. The record carries `demo`; so does the paper.
+  const r = receiptModel(sale({ demo: true }), { name: 'Susan Road' })
+  assert.equal(r.isPractice, true)
+})
+
+test('an ordinary sale carries no stamp at all', () => {
+  const r = receiptModel(sale(), { name: 'Susan Road' })
+  assert.equal(r.isVoided, false)
+  assert.equal(r.isPractice, false)
+  assert.equal(r.isRefund, false)
+})

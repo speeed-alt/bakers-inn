@@ -14,7 +14,7 @@ import { closeDay, closingDoc, isClosed, reopenDay } from '../data/closings.js'
 import { demandDoc } from '../data/demands.js'
 import { productionDoc } from '../data/production.js'
 import { sendReturn, transfersFrom } from '../data/transfers.js'
-import { useArrivals } from '../data/arrivals.js'
+import { pendingDeliveries, useArrivals } from '../data/arrivals.js'
 import { WASTE_REASONS } from '../config.js'
 import { Empty, Loading, Modal, Money, Stepper } from '../components/ui.jsx'
 import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
@@ -147,7 +147,14 @@ export default function CloseDay({ branchId, isMain }) {
   }
 
   // A delivery still sitting unconfirmed would make the shelf count meaningless.
-  const unconfirmed = (transfersIn.data ?? []).filter((t) => t.status === 'dispatched')
+  //
+  // Deliveries only. A note this outlet *sent* — leftovers going back to the
+  // hub — is somebody else's to confirm, and at the hub only the baker can:
+  // a cashier cannot reach the Dispatch screen at all. So a return sent from
+  // Gulberg at nine o'clock blocked Susan Road's own close, every night, with
+  // the remedy on a screen the person holding the tablet is not allowed to
+  // open. `pendingDeliveries` is the same filter the Stock screen uses.
+  const unconfirmed = pendingDeliveries(transfersIn.data)
   if (unconfirmed.length > 0) {
     return (
       <div className="page">
@@ -184,7 +191,7 @@ export default function CloseDay({ branchId, isMain }) {
   const binnedValue = wasteValue(waste, priceOf)
   const needsReason = waste.filter((w) => !w.reason)
 
-  function finish() {
+  function finish(over = {}) {
     if (returns.length > 0) {
       sendReturn({ fromBranch: branchId, businessDate: target, items: returns, user: profile })
     }
@@ -194,6 +201,7 @@ export default function CloseDay({ branchId, isMain }) {
       openingFloat,
       countedCash: counted ?? 0,
       nextFloat: nextFloat ?? openingFloat,
+      ...over,
       summary,
       waste,
       carry,
@@ -213,7 +221,18 @@ export default function CloseDay({ branchId, isMain }) {
           <p className="muted small">
             No sales, no delivery. Close it so tomorrow can start clean.
           </p>
-          <button className="btn primary big block" onClick={finish}>Close — no trade</button>
+          {/* The drawer holds exactly what it opened with, because nothing
+              opened it. Closing with `countedCash: 0` booked the whole float
+              as missing money — a shop shut for Eid reported a Rs 5,000 cash
+              shortage, on a screen whose entire purpose is telling the owner
+              when cash has gone astray. The over/short works itself out from
+              here: nothing was sold, so expected is the float too. */}
+          <button
+            className="btn primary big block"
+            onClick={() => finish({ countedCash: openingFloat })}
+          >
+            Close — no trade
+          </button>
         </div>
       </div>
     )

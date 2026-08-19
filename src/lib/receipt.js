@@ -94,6 +94,19 @@ export function receiptModel(sale, branch) {
     // A refund slip that reads like a bill gets presented for payment twice.
     isRefund: sale.status === 'refund',
 
+    // And the two other slips that must never pass for a bill.
+    //
+    // A voided sale keeps its Receipt button — nothing is ever deleted here —
+    // so tapping it printed a clean, ordinary bill for a sale that had been
+    // cancelled and taken out of every total. A customer handed that has proof
+    // of a purchase the books say never happened.
+    isVoided: sale.status === 'voided',
+    // A practice tablet is deliberately a real till wired to the real
+    // catalogue, so a trainee can be shown the actual job — which means a real
+    // customer walking up mid-lesson gets a real-looking slip for a sale that
+    // exists nowhere. The record is stamped `demo`; so is the paper now.
+    isPractice: sale.demo === true,
+
     rows: items.map(itemRow),
     itemCount: itemCount(items),
 
