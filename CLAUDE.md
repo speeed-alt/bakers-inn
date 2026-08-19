@@ -129,6 +129,15 @@ allow list: if active() && resource.data.branchId == myBranch();
 Separate `allow` statements are considered independently. Non-owner queries must
 therefore pin their branch field; the owner needs no filter.
 
+This is written down and it still got broken. `compileNow` asked for "every
+transfer for this date" so it would not overwrite a note already in a van — and
+that passed every time it was tried, because it was tried as the owner. The
+baker got "Missing or insufficient permissions" for a *read*, several lines
+before the batch everyone suspected. Two lessons: **try it as the role that
+actually does the job**, and when a rules failure has no obvious write behind
+it, look at the reads. `src/data/transfers.js` exports the pinned queries;
+nothing should build its own.
+
 **A rule that touches `resource.data` cannot read a document that does not
 exist.** Fetching one by id returns *permission denied*, not "no such document".
 The till asks `closings/C-<date>-<branch>` on every load and for most of the day
