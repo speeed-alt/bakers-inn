@@ -18,9 +18,11 @@ const production = (date) => ({
   produced: { bread: 2000 },
 })
 
+// `fromBranch` is on every real note, and it is what says whose shelf the bread
+// has left — the hub's own line is what it baked less what it put on a note.
 const transfersFor = (date) => [
-  { businessDate: date, toBranchId: 'B2', status: 'received', items: [{ productId: 'bread', qtySent: 500 }] },
-  { businessDate: date, toBranchId: 'B3', status: 'received', items: [{ productId: 'bread', qtySent: 500 }] },
+  { businessDate: date, fromBranch: 'MAIN', toBranchId: 'B2', status: 'received', items: [{ productId: 'bread', qtySent: 500 }] },
+  { businessDate: date, fromBranch: 'MAIN', toBranchId: 'B3', status: 'received', items: [{ productId: 'bread', qtySent: 500 }] },
 ]
 
 const closing = (date, branchId, salesTotal, wasteValue = 0) => ({

@@ -6,7 +6,8 @@ import { useAuth } from '../auth.jsx'
 import { businessDateOf, formatDate, formatTime, nextDate } from '../lib/dates.js'
 import { extrasList, shortfalls } from '../lib/compile.js'
 import { productionDoc } from '../data/production.js'
-import { dispatchTransfer, receiveTransfer, transfersFrom, transfersTo } from '../data/transfers.js'
+import { dispatchTransfer, receiveTransfer, transfersFrom } from '../data/transfers.js'
+import { pendingReturns, useArrivals } from '../data/arrivals.js'
 import { Empty, Loading, Stepper } from '../components/ui.jsx'
 
 /**
@@ -43,8 +44,18 @@ export default function Dispatch({ branchId }) {
   const order = day === today ? todayList : tomorrowList
 
   const transfers = useSnapshot(() => transfersFrom(branchId, day), [branchId, day])
-  const inbound = useSnapshot(() => transfersTo(branchId, day), [branchId, day])
   const branches = useSnapshot(() => collection(db, 'branches'), [])
+
+  // Outbound follows the list; inbound follows the goods.
+  //
+  // What goes out is a particular baking list, and the baker picks which one.
+  // What comes back is crates in the room, and they arrive on nobody's
+  // schedule: an outlet sends its leftovers at closing, so the note carries the
+  // day that just ended, and the hub confirms it the next morning — after 04:00,
+  // when that date is already yesterday. Pinned to the bake day, this query
+  // could not match a single return that had ever been sent. See
+  // src/data/arrivals.js.
+  const inbound = useArrivals(branchId, today)
 
   /** Shown only when there is genuinely a choice to make. */
   const dayToggle = bothDays ? (
@@ -58,7 +69,7 @@ export default function Dispatch({ branchId }) {
   // ("B2 — DN-0142") instead of a name while branches is still in flight —
   // on shop wifi that reads as a bug, not as a loading state, because a raw
   // id looks exactly like real data.
-  if (todayList.loading || tomorrowList.loading || transfers.loading || branches.loading) {
+  if (todayList.loading || tomorrowList.loading || transfers.loading || inbound.loading || branches.loading) {
     return <div className="page"><div className="card"><Loading>Reading the delivery notes…</Loading></div></div>
   }
 
@@ -69,9 +80,49 @@ export default function Dispatch({ branchId }) {
   const drafts = (transfers.data ?? []).filter((t) => t.status === 'draft')
   const sent = (transfers.data ?? []).filter((t) => t.status !== 'draft')
 
+  // Computed here, above every early return, and rendered in all three states.
+  //
+  // These used to sit at the bottom of the final tree, which meant crates that
+  // an outlet had already sent back could only be confirmed on a morning when
+  // the baking list happened to exist and be finished. At 05:00, before the
+  // list is made, the screen said "nothing to send yet" and there was no way
+  // anywhere in the app to take yesterday's stock back in. Goods arriving have
+  // nothing to do with whether goods are going out.
+  const returns = pendingReturns(inbound.data)
+
+  const returnCards = returns.map((transfer) => (
+    <ReturnCard
+      key={transfer.id}
+      transfer={transfer}
+      fromName={nameOf(transfer.fromBranch)}
+      today={today}
+      user={profile}
+    />
+  ))
+
+  // A read that was refused is not the fact that nothing is happening. Said
+  // plainly, because the alternative is a screen that calmly reports no work
+  // to a person who has three vans waiting.
+  if (transfers.error || inbound.error) {
+    return (
+      <div className="page">
+        <div className="card">
+          <h2>The delivery notes could not be read</h2>
+          <p className="muted">
+            This is not the same as there being nothing to send — the tablet was refused, so it
+            cannot say either way. Sign out and back in. If it still will not load, tell whoever
+            looks after the system rather than assuming there is no delivery.
+          </p>
+        </div>
+        {returnCards}
+      </div>
+    )
+  }
+
   if (!po) {
     return (
       <div className="page">
+        {returnCards}
         <div className="card">
           <h2>Nothing to send yet</h2>
           <p className="muted">
@@ -86,6 +137,7 @@ export default function Dispatch({ branchId }) {
   if (po.status !== 'done' && drafts.length > 0) {
     return (
       <div className="page">
+        {returnCards}
         <div className="card">
           <h2>Still baking</h2>
           <p className="muted">
@@ -97,10 +149,6 @@ export default function Dispatch({ branchId }) {
       </div>
     )
   }
-
-  const returns = (inbound.data ?? []).filter(
-    (t) => t.direction === 'return' && t.status === 'dispatched',
-  )
 
   return (
     <div className="page">
@@ -118,14 +166,7 @@ export default function Dispatch({ branchId }) {
         </div>
       )}
 
-      {returns.map((transfer) => (
-        <ReturnCard
-          key={transfer.id}
-          transfer={transfer}
-          fromName={nameOf(transfer.fromBranch)}
-          user={profile}
-        />
-      ))}
+      {returnCards}
 
       {short.length > 0 && (
         <div className="card">
@@ -214,7 +255,7 @@ export default function Dispatch({ branchId }) {
  * treatment. Breakage or a miscount at the sending outlet is real, and it needs
  * somewhere to go rather than being recorded as if every last one arrived.
  */
-function ReturnCard({ transfer, fromName, user }) {
+function ReturnCard({ transfer, fromName, today, user }) {
   const [counted, setCounted] = useState(() =>
     Object.fromEntries(transfer.items.map((i) => [i.productId, i.qtySent])),
   )
@@ -223,7 +264,15 @@ function ReturnCard({ transfer, fromName, user }) {
   return (
     <div className="card">
       <div className="row between">
-        <h2 style={{ margin: 0 }}>Coming back — {transfer.ref}</h2>
+        <h2 style={{ margin: 0 }}>
+          Coming back — {transfer.ref}
+          {/* Almost always last night's, since a return is sent at closing and
+              confirmed the next morning. Naming the day is what stops somebody
+              confirming yesterday's crates against today's. */}
+          {transfer.businessDate !== today && (
+            <span className="muted"> · from {formatDate(transfer.businessDate)}</span>
+          )}
+        </h2>
         <span className="muted small">from {fromName}</span>
       </div>
       <p className="muted small">

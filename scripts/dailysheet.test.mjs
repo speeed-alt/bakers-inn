@@ -29,9 +29,11 @@ const PRODUCTION = {
   produced: { bread: 2000 },
 }
 
+// `fromBranch` is on every real note — the compile stamps it, and so does a
+// return — and it is what says whose shelf the bread has left.
 const TRANSFERS = [
-  { toBranchId: 'B2', status: 'dispatched', items: [{ productId: 'bread', qtySent: 500 }] },
-  { toBranchId: 'B3', status: 'dispatched', items: [{ productId: 'bread', qtySent: 500 }] },
+  { fromBranch: 'MAIN', toBranchId: 'B2', status: 'dispatched', items: [{ productId: 'bread', qtySent: 500 }] },
+  { fromBranch: 'MAIN', toBranchId: 'B3', status: 'dispatched', items: [{ productId: 'bread', qtySent: 500 }] },
 ]
 
 const sale = (branchId, total) => ({
@@ -221,8 +223,8 @@ test('the hub is distributed to from the bake, not from a delivery note', () => 
 test('a delivery still being counted at the far end has still been sent', () => {
   const sheet = build({
     transfers: [
-      { toBranchId: 'B2', status: 'received', items: [{ productId: 'bread', qtySent: 500 }] },
-      { toBranchId: 'B3', status: 'dispatched', items: [{ productId: 'bread', qtySent: 500 }] },
+      { fromBranch: 'MAIN', toBranchId: 'B2', status: 'received', items: [{ productId: 'bread', qtySent: 500 }] },
+      { fromBranch: 'MAIN', toBranchId: 'B3', status: 'dispatched', items: [{ productId: 'bread', qtySent: 500 }] },
     ],
   })
   assert.equal(at(sheet, 'B2').distributed, 50000)
@@ -231,7 +233,9 @@ test('a delivery still being counted at the far end has still been sent', () => 
 
 test('a note still on the bench has not been distributed', () => {
   const sheet = build({
-    transfers: [{ toBranchId: 'B2', status: 'draft', items: [{ productId: 'bread', qtySent: 500 }] }],
+    transfers: [
+      { fromBranch: 'MAIN', toBranchId: 'B2', status: 'draft', items: [{ productId: 'bread', qtyDemanded: 500 }] },
+    ],
   })
   assert.equal(at(sheet, 'B2').distributed, 0)
 })
@@ -241,6 +245,7 @@ test('stock coming back to the hub is not a distribution', () => {
     transfers: [
       ...TRANSFERS,
       {
+        fromBranch: 'B2',
         toBranchId: 'MAIN',
         direction: 'return',
         status: 'received',

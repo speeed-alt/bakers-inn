@@ -6,13 +6,13 @@ import { useAuth } from '../auth.jsx'
 import { businessDateOf, formatDate, nextDate, previousDate } from '../lib/dates.js'
 import { formatMoney, parseMoney } from '../lib/money.js'
 import { summariseDay } from '../lib/report.js'
-import { mainShare } from '../lib/compile.js'
+import { receivedAt } from '../lib/stock.js'
 import { buildLeftovers, splitLeftovers, wasteValue, CARRY, RETURN, WASTE } from '../lib/leftovers.js'
 import { carryoverFrom } from '../lib/dailyReport.js'
 import { salesForDay } from '../data/sales.js'
 import { closeDay, closingDoc, isClosed, reopenDay } from '../data/closings.js'
 import { productionDoc } from '../data/production.js'
-import { sendReturn, transfersTo } from '../data/transfers.js'
+import { sendReturn, transfersFrom, transfersTo } from '../data/transfers.js'
 import { WASTE_REASONS } from '../config.js'
 import { Empty, Loading, Modal, Money, Stepper } from '../components/ui.jsx'
 import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
@@ -53,6 +53,11 @@ export default function CloseDay({ branchId, isMain }) {
     [],
   )
   const transfersIn = useSnapshot(() => transfersTo(branchId, target), [branchId, target])
+  // The hub also needs what it sent out: what it kept is what it made less what
+  // it put on a note, so without this it counted its own share of the bake even
+  // on a day it gave the whole bake away. Subscribed for every outlet rather
+  // than conditionally, because a hook cannot be called behind an `if`.
+  const transfersOut = useSnapshot(() => transfersFrom(branchId, target), [branchId, target])
   const production = useSnapshot(() => productionDoc(target), [target])
 
   const [step, setStep] = useState(1)
@@ -72,24 +77,23 @@ export default function CloseDay({ branchId, isMain }) {
 
   const summary = useMemo(() => summariseDay(sales.data ?? []), [sales.data])
 
-  // What the outlet had to sell: a delivery at a shop, its own share of the
-  // bake at the hub.
-  const received = useMemo(() => {
-    const arrived = {}
-    for (const transfer of transfersIn.data ?? []) {
-      if (transfer.status !== 'received' || transfer.direction === 'return') continue
-      for (const item of transfer.items ?? []) {
-        arrived[item.productId] =
-          (arrived[item.productId] ?? 0) + (item.qtyReceived ?? item.qtySent ?? 0)
-      }
-    }
-    if (isMain && production.data) {
-      for (const [productId, qty] of Object.entries(mainShare(production.data, branchId))) {
-        arrived[productId] = (arrived[productId] ?? 0) + qty
-      }
-    }
-    return arrived
-  }, [transfersIn.data, production.data, isMain, branchId])
+  // What the outlet had to sell: a delivery at a shop, what never went in a van
+  // at the hub.
+  //
+  // Through `receivedAt`, which the owner's stock screen also uses. This was a
+  // second copy of that arithmetic, and the two had already drifted: the figure
+  // the cashier was asked to confirm at closing time was not the figure the
+  // owner was reading at home.
+  const received = useMemo(
+    () =>
+      receivedAt({
+        branchId,
+        isMain,
+        transfers: [...(transfersIn.data ?? []), ...(transfersOut.data ?? [])],
+        production: production.data,
+      }),
+    [transfersIn.data, transfersOut.data, production.data, isMain, branchId],
+  )
 
   const lines = useMemo(
     () =>

@@ -37,26 +37,114 @@ test('a counted-in delivery is stock; one still in the van is not', () => {
   assert.deepEqual(receivedAt({ branchId: 'B2', transfers }), { 'bread-large': 38 })
 })
 
-test('stock going back to the hub is not an arrival', () => {
+test('stock coming back to the hub is an arrival, because it arrives', () => {
+  // This asserted the opposite, and the opposite lost stock every night. The
+  // reasoning behind it was that a return is not a delivery — true from the
+  // shop's end, where it is a departure. But the loop has already narrowed to
+  // notes addressed *to* this outlet, so what is left here is the hub taking
+  // crates off a van. Excluding them meant unsold bread left the shop's books,
+  // where it correctly stopped being carried, and never reached the hub's:
+  // counted in by a named person, and then accounted for nowhere.
   const transfers = [
     {
+      fromBranch: 'B2',
       toBranchId: 'MAIN',
       direction: 'return',
       status: 'received',
       items: [{ productId: 'rusk', qtySent: 5, qtyReceived: 5 }],
     },
   ]
+  assert.deepEqual(receivedAt({ branchId: 'MAIN', transfers }), { rusk: 5 })
+})
+
+test('a return still on its way back has not arrived', () => {
+  const transfers = [
+    {
+      fromBranch: 'B2',
+      toBranchId: 'MAIN',
+      direction: 'return',
+      status: 'dispatched',
+      items: [{ productId: 'rusk', qtySent: 5 }],
+    },
+  ]
   assert.deepEqual(receivedAt({ branchId: 'MAIN', transfers }), {})
 })
 
-test('the hub keeps its own share of the bake rather than sending itself a note', () => {
+test('the hub keeps what it made and did not put on a note', () => {
+  // The compile writes a draft note for every outlet in the same batch as the
+  // list, so bread destined for Gulberg is spoken for from the moment the list
+  // exists — long before the van. That is what keeps the hub's closing count to
+  // its own forty rather than the whole bake standing in the room.
   const production = {
     items: [{ productId: 'bread-large', perOutlet: { MAIN: 12, B2: 40 } }],
     produced: { 'bread-large': 52 },
   }
+  const transfers = [
+    {
+      fromBranch: 'MAIN',
+      toBranchId: 'B2',
+      status: 'draft',
+      items: [{ productId: 'bread-large', qtyDemanded: 40, qtySent: null }],
+    },
+  ]
+  assert.deepEqual(
+    receivedAt({ branchId: 'MAIN', isMain: true, transfers, production }),
+    { 'bread-large': 12 },
+  )
+})
+
+test('a short bake the hub gives away entirely leaves the hub with nothing', () => {
+  // The one that put bread on the owner's screen that was forty minutes down
+  // the road. Twelve came out of the oven against an order for fifty-two; the
+  // baker sent all twelve to Gulberg rather than keep his own share. The hub's
+  // shelf is empty, and it used to read twelve.
+  const production = {
+    items: [{ productId: 'bread-large', perOutlet: { MAIN: 12, B2: 40 } }],
+    produced: { 'bread-large': 12 },
+  }
+  const transfers = [
+    {
+      fromBranch: 'MAIN',
+      toBranchId: 'B2',
+      status: 'dispatched',
+      items: [{ productId: 'bread-large', qtyDemanded: 40, qtySent: 12 }],
+    },
+  ]
+  assert.deepEqual(receivedAt({ branchId: 'MAIN', isMain: true, transfers, production }), {})
+})
+
+test('a tray the hub baked and kept is the hub’s stock', () => {
+  // Extras belonged nowhere at all: the old figure was capped at what the hub
+  // had ordered for its own counter, so a second bake nobody asked for was, on
+  // every screen in the system, zero.
+  const production = {
+    items: [],
+    produced: {},
+    extras: { rusk: { productId: 'rusk', productName: 'Rusk', qty: 20 } },
+  }
   assert.deepEqual(
     receivedAt({ branchId: 'MAIN', isMain: true, transfers: [], production }),
-    { 'bread-large': 12 },
+    { rusk: 20 },
+  )
+})
+
+test('an extra shared out is only the hub’s for the part it kept', () => {
+  const production = {
+    items: [],
+    produced: {},
+    extras: { rusk: { productId: 'rusk', productName: 'Rusk', qty: 20 } },
+  }
+  const transfers = [
+    {
+      fromBranch: 'MAIN',
+      toBranchId: 'B2',
+      status: 'dispatched',
+      items: [{ productId: 'rusk', qtyDemanded: 0, qtySent: 8, extra: true }],
+    },
+  ]
+  assert.deepEqual(
+    receivedAt({ branchId: 'MAIN', isMain: true, transfers, production }),
+    { rusk: 12 },
   )
 })
 
@@ -74,11 +162,10 @@ test('the hub has what was baked, not what was planned', () => {
 })
 
 test('before anything is recorded as baked, the hub has nothing', () => {
+  // No key at all rather than a zero, so the close wizard does not ask anybody
+  // to count a product the ovens have not produced.
   const production = { items: [{ productId: 'bread-large', perOutlet: { MAIN: 12 } }] }
-  assert.deepEqual(
-    receivedAt({ branchId: 'MAIN', isMain: true, transfers: [], production }),
-    { 'bread-large': 0 },
-  )
+  assert.deepEqual(receivedAt({ branchId: 'MAIN', isMain: true, transfers: [], production }), {})
 })
 
 test('a voided sale did not sell anything', () => {

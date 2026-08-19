@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useSnapshot } from '../lib/hooks.js'
 import { useAuth } from '../auth.jsx'
-import { businessDateOf, nextDate } from '../lib/dates.js'
-import { receiveTransfer, transfersTo } from '../data/transfers.js'
+import { businessDateOf, formatDate, nextDate } from '../lib/dates.js'
+import { receiveTransfer } from '../data/transfers.js'
+import { pendingDeliveries, useArrivals } from '../data/arrivals.js'
 import { SHORT_REASONS } from '../config.js'
 import { Loading, Stepper } from '../components/ui.jsx'
 import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
@@ -17,15 +17,21 @@ export default function Stock({ branchId, isMain }) {
 
   return (
     <div className="page">
-      {!isMain && <ReceiveDelivery branchId={branchId} businessDate={today} />}
+      {!isMain && <ReceiveDelivery branchId={branchId} today={today} />}
       <TomorrowsOrder branchId={branchId} businessDate={nextDate(today)} />
     </div>
   )
 }
 
-function ReceiveDelivery({ branchId, businessDate }) {
+function ReceiveDelivery({ branchId, today }) {
   const { profile } = useAuth()
-  const incoming = useSnapshot(() => transfersTo(branchId, businessDate), [branchId, businessDate])
+
+  // Every note addressed here across yesterday, today and tomorrow — not just
+  // today. See src/data/arrivals.js: a note carries the day it was *made for*,
+  // and the baker making tomorrow's bread tonight is the normal case, not the
+  // strange one. Asking only about today told this shop "nothing on its way"
+  // with the van already loaded.
+  const incoming = useArrivals(branchId, today)
 
   // Not null. An empty space here says "nothing is coming", and a cashier who
   // believes that stops waiting for the van.
@@ -40,14 +46,29 @@ function ReceiveDelivery({ branchId, businessDate }) {
     )
   }
 
+  // A read that failed is not the same fact as a delivery that was not sent,
+  // and only one of the two is safe to say out loud.
+  if (incoming.error) {
+    return (
+      <div className="card">
+        <h3>Delivery</h3>
+        <p className="muted small" style={{ margin: 0 }}>
+          The delivery notes could not be read on this tablet, so this is not a reliable answer.
+          Sign out and back in, and if it still will not load, ring the main outlet before assuming
+          nothing is coming.
+        </p>
+      </div>
+    )
+  }
+
   const arriving = (incoming.data ?? []).filter((t) => t.direction !== 'return')
-  const pending = arriving.filter((t) => t.status === 'dispatched')
+  const pending = pendingDeliveries(incoming.data)
   const done = arriving.filter((t) => t.status === 'received')
 
   return (
     <>
       {pending.map((transfer) => (
-        <ReceiveCard key={transfer.id} transfer={transfer} user={profile} />
+        <ReceiveCard key={transfer.id} transfer={transfer} today={today} user={profile} />
       ))}
 
       {pending.length === 0 && (
@@ -55,7 +76,9 @@ function ReceiveDelivery({ branchId, businessDate }) {
           <h3>Delivery</h3>
           {done.length > 0 ? (
             <p className="muted small" style={{ margin: 0 }}>
-              Today's delivery is confirmed — {done[0].ref}, received by {done[0].receivedByName}.
+              {done.length === 1 ? 'The delivery is' : `All ${done.length} deliveries are`} confirmed
+              — {done.map((t) => t.ref).join(', ')}, received by{' '}
+              {done[done.length - 1].receivedByName}.
             </p>
           ) : (
             <p className="muted small" style={{ margin: 0 }}>
@@ -69,7 +92,7 @@ function ReceiveDelivery({ branchId, businessDate }) {
   )
 }
 
-function ReceiveCard({ transfer, user }) {
+function ReceiveCard({ transfer, today, user }) {
   // Pre-filled with what was sent: a normal day is one tap.
   const [counted, setCounted] = useState(() =>
     Object.fromEntries(transfer.items.map((i) => [i.productId, i.qtySent ?? i.qtyDemanded])),
@@ -82,7 +105,15 @@ function ReceiveCard({ transfer, user }) {
   return (
     <div className="card">
       <div className="row between">
-        <h2 style={{ margin: 0 }}>Delivery in — {transfer.ref}</h2>
+        <h2 style={{ margin: 0 }}>
+          Delivery in — {transfer.ref}
+          {/* Named only when it is not today's, which is the case that used to
+              be invisible. Saying "for tomorrow" on every normal delivery would
+              be noise; saying nothing on the one that matters was the bug. */}
+          {transfer.businessDate !== today && (
+            <span className="muted"> · for {formatDate(transfer.businessDate)}</span>
+          )}
+        </h2>
         <span className="muted small">sent by {transfer.dispatchedByName}</span>
       </div>
       <p className="muted small">

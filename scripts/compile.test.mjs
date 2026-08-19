@@ -7,7 +7,7 @@ import {
   mergeProduction,
   productionProgress,
   shortfalls,
-  mainShare,
+  hubStock,
 } from '../src/lib/compile.js'
 
 const BRANCHES = [
@@ -221,17 +221,39 @@ test('baking over the asked-for amount is not reported as short', () => {
   assert.equal(productionProgress(order).complete, true)
 })
 
-test("the hub's own stock is what it baked for itself, less what went out", () => {
+test("the hub's own stock is what it made, less what is on a note", () => {
   const order = {
     items: [{ productId: 'patty', productName: 'P', qtyNeeded: 45, perOutlet: { MAIN: 20, B2: 25 } }],
     produced: { patty: 45 },
   }
-  assert.deepEqual(mainShare(order, 'MAIN'), { patty: 20 })
-  assert.deepEqual(mainShare(order, 'MAIN', { patty: 5 }), { patty: 15 })
+  // The compile writes Gulberg's note in the same batch as the list, so its 25
+  // are spoken for immediately and the hub is left with its own 20.
+  assert.deepEqual(hubStock(order, { patty: 25 }), { patty: 20 })
 
-  // A short bake cannot leave the hub claiming more than exists.
+  // Nothing spoken for yet: everything made is still standing in the building,
+  // and saying so is the honest answer rather than a share of an order.
+  assert.deepEqual(hubStock(order), { patty: 45 })
+
+  // A short bake given away entirely leaves the hub with nothing. This is what
+  // the old figure got wrong — its `dispatched` argument was never passed by
+  // any caller, so the hub kept claiming a share it had already sent out.
   const short = { items: order.items, produced: { patty: 12 } }
-  assert.deepEqual(mainShare(short, 'MAIN'), { patty: 12 })
+  assert.deepEqual(hubStock(short, { patty: 12 }), {})
+})
+
+test('a tray nobody ordered is the hub’s until it is put on a note', () => {
+  const order = {
+    items: [],
+    produced: {},
+    extras: { donut: { productId: 'donut', productName: 'Donut', qty: 30 } },
+  }
+  assert.deepEqual(hubStock(order), { donut: 30 })
+  assert.deepEqual(hubStock(order, { donut: 12 }), { donut: 18 })
+})
+
+test('the hub is never left owing more than it made', () => {
+  const order = { items: [], produced: { patty: 5 } }
+  assert.deepEqual(hubStock(order, { patty: 9 }), {})
 })
 
 

@@ -4,6 +4,7 @@ import { fireAndForget } from './errors.js'
 import { transferDocId, transferRef } from '../lib/ids.js'
 import { HUB_BRANCH_ID } from '../config.js'
 import { practiceStamp } from '../lib/practice.js'
+import { dispatchedItems, receivedItems } from '../lib/dispatch.js'
 
 // A delivery note. Created as a draft by the compile, pre-filled with what the
 // outlet asked for, so the hub only confirms or adjusts and the outlet only
@@ -38,12 +39,22 @@ export function transfersTo(branchId, businessDate) {
   )
 }
 
-/** Hub sends the goods. `sent` overrides only the lines that were adjusted. */
+/**
+ * Hub sends the goods. `sent` overrides only the lines that were adjusted.
+ *
+ * The fallback runs through `item.qtySent` before `item.qtyDemanded`, and that
+ * middle step is not decoration. A tray of something nobody ordered is added to
+ * the note as a line with `qtyDemanded: 0` and its quantity already in
+ * `qtySent` — it cannot be in `sent`, because `sent` is seeded from the note's
+ * own lines and an extra is by definition not one of them. Falling straight to
+ * `qtyDemanded` therefore wrote every single extra out as zero: the van left
+ * with twenty donuts in it, the note said none had been sent, the shop could
+ * not count them in without recording a miscount, and the day's paperwork
+ * valued them at nothing. It happened every time, and the button said "Send —
+ * 1 extra" while it did it.
+ */
 export function dispatchTransfer({ transfer, sent = {}, user }) {
-  const items = transfer.items.map((item) => ({
-    ...item,
-    qtySent: sent[item.productId] ?? item.qtyDemanded,
-  }))
+  const items = dispatchedItems(transfer.items, sent)
 
   fireAndForget(
     updateDoc(transferDoc(transfer.id), {
@@ -63,15 +74,7 @@ export function dispatchTransfer({ transfer, sent = {}, user }) {
  * never quietly turned into the outlet's waste.
  */
 export function receiveTransfer({ transfer, counted = {}, reasons = {}, user }) {
-  const items = transfer.items.map((item) => {
-    const got = counted[item.productId] ?? item.qtySent
-    const short = got !== item.qtySent
-    return {
-      ...item,
-      qtyReceived: got,
-      ...(short ? { shortReason: reasons[item.productId] ?? 'Other' } : {}),
-    }
-  })
+  const items = receivedItems(transfer.items, counted, reasons)
 
   fireAndForget(
     updateDoc(transferDoc(transfer.id), {
@@ -118,11 +121,4 @@ export function sendReturn({ fromBranch, businessDate, items, user, toBranch = H
 
   fireAndForget(setDoc(transferDoc(id), record, { merge: true }), `return ${record.ref}`)
   return record
-}
-
-export function transferVariance(transfer) {
-  return (transfer.items ?? []).reduce(
-    (sum, i) => sum + Math.max(0, (i.qtySent ?? 0) - (i.qtyReceived ?? i.qtySent ?? 0)),
-    0,
-  )
 }

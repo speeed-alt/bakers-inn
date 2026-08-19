@@ -185,18 +185,46 @@ export function shortfalls(order) {
 }
 
 /**
- * What the hub itself has to sell: what it baked for its own counter, less
- * anything of that already sent out. Defined here so the figure is the same
- * everywhere it is shown.
+ * What the hub still has, out of everything it made today.
+ *
+ * Stated as a physical fact rather than as a share of an order: everything that
+ * came out of the ovens, less everything that is on a delivery note. What is
+ * left is in the building, and the building is the hub's shop.
+ *
+ * This replaced `mainShare`, which asked a subtly different question — "how
+ * much of what the hub ordered for itself did it manage to bake" — and got
+ * three things wrong at once, each of which showed the hub holding bread it did
+ * not have:
+ *
+ *   - It took a `dispatched` argument that no caller ever passed. So on a short
+ *     day, when the baker sent the whole bake to the outlets rather than keep
+ *     his own share, the hub was still credited with that share in full. The
+ *     owner's stock screen showed loaves that were forty minutes down the road.
+ *   - It was capped at what the hub had ordered for its own counter, so a
+ *     second bake nobody ordered belonged to nowhere.
+ *   - Extras never appeared at all: a tray of spare rusks the hub deliberately
+ *     kept was, on every screen in the system, nothing.
+ *
+ * `committed` is what is spoken for, from `committedOut` — a note still in
+ * draft counts at what the outlet asked for, one that has gone counts at what
+ * actually went. So bread earmarked for Gulberg stops being the hub's the
+ * moment the note exists, not when the van pulls away, and the hub is never
+ * asked at closing time to count a crate that is standing by the door with
+ * somebody else's name on it.
+ *
+ * Products that are entirely spoken for drop out rather than sitting at zero,
+ * which is what keeps the hub's closing count to things it actually handled.
  */
-export function mainShare(order, mainId, dispatched = {}) {
-  const produced = order?.produced ?? {}
-  const share = {}
-  for (const item of order?.items ?? []) {
-    const own = item.perOutlet?.[mainId] ?? 0
-    if (!own) continue
-    const madeRatio = Math.min(own, produced[item.productId] ?? 0)
-    share[item.productId] = Math.max(0, madeRatio - (dispatched[item.productId] ?? 0))
+export function hubStock(order, committed = {}) {
+  const made = { ...(order?.produced ?? {}) }
+  for (const extra of extrasList(order)) {
+    made[extra.productId] = (made[extra.productId] ?? 0) + (extra.qty ?? 0)
   }
-  return share
+
+  const left = {}
+  for (const [productId, qty] of Object.entries(made)) {
+    const keeps = qty - (committed[productId] ?? 0)
+    if (keeps > 0) left[productId] = keeps
+  }
+  return left
 }

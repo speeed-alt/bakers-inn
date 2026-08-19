@@ -7,28 +7,37 @@
 // would eventually give two answers, and the one the owner reads at home would
 // not be the one the cashier is looking at.
 
-import { mainShare } from './compile.js'
+import { hubStock } from './compile.js'
+import { committedOut } from './dispatch.js'
 import { buildLeftovers } from './leftovers.js'
 import { carryoverFrom } from './dailyReport.js'
 
 /**
  * What one outlet took in today.
  *
- * A shop receives deliveries. The hub does not send itself anything — it keeps
- * its own share of the bake, which is on the production order rather than on a
- * transfer. Returns coming back are excluded: stock going the other way is not
- * an arrival.
+ * A shop receives deliveries. The hub does not send itself anything — what it
+ * keeps is whatever it made and did not put on a note, which is worked out from
+ * the production order by `hubStock`.
  *
  * Only deliveries that have actually been counted in are included. A note still
  * in the van is not stock on a shelf, and treating it as such is how a shop ends
  * up "having" bread it cannot find.
+ *
+ * **A return arriving is an arrival.** This used to skip every note marked
+ * `return`, on the reasoning that stock going back the other way is not a
+ * delivery — but the loop above has already narrowed to notes addressed *to*
+ * this outlet, so what is left is the hub receiving crates. Skipping them meant
+ * unsold bread sent back at closing left the shop's books, where it was
+ * correctly no longer carried, and never appeared on the hub's: forty loaves
+ * checked in by name, by a person, and then accounted for nowhere in the
+ * system. The stock that went back was silently destroyed every night.
  */
 export function receivedAt({ branchId, isMain = false, transfers = [], production = null }) {
   const arrived = {}
 
   for (const transfer of transfers) {
     if (transfer.toBranchId !== branchId) continue
-    if (transfer.status !== 'received' || transfer.direction === 'return') continue
+    if (transfer.status !== 'received') continue
     for (const item of transfer.items ?? []) {
       arrived[item.productId] =
         (arrived[item.productId] ?? 0) + (item.qtyReceived ?? item.qtySent ?? 0)
@@ -36,7 +45,8 @@ export function receivedAt({ branchId, isMain = false, transfers = [], productio
   }
 
   if (isMain && production) {
-    for (const [productId, qty] of Object.entries(mainShare(production, branchId))) {
+    const spokenFor = committedOut(branchId, transfers)
+    for (const [productId, qty] of Object.entries(hubStock(production, spokenFor))) {
       arrived[productId] = (arrived[productId] ?? 0) + qty
     }
   }

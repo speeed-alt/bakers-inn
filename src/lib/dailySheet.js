@@ -1,4 +1,5 @@
-import { extrasList, mainShare } from './compile.js'
+import { extrasList, hubStock } from './compile.js'
+import { committedOut } from './dispatch.js'
 import { summariseDay } from './report.js'
 
 // The owner's own daily sheet, worked out by itself.
@@ -78,7 +79,7 @@ export function productionValue(production, prices = {}) {
  */
 export function distributedTo({ branch, production, transfers = [], prices = {} }) {
   if (branch?.isMain) {
-    const share = mainShare(production, branch.id)
+    const share = hubStock(production, committedOut(branch.id, transfers))
     let value = 0
     let qty = 0
     for (const [productId, n] of Object.entries(share)) {
