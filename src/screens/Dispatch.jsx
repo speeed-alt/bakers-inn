@@ -9,6 +9,7 @@ import { productionDoc } from '../data/production.js'
 import { dispatchTransfer, receiveTransfer, startTransfer, transfersFrom } from '../data/transfers.js'
 import { pendingReturns, useArrivals } from '../data/arrivals.js'
 import { committedOut } from '../lib/dispatch.js'
+import { weighedProps } from '../lib/quantity.js'
 import { Empty, Loading, Stepper } from '../components/ui.jsx'
 
 /**
@@ -350,9 +351,10 @@ function ReturnCard({ transfer, fromName, today, user }) {
             <span className="bill-name">{i.productName}</span>
             <Stepper
               value={counted[i.productId]}
-              max={i.qtySent}
               onChange={(v) => setCounted((c) => ({ ...c, [i.productId]: v }))}
               label={`arrived, ${i.productName}`}
+              {...weighedProps(i)}
+              max={i.qtySent}
             />
             <span className="bill-amount muted">{i.qtySent}</span>
           </div>
@@ -430,6 +432,8 @@ function DispatchCard({ transfer, outletName, user, extras = [] }) {
             <Stepper
               value={sending[item.productId]}
               onChange={(v) => setSending((c) => ({ ...c, [item.productId]: v }))}
+              label={`sending, ${item.productName}`}
+              {...weighedProps(item)}
             />
             <span className="bill-amount">{item.qtyDemanded}</span>
           </div>
@@ -456,9 +460,10 @@ function DispatchCard({ transfer, outletName, user, extras = [] }) {
                 <span className="bill-name">{e.productName}</span>
                 <Stepper
                   value={added[e.productId] ?? 0}
-                  max={e.qty}
                   onChange={(v) => setAdded((c) => ({ ...c, [e.productId]: v }))}
                   label={`extra ${e.productName} for ${outletName}`}
+                  {...weighedProps(e)}
+                  max={e.qty}
                 />
                 <span className="bill-amount muted">{e.qty} made</span>
               </div>

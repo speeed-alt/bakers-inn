@@ -110,3 +110,28 @@ export function maxFor(product) {
 
 export const MAX_COUNTED_UNITS = 999
 export const MAX_WEIGHED_UNITS = 100
+
+/**
+ * The props a Stepper needs to count one of these properly.
+ *
+ * Spread rather than passed one by one, because the interesting fact is that
+ * they always travel together: a screen that knows the step but not the parser
+ * accepts "450g" and stores 450. Only the till had them; the baking list, the
+ * delivery note, the receipt count, the closing count and the outlet's order
+ * were all plain integer steppers, so the one product this bakery sells by
+ * weight could be ordered, baked, sent, received and counted only in whole
+ * kilos — while the till sold it in quarters. Weighed stock could never
+ * reconcile, and nothing said why.
+ *
+ * A missing product means "not known yet", which behaves as counted.
+ */
+export function weighedProps(product) {
+  if (!product) return {}
+  return {
+    step: stepFor(product),
+    max: maxFor(product),
+    parse: (raw) => parseQuantity(raw, product),
+    // The bare number: these steppers sit in tables with their own unit column.
+    format: (n) => String(Number(Number(n ?? 0).toFixed(3))),
+  }
+}

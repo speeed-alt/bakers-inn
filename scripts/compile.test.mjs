@@ -299,3 +299,55 @@ test('a compile only ever sees the orders filed under its own day', () => {
   // compiledFrom holds the order documents it was built from, not branch ids.
   assert.deepEqual(tomorrow.compiledFrom, ['D-20260818-B2'])
 })
+
+// --- the unit travels with the goods ---------------------------------------
+
+test('a weighed line keeps its unit from the order to the delivery note', () => {
+  // Only the till understood weight. Everywhere else was a plain integer
+  // stepper, so the one product this bakery sells by the kilo was ordered,
+  // baked, sent, received and counted in whole ones — 2.5 kg out of the oven
+  // recorded as 2 — while the till sold it in quarters. Weighed stock could
+  // never reconcile, and nothing said why. The flag rides on the line now.
+  const branches = [{ id: 'MAIN', isMain: true }, { id: 'B2' }]
+  const demands = [
+    {
+      id: 'D1',
+      branchId: 'B2',
+      status: 'submitted',
+      items: [
+        { productId: 'biscuits', productName: 'Biscuits', qty: 2.5, soldByWeight: true, unit: 'kg' },
+        { productId: 'bread', productName: 'Bread', qty: 40 },
+      ],
+    },
+  ]
+
+  const result = compileDemands({ branches, demands, fallbacks: {}, existing: null })
+
+  const line = result.items.find((i) => i.productId === 'biscuits')
+  assert.equal(line.qtyNeeded, 2.5, 'the half kilo survives the addition')
+  assert.equal(line.soldByWeight, true)
+  assert.equal(line.unit, 'kg')
+
+  // And onto the note the van carries.
+  const note = result.transfers.find((t) => t.toBranchId === 'B2')
+  const noteLine = note.items.find((i) => i.productId === 'biscuits')
+  assert.equal(noteLine.qtyDemanded, 2.5)
+  assert.equal(noteLine.soldByWeight, true)
+
+  // A counted product is left alone rather than gaining a meaningless unit.
+  const bread = result.items.find((i) => i.productId === 'bread')
+  assert.equal(bread.soldByWeight, undefined)
+  assert.equal(bread.unit, undefined)
+})
+
+test('two outlets ordering fractions add up without drifting', () => {
+  const branches = [{ id: 'MAIN', isMain: true }, { id: 'B2' }, { id: 'B3' }]
+  const demands = [
+    { id: 'D1', branchId: 'B2', status: 'submitted', items: [{ productId: 'biscuits', productName: 'B', qty: 2.5, soldByWeight: true, unit: 'kg' }] },
+    { id: 'D2', branchId: 'B3', status: 'submitted', items: [{ productId: 'biscuits', productName: 'B', qty: 1.25, soldByWeight: true, unit: 'kg' }] },
+  ]
+  const result = compileDemands({ branches, demands, fallbacks: {}, existing: null })
+  const line = result.items.find((i) => i.productId === 'biscuits')
+  assert.equal(line.qtyNeeded, 3.75)
+  assert.deepEqual(line.perOutlet, { B2: 2.5, B3: 1.25 })
+})

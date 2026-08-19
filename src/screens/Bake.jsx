@@ -5,6 +5,7 @@ import { useSnapshot } from '../lib/hooks.js'
 import { useAuth } from '../auth.jsx'
 import { businessDateOf, formatDate, nextDate } from '../lib/dates.js'
 import { extrasList, extrasTotal, productionProgress } from '../lib/compile.js'
+import { weighedProps } from '../lib/quantity.js'
 import {
   addExtra,
   compileNow,
@@ -203,6 +204,12 @@ export default function Bake() {
                 <Stepper
                   value={value}
                   onChange={(v) => setDraft((c) => ({ ...c, [keyFor(item.productId)]: v }))}
+                  label={`baked ${item.productName}`}
+                  // Biscuits are sold by the kilo, so they are baked by the
+                  // kilo. Without these the stepper is the default integer one
+                  // and 2.5 kg out of the oven was recorded as 2 — half a kilo
+                  // gone from the day, silently, before it ever left the hub.
+                  {...weighedProps(item)}
                 />
                 <button
                   className={`btn small ${isDone && !pending ? 'ghost' : 'primary'}`}
@@ -503,7 +510,12 @@ function Extras({ order, today, user, products }) {
             </option>
           ))}
         </select>
-        <Stepper value={qty} onChange={setQty} label="how many extra" />
+        <Stepper
+          value={qty}
+          onChange={setQty}
+          label="how many extra"
+          {...weighedProps(choices.find((p) => p.id === productId))}
+        />
         <button className="btn primary" disabled={!productId || busy} onClick={add}>
           {busy ? 'Adding…' : 'Add'}
         </button>

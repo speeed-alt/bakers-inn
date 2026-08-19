@@ -55,6 +55,14 @@ export function saveDemand({ branchId, businessDate, items, user, submit = false
         code: i.code ?? '',
         productName: i.name ?? i.productName,
         qty: i.qty,
+        // Carried on the line itself, all the way from the order to the closing
+        // count. Every screen that counts these goods needs to know whether it
+        // is counting loaves or kilograms, and looking the product up again at
+        // each stop is how one of them comes to be counting the wrong thing —
+        // which is exactly what happened: only the till knew, so the one item
+        // this bakery sells by weight was ordered, baked, sent, received and
+        // counted in whole kilos while the till sold it in quarters.
+        ...(i.soldByWeight ? { soldByWeight: true, unit: i.unit ?? 'kg' } : {}),
       })),
     updatedBy: user.id,
     updatedByName: user.name,

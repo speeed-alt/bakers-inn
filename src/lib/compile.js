@@ -80,6 +80,9 @@ export function compileDemands({ branches = [], demands = [], fallbacks = {}, ex
         productName: item.productName,
         qtyNeeded: 0,
         perOutlet: {},
+        // Travels with the line, so the kitchen and the van count in the same
+        // unit the shop ordered in.
+        ...(item.soldByWeight ? { soldByWeight: true, unit: item.unit ?? 'kg' } : {}),
       }
       row.qtyNeeded += item.qty
       row.perOutlet[branchId] = (row.perOutlet[branchId] ?? 0) + item.qty
@@ -101,6 +104,7 @@ export function compileDemands({ branches = [], demands = [], fallbacks = {}, ex
           code: it.code,
           productName: it.productName,
           qtyDemanded: it.perOutlet[toBranchId],
+          ...(it.soldByWeight ? { soldByWeight: true, unit: it.unit ?? 'kg' } : {}),
         })),
     }))
     .filter((t) => t.items.length > 0)

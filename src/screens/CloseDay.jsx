@@ -16,6 +16,7 @@ import { productionDoc } from '../data/production.js'
 import { sendReturn, transfersFrom } from '../data/transfers.js'
 import { pendingDeliveries, useArrivals } from '../data/arrivals.js'
 import { WASTE_REASONS } from '../config.js'
+import { weighedProps } from '../lib/quantity.js'
 import { Empty, Loading, Modal, Money, Stepper } from '../components/ui.jsx'
 import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
 
@@ -542,6 +543,8 @@ function LeftoverStep({ lines, counts, setCounts, dispositions, setDispositions,
               <Stepper
                 value={qty}
                 onChange={(v) => setCounts((s) => ({ ...s, [line.productId]: v }))}
+                label={`left, ${line.productName}`}
+                {...weighedProps(line)}
               />
               <span className="bill-amount">{line.sold}</span>
             </div>

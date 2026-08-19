@@ -9,6 +9,7 @@ import { demandDoc, lastSameWeekdayDemand, saveDemand } from '../data/demands.js
 import { branchReportsQuery } from '../data/reports.js'
 import { sameWeekdayReports, suggestOrder } from '../lib/suggest.js'
 import { Empty, Loading, Stepper } from '../components/ui.jsx'
+import { weighedProps } from '../lib/quantity.js'
 
 /**
  * Tomorrow's order.
@@ -79,7 +80,16 @@ export default function TomorrowsOrder({ branchId, businessDate, bare = false, o
       businessDate,
       items: catalog
         .filter((p) => qty[p.id] > 0)
-        .map((p) => ({ productId: p.id, code: p.code, name: p.name, qty: qty[p.id] })),
+        .map((p) => ({
+          productId: p.id,
+          code: p.code,
+          name: p.name,
+          qty: qty[p.id],
+          // The unit travels with the line from here. Without it the kitchen
+          // gets a plain integer counter and two and a half kilos of biscuits
+          // are recorded as two.
+          ...(p.soldByWeight ? { soldByWeight: true, unit: p.unit ?? 'kg' } : {}),
+        })),
       user: profile,
       submit: true,
     })
@@ -176,7 +186,16 @@ function OrderTable({ catalog, qty, lastWeek = {}, suggestion = null, onQty, rea
                 </span>
               )}
             </span>
-            {readOnly ? <span /> : <Stepper value={qty[p.id] ?? 0} onChange={(v) => onQty(p.id, v)} />}
+            {readOnly ? (
+              <span />
+            ) : (
+              <Stepper
+                value={qty[p.id] ?? 0}
+                onChange={(v) => onQty(p.id, v)}
+                label={`order ${p.name}`}
+                {...weighedProps(p)}
+              />
+            )}
             <span className="bill-amount">
               {readOnly ? qty[p.id] : suggested ? (basis?.qty ?? '–') : (lastWeek[p.id] ?? '–')}
             </span>

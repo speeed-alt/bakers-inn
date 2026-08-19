@@ -10,6 +10,7 @@ import { salesForDay } from '../data/sales.js'
 import { closingDoc } from '../data/closings.js'
 import { productionDoc } from '../data/production.js'
 import { stockAt } from '../lib/stock.js'
+import { weighedProps } from '../lib/quantity.js'
 import { SHORT_REASONS } from '../config.js'
 import { Empty, Loading, Stepper } from '../components/ui.jsx'
 import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
@@ -258,6 +259,8 @@ function ReceiveCard({ transfer, today, user }) {
               <Stepper
                 value={counted[item.productId]}
                 onChange={(v) => setCounted((c) => ({ ...c, [item.productId]: v }))}
+                label={`counted, ${item.productName}`}
+                {...weighedProps(item)}
               />
               <span className="bill-amount">{item.qtySent}</span>
             </div>

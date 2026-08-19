@@ -55,6 +55,7 @@ export function buildLeftovers({
         productName: product.name,
         price: product.price ?? 0,
         keeps: Boolean(product.sellsNextDay),
+        ...(product.soldByWeight ? { soldByWeight: true, unit: product.unit ?? 'kg' } : {}),
         received: received[product.id] ?? 0,
         carriedIn: carriedIn[product.id] ?? 0,
         sold: soldQty,
