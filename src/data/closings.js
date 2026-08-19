@@ -55,6 +55,10 @@ export function closeDay({
     salesTotal: summary.salesTotal,
     cashTotal: summary.cashTotal,
     cardTotal: summary.cardTotal,
+    // The whole split, so a close can still be read years later even if the
+    // shop has stopped taking one of these ways entirely.
+    digitalTotal: summary.digitalTotal,
+    byMethod: summary.byMethod.map((m) => ({ id: m.id, label: m.label, total: m.total, count: m.count })),
     refundTotal: summary.refundTotal,
     txCount: summary.txCount,
     voidedCount: summary.voidedCount,

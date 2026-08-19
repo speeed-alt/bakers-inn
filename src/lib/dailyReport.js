@@ -127,6 +127,8 @@ export function buildDailyReport({
     salesTotal: summary.salesTotal,
     cashTotal: summary.cashTotal,
     cardTotal: summary.cardTotal,
+    digitalTotal: summary.digitalTotal,
+    byMethod: summary.byMethod.map((m) => ({ id: m.id, label: m.label, total: m.total, count: m.count })),
     refundTotal: summary.refundTotal,
     txCount: summary.txCount,
     voidedCount: summary.voidedCount,

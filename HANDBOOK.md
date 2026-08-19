@@ -24,7 +24,7 @@ The day is a loop, and every screen in the app is one step of it:
         │                                                        │
    1. Each shop says what it wants for tomorrow      (Close day, step 3)
         │                                                        │
-   2. At 05:00 the system adds those up into ONE baking list     │
+   2. The baker adds those up into ONE baking list    (Bake)      │
         │                                                        │
    3. The kitchen bakes it and records what came out    (Bake)    │
         │                                                        │
@@ -101,8 +101,13 @@ The main screen for a cashier, and the most-used screen in the business.
 - Type a **quantity** rather than tapping `+` forty times.
 - **Weighed items** accept `4.5`, `4.5kg` or `450g`.
 - The total sticks to the bottom of the screen so it is always visible.
-- **Pay** asks cash or card. For cash, type what the customer handed over and
-  the change is worked out.
+- **Pay** asks how: cash, card, JazzCash, Easypaisa or bank transfer. For cash,
+  type what the customer handed over and the change is worked out. For a wallet
+  or a transfer, type the transaction id the customer shows you — it is the only
+  thing that lets the money be matched against the account later.
+- Only **cash** is counted against the drawer at closing. A JazzCash payment is
+  real money and real takings, but it is not in the till, so it never makes the
+  drawer read short.
 - The receipt prints in the local four-column format, with the total written out
   in words as well as figures — a figure can be altered with a pen, a line of
   words cannot.
@@ -122,7 +127,9 @@ on the bill like anything else.
 
 Corrections, both same-day and both stamped:
 
-- **Fix** changes a sale rung as cash to card, or the other way round.
+- **Fix** corrects how a sale was paid — cash rung when the customer actually
+  sent JazzCash, and so on. This moves the money between the drawer and the
+  statements; it does not change what the customer paid.
 - **Void** cancels a sale entirely. It stays on the list, greyed, with the
   reason. It never disappears.
 
@@ -166,8 +173,10 @@ for the owner. It is stamped and it shows on the dashboard.
 
 ### Bake — the kitchen
 
-One list, for all three shops, compiled at 05:00. For each line, record what
-actually came out of the oven.
+**Make the list** when you start. One tap adds up what the three shops ordered
+last night into a single list for all of them — the baker decides when the
+bake begins, not a clock. Then, for each line, record what actually came out of
+the oven.
 
 - A short bake is normal and the list can still be finished — otherwise the vans
   never leave.
@@ -219,8 +228,7 @@ Owner-only.
 
 | Time | Who | What |
 |---|---|---|
-| 05:00 | *automatic* | The three orders are added into one baking list |
-| 05:15 | Kitchen | Open **Bake**, work through the list, record what came out |
+| start of the bake | Kitchen | Open **Bake**, tap **Make the list now**, work through it |
 | ~07:00 | Kitchen | **Dispatch** — adjust and send each shop's note |
 | ~07:30 | Each shop | **Stock** — count what arrived, give a reason for anything short |
 | all day | Cashiers | **Sell** |
@@ -228,9 +236,9 @@ Owner-only.
 | closing | Each shop | **Close day** — cash, shelf, tomorrow's order, finish |
 | any time | Owner | **Dashboard** |
 
-The two automatic steps are the only things that do not have a person behind
-them. If the 05:00 one has not run by 05:15, the kitchen makes the list itself
-from the Bake screen — same calculation, one tap. See §7.
+One automatic step is left: the 06:00 report rebuild, which settles yesterday's
+figures once every late-syncing sale has arrived. Everything else has a person
+behind it.
 
 ---
 
@@ -306,10 +314,10 @@ numbers for years. Do not renumber them.
 
 ## 7 · When something goes wrong
 
-### There is no baking list at 05:15
+### There is no baking list
 
-**The kitchen fixes this itself now.** Open **Bake** and tap **Make the list
-now**. It adds up whatever the outlets sent last night — the identical
+Open **Bake** and tap **Make the list now**. That is the normal way it is made
+— there is no scheduled job to wait for. It adds up whatever the outlets sent last night — the identical
 calculation the 05:00 job runs, so it produces the list the job would have
 produced. Nobody types what to bake; it is still only ever the shops' own
 orders added up.

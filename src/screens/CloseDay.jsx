@@ -357,7 +357,15 @@ function CashStep({ summary, openingFloat, expected, countedText, setCountedText
               <td><b>Cash expected in drawer</b></td>
               <td className="num"><b><Money minor={expected} /></b></td>
             </tr>
-            <tr><td className="muted">Card sales</td><td className="num muted"><Money minor={summary.cardTotal} /></td></tr>
+            {/* Every way anybody actually paid today. Cash is above, because
+                that is the only figure the drawer is counted against; these are
+                listed so the total still explains itself. */}
+            {summary.byMethod.filter((m) => !m.drawer).map((m) => (
+              <tr key={m.id}>
+                <td className="muted">{m.label}</td>
+                <td className="num muted"><Money minor={m.total} /></td>
+              </tr>
+            ))}
             <tr><td className="muted">Total takings</td><td className="num muted"><Money minor={summary.salesTotal} /></td></tr>
             {summary.voidedCount > 0 && (
               <tr><td className="muted">Voided (not counted)</td><td className="num muted">{summary.voidedCount}</td></tr>
@@ -511,6 +519,12 @@ function ReviewStep({ target, summary, openingFloat, expected, counted, differen
           <tbody>
             <tr><td>Takings</td><td className="num"><Money minor={summary.salesTotal} /></td></tr>
             <tr><td className="muted">Cash</td><td className="num muted"><Money minor={summary.cashTotal} /></td></tr>
+            {summary.digitalTotal !== 0 && (
+              <tr>
+                <td className="muted">Not in the drawer</td>
+                <td className="num muted"><Money minor={summary.digitalTotal} /></td>
+              </tr>
+            )}
             <tr><td className="muted">Card</td><td className="num muted"><Money minor={summary.cardTotal} /></td></tr>
             <tr><td>Counted in drawer</td><td className="num">{counted === null ? '—' : <Money minor={counted} />}</td></tr>
             <tr>

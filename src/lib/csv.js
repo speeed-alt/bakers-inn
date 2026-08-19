@@ -18,7 +18,13 @@ export function toCsv(rows = []) {
 const money = (minor) => formatMoney(minor ?? 0, { symbol: false }).replaceAll(',', '')
 
 export function salesCsv(sales = []) {
-  const rows = [['Ref', 'Date', 'Outlet', 'Cashier', 'Payment', 'Status', 'Item', 'Qty', 'Unit price', 'Line total']]
+  // 'Reference' has to be here as well as in the row below, or every column
+  // after Payment is shifted by one and the accountant reads the status as
+  // the item name.
+  const rows = [[
+    'Ref', 'Date', 'Outlet', 'Cashier', 'Payment', 'Reference', 'Status',
+    'Item', 'Qty', 'Unit price', 'Line total',
+  ]]
   for (const sale of sales) {
     for (const item of sale.items ?? []) {
       rows.push([
@@ -27,6 +33,7 @@ export function salesCsv(sales = []) {
         sale.branchId,
         sale.cashierName,
         sale.payment,
+        sale.paymentRef ?? '',
         sale.status,
         item.name,
         item.qty,

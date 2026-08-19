@@ -167,9 +167,26 @@ test('a card sale prints how it was paid and no cash lines', () => {
     { businessDate: '2026-07-28', status: 'normal', payment: 'card', total: 800, items: [] },
     'Gulberg',
   )
-  assert.equal(r.payment, 'card')
+  // Named, not the stored id — a slip reading "jazzcash" looks like a fault.
+  assert.equal(r.payment, 'Card')
   assert.equal(r.cashGiven, null)
   assert.equal(r.changeGiven, null)
+})
+
+test('a wallet payment prints its name and its reference', () => {
+  const r = receiptModel(
+    {
+      businessDate: '2026-08-14',
+      status: 'normal',
+      payment: 'jazzcash',
+      paymentRef: 'TID9931204',
+      total: 600,
+      items: [],
+    },
+    'Gulberg',
+  )
+  assert.equal(r.payment, 'JazzCash')
+  assert.equal(r.paymentRef, 'TID9931204')
 })
 
 test('a cash sale does not repeat the payment type it already shows', () => {

@@ -31,6 +31,28 @@ export const CURRENCY_SYMBOL = 'Rs'
 export const CURRENCY_DECIMALS = 0
 export const MINOR_UNITS = 10 ** CURRENCY_DECIMALS
 
+// How a customer can pay.
+//
+// `drawer` is the only field that really matters, and it is not a label: it
+// decides whether the money is expected to be in the till at closing time.
+// Cash is; a JazzCash transfer sitting in the shop's mobile account is not.
+// Getting that wrong makes every drawer read short by the day's transfers, and
+// a cashier gets accused of it.
+//
+// `reference` asks the cashier for the transaction id the customer shows them.
+// Without it a line reading "JazzCash Rs 5,000" cannot be matched against the
+// account statement, and an evening's transfers are unverifiable.
+//
+// To add a method — another wallet, another bank — add a row. Nothing else in
+// the system needs to know about it.
+export const PAYMENT_METHODS = [
+  { id: 'cash', label: 'Cash', drawer: true },
+  { id: 'card', label: 'Card', drawer: false },
+  { id: 'jazzcash', label: 'JazzCash', drawer: false, reference: 'Transaction ID' },
+  { id: 'easypaisa', label: 'Easypaisa', drawer: false, reference: 'Transaction ID' },
+  { id: 'bank', label: 'Bank transfer', drawer: false, reference: 'Reference' },
+]
+
 // Sales rung before this hour count towards the previous business day, so a
 // late shift that runs past midnight lands on the right day's report.
 export const DAY_ROLLOVER_HOUR = 4
@@ -41,9 +63,6 @@ export const DAY_ROLLOVER_HOUR = 4
 export const CLOCK_TOLERANCE_MINUTES = 5
 
 // The daily cycle. An outlet orders on the evening before the day it is for;
-// the system compiles every outlet's order into one baking list at COMPILE_HOUR
-// the next morning, before the kitchen starts.
-export const COMPILE_HOUR = 5
 export const TIME_ZONE = 'Asia/Karachi'
 
 // The outlet that buys, bakes and distributes. Stock sent back at the end of a

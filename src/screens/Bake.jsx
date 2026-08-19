@@ -20,9 +20,9 @@ import { Empty, Loading, Stepper } from '../components/ui.jsx'
 
 /**
  * Today's baking list. Nobody wrote it — it is the three outlets' orders added
- * together by the system at 5am. The kitchen adds one number per line: how many
- * actually came out. That number is pre-filled with what was asked for, so a
- * normal morning is a tap per line.
+ * together, on the morning the baker starts. The kitchen adds one number per
+ * line: how many actually came out. That number is pre-filled with what was
+ * asked for, so a normal morning is a tap per line.
  */
 export default function Bake() {
   const { profile } = useAuth()
@@ -168,29 +168,16 @@ export default function Bake() {
 }
 
 /**
- * Things baked that nobody ordered.
+ * Where the day's baking actually begins.
  *
- * A second bake because the bread went by ten, a tray of donuts made because
- * the oven was free. These are kept apart from the compiled list rather than
- * added into it: the list is what the outlets asked for, and if extras were
- * folded in, tomorrow's suggested order would learn from a demand that was
- * never made.
+ * There was a 05:00 job that did this. It decided, at a fixed hour, what the
+ * bakery would bake — so the kitchen's morning depended on a clock and a
+ * network neither of them could see, and a morning it did not run was a morning
+ * nobody in the building could do anything about.
  *
- * Anything added here shows up on the Dispatch screen, where whoever is loading
- * the van decides which outlet it goes to. Nobody rations it behind their back.
- */
-/**
- * No list yet — and, now, something the kitchen can do about it.
- *
- * The 05:00 job is still the normal way this happens and nobody should have to
- * think about it. But when it has not run, this screen used to be the end of
- * the road: no list, no way to make one, and a handbook that said to telephone
- * the developer. At quarter past five in the morning that is not a plan.
- *
- * The button runs the identical compile — `compileDemands`, the same module the
- * scheduled job uses — so the list it produces is the list the job would have
- * produced. It is not an override or a manual entry screen: nobody types what
- * to bake, it is still only ever the outlets' own orders added up.
+ * The baker starts the bake now. Same arithmetic — `compileDemands`, the shops'
+ * own orders added up — just triggered by the person about to light the ovens.
+ * It is not a manual entry screen: nobody types what to bake.
  */
 function MakeTheList({ today, demands, user }) {
   const [busy, setBusy] = useState(false)
@@ -237,26 +224,27 @@ function MakeTheList({ today, demands, user }) {
 
   return (
     <div className="card">
-      <h2>No baking list for {formatDate(today)} yet</h2>
+      <h2>Today's baking list</h2>
       <p className="muted">
-        The list is put together automatically at 5am from what the outlets ordered the evening
-        before, so most mornings it is simply here.
+        The list is what the three shops asked for last night, added up. Make it when you are
+        ready to start — there is nothing to wait for.
       </p>
 
       {orders.length > 0 ? (
         <p className="muted small">
-          {orders.length} of {demands.length} outlet orders are in. You can add them up now rather
-          than waiting — it makes exactly the list 5am would have made.
+          {orders.length} of {demands.length} outlet orders are in.
+          {orders.length < demands.length &&
+            ' The shops that have not sent one get their last same weekday repeated.'}
         </p>
       ) : (
         <p className="muted small">
-          No outlet has sent an order for today yet. Adding up now would repeat last week for all
-          three, which is worth doing only if you know they are not coming.
+          No shop has sent an order for today yet. Making the list now would repeat last week for
+          all three — worth doing only if you know their orders are not coming.
         </p>
       )}
 
       <button className="btn primary big" disabled={busy} onClick={build}>
-        {busy ? 'Adding up the orders…' : 'Make the list now'}
+        {busy ? 'Adding up the orders…' : "Make today's list"}
       </button>
 
       {result?.items === 0 && (
@@ -274,6 +262,18 @@ function MakeTheList({ today, demands, user }) {
   )
 }
 
+/**
+ * Things baked that nobody ordered.
+ *
+ * A second bake because the bread went by ten, a tray of donuts made because
+ * the oven was free. These are kept apart from the compiled list rather than
+ * added into it: the list is what the outlets asked for, and if extras were
+ * folded in, tomorrow's suggested order would learn from a demand that was
+ * never made.
+ *
+ * Anything added here shows up on the Dispatch screen, where whoever is loading
+ * the van decides which outlet it goes to. Nobody rations it behind their back.
+ */
 function Extras({ order, today, user, products }) {
   const [productId, setProductId] = useState('')
   const [qty, setQty] = useState(1)

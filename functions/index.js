@@ -22,12 +22,15 @@ import {
 import { addDays, previousDate } from './shared/lib/dates.js'
 import { isValidPin, pinPassword } from './shared/lib/pin.js'
 import { onlyForMode } from './shared/lib/practice.js'
-import { COMPILE_HOUR, HISTORY_WEEKS, HUB_BRANCH_ID, TIME_ZONE } from './shared/config.js'
+import { HISTORY_WEEKS, HUB_BRANCH_ID, TIME_ZONE } from './shared/config.js'
 
-// The one piece of server code in the system: every morning, add the outlets'
-// orders together into a single baking list and pre-fill a delivery note for
-// each shop. It runs on a clock rather than behind a button precisely so nobody
-// can forget to press it.
+// The server side of the system: keep sign-in permissions in step with the
+// staff list, and rebuild each day's report once its outlet has closed.
+//
+// The baking list used to be compiled here too, on a 05:00 schedule. It is not
+// any more — the baker starts the bake, from the Bake screen, using the same
+// `compileDemands` this file still exposes through `compileNow` for whoever
+// maintains the system. A clock should not decide when a bakery starts work.
 
 // Every function runs beside the database, in Mumbai. This is not a preference:
 // a v2 Firestore trigger has to live in the same region as the database it
@@ -363,18 +366,18 @@ export const rebuildYesterdaysReports = onSchedule(
   },
 )
 
-export const compileDailyOrders = onSchedule(
-  { schedule: `0 ${COMPILE_HOUR} * * *`, timeZone: TIME_ZONE, retryCount: 3 },
-  async () => {
-    await runCompile(todayThere())
-  },
-)
+// The 05:00 compile is gone.
+//
+// It decided, at a fixed hour, what the bakery would bake — which meant the
+// kitchen's morning depended on a clock and a network neither of them could
+// see. If it did not run there was no list, and for a while nobody in the
+// building could make one.
+//
+// The bake now starts when the baker starts it, from the Bake screen. Same
+// `compileDemands`, same orders, same arithmetic — just triggered by the person
+// who is about to light the ovens rather than by a scheduler. `compileNow`
+// below stays as the manual server-side path for whoever maintains this.
 
-/**
- * Manual run — for testing against the emulators, and as the recovery path if
- * the scheduled job ever misses. Locked behind a key in the cloud; open only
- * when running locally.
- */
 export const compileNow = onRequest(async (req, res) => {
   const key = process.env.COMPILE_KEY
   const local = process.env.FUNCTIONS_EMULATOR === 'true'

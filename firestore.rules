@@ -136,7 +136,7 @@ service cloud.firestore {
                     && canWriteBranch(resource.data.branchId)
                     && changedOnly([
                          'status', 'voidReason', 'voidedBy', 'voidedAt',
-                         'payment', 'paymentChangedBy', 'paymentChangedAt'
+                         'payment', 'paymentRef', 'paymentChangedBy', 'paymentChangedAt'
                        ])
                     && stampedHonestly('voidedBy')
                     && stampedHonestly('paymentChangedBy');

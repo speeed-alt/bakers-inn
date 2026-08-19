@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Day at Baker's Inn</title>
+</head>
+<body>
+<style>
+  /* The app's palette — near-black on paper, one grey, one red that means one
+     thing. The ledger blue is borrowed from the ruled pad this replaces, and
+     everything that "writes itself" writes in that blue, like a ballpoint. */
+  :root {
+    --paper:      #FBFAF7;
+    --card:       #FFFFFF;
+    --ink:        #1B1A18;
+    --muted:      #6E6C67;
+    --rule:       #C9D4E2;
+    --rule-soft:  #E7EBF1;
+    --pen:        #2C4A73;
+    --pen-soft:   #7C95B8;
+    --alert:      #A32020;
+    --edge:       #DEDDD8;
+    --good:       #2E6B45;
+
+    --serif: "Palatino Linotype", Palatino, "Iowan Old Style", Georgia, ui-serif, serif;
+    --sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #16161A; --card: #1E1E24; --ink: #ECEBE7; --muted: #9A9892;
+      --rule: #3D4E64; --rule-soft: #2B2D35; --pen: #93B4DC; --pen-soft: #5B7799; --alert: #E58C8C; --edge: #34343C; --good: #7FBF9A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #16161A; --card: #1E1E24; --ink: #ECEBE7; --muted: #9A9892;
+    --rule: #3D4E64; --rule-soft: #2B2D35; --pen: #93B4DC; --pen-soft: #5B7799;
+    --alert: #E58C8C; --edge: #34343C; --good: #7FBF9A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Faint ruled paper under everything, the width of a written line. */
+  .paper {
+    position: relative;
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    background-image: repeating-linear-gradient(
+      to bottom, transparent, transparent 37px, var(--rule-soft) 37px, var(--rule-soft) 38px
+    );
+  }
+
+  /* ---- chrome ------------------------------------------------------------ */
+
+  .bar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px clamp(16px, 4vw, 34px);
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper);
+  }
+  .mark {
+    font-family: var(--serif); font-size: 18px; letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+  .ticks { display: flex; gap: 5px; flex: 1; }
+  .tick {
+    height: 3px; flex: 1; background: var(--rule-soft); border-radius: 2px;
+    overflow: hidden; min-width: 8px;
+  }
+  .tick i { display: block; height: 100%; width: 0; background: var(--pen); }
+  .tick.done i { width: 100%; }
+  .tick.now i { animation: fill var(--dur, 8s) linear forwards; }
+  @keyframes fill { to { width: 100%; } }
+
+  .controls { display: flex; gap: 6px; }
+  button {
+    font: inherit; font-size: 13px;
+    background: var(--card); color: var(--ink);
+    border: 1px solid var(--edge); border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; min-height: 34px;
+  }
+  button:hover { border-color: var(--pen-soft); }
+  button:focus-visible { outline: 2px solid var(--pen); outline-offset: 2px; }
+
+  /* ---- stage ------------------------------------------------------------- */
+
+  .stage {
+    flex: 1; position: relative;
+    display: grid; place-items: center;
+    padding: clamp(20px, 4vw, 44px);
+  }
+  .scene {
+    grid-area: 1 / 1;
+    width: 100%; max-width: 960px;
+    opacity: 0; visibility: hidden;
+    transform: translateY(10px);
+    transition: opacity .5s ease, transform .5s ease, visibility .5s;
+    display: flex; flex-direction: column; gap: 22px;
+  }
+  .scene.on { opacity: 1; visibility: visible; transform: none; }
+
+  .when {
+    font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--pen); font-weight: 700;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 400; margin: 0;
+    font-size: clamp(34px, 6.4vw, 60px); line-height: 1.05;
+    letter-spacing: -0.015em; text-wrap: balance;
+  }
+  h2 {
+    font-family: var(--serif); font-weight: 400; margin: 0;
+    font-size: clamp(26px, 4vw, 40px); line-height: 1.12;
+    letter-spacing: -0.01em; text-wrap: balance;
+  }
+  .say { margin: 0; max-width: 56ch; color: var(--muted); font-size: clamp(15px, 1.8vw, 17.5px); }
+  .say b { color: var(--ink); font-weight: 600; }
+
+  /* ---- the map ----------------------------------------------------------- */
+
+  .map { width: 100%; max-width: 720px; height: auto; }
+  .node-box { fill: var(--card); stroke: var(--edge); }
+  .node-hub { stroke: var(--pen); }
+  .node-name { font-family: var(--sans); font-size: 13px; font-weight: 700; fill: var(--ink); }
+  .node-role { font-family: var(--sans); font-size: 10.5px; fill: var(--muted); letter-spacing: 0.06em; }
+  .spoke { stroke: var(--rule); stroke-width: 1.5; fill: none; }
+  .flow {
+    stroke: var(--pen); stroke-width: 2.5; fill: none; stroke-linecap: round;
+    stroke-dasharray: var(--len); stroke-dashoffset: var(--len);
+  }
+  .scene.on .flow.go { animation: draw 1.1s ease forwards; }
+  .scene.on .flow.go.d2 { animation-delay: .25s; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .parcel { fill: var(--pen); opacity: 0; }
+  .scene.on .parcel.go { animation: ride 1.6s ease-in-out forwards; }
+  .scene.on .parcel.go.d2 { animation-delay: .3s; }
+  @keyframes ride { 0% { opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { opacity: 0; } }
+
+  /* ---- panels ------------------------------------------------------------ */
+
+  .panel {
+    background: var(--card); border: 1px solid var(--edge); border-radius: 6px;
+    overflow: hidden;
+  }
+  .panel-top {
+    padding: 10px 14px; border-bottom: 1px solid var(--rule-soft);
+    font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700;
+    display: flex; justify-content: space-between; gap: 12px;
+  }
+  .rows { display: flex; flex-direction: column; }
+  .row {
+    display: grid; grid-template-columns: 1fr auto auto;
+    gap: 14px; align-items: center;
+    padding: 10px 14px; border-bottom: 1px solid var(--rule-soft);
+    font-size: 15px; font-variant-numeric: tabular-nums;
+    opacity: 0; transform: translateY(-4px);
+  }
+  .row:last-child { border-bottom: 0; }
+  .scene.on .row { animation: land .4s ease forwards; }
+  .scene.on .row:nth-child(1) { animation-delay: .30s; }
+  .scene.on .row:nth-child(2) { animation-delay: .55s; }
+  .scene.on .row:nth-child(3) { animation-delay: .80s; }
+  .scene.on .row:nth-child(4) { animation-delay: 1.05s; }
+  .scene.on .row:nth-child(5) { animation-delay: 1.30s; }
+  @keyframes land { to { opacity: 1; transform: none; } }
+  .row .qty { color: var(--muted); }
+  .row .amt { font-weight: 600; }
+  .row.short .qty { color: var(--alert); font-weight: 600; }
+
+  .chip {
+    display: inline-block; font-size: 11.5px; padding: 2px 8px;
+    border: 1px solid var(--edge); border-radius: 999px; color: var(--muted);
+  }
+  .chip.on { border-color: var(--pen); color: var(--pen); }
+
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+
+  /* ---- the sheet --------------------------------------------------------- */
+
+  .sheet { width: 100%; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 9px 11px; text-align: right; font-size: 13.5px; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; border-bottom: 1px solid var(--rule);
+  }
+  thead tr.grp th { color: var(--pen); }
+  tbody td { border-bottom: 1px solid var(--rule-soft); }
+  /* Figures arrive one at a time, as if written across the line. */
+  .cell { opacity: 0; color: var(--pen); font-weight: 600; }
+  .scene.on .cell { animation: ink .45s ease forwards; }
+  @keyframes ink { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+  /* ---- till -------------------------------------------------------------- */
+
+  .till-total {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 14px; border-top: 1px solid var(--rule);
+    font-variant-numeric: tabular-nums;
+  }
+  .till-total b { font-size: clamp(24px, 3.6vw, 34px); font-family: var(--serif); font-weight: 400; }
+  .strip {
+    padding: 9px 14px; font-size: 13px; border-bottom: 1px solid var(--rule-soft);
+    color: var(--muted);
+  }
+  .strip b { color: var(--ink); }
+
+  .figure { font-family: var(--serif); font-size: clamp(30px, 5vw, 46px); font-variant-numeric: tabular-nums; }
+  .figure.bad { color: var(--alert); }
+  .figure.ok { color: var(--good); }
+  .cap { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+
+  .needs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1px; background: var(--rule-soft); border: 1px solid var(--edge); border-radius: 6px; overflow: hidden; }
+  .need { background: var(--card); padding: 16px; display: flex; flex-direction: column; gap: 5px; }
+  .need b { font-size: 14.5px; }
+  .need span { font-size: 13.5px; color: var(--muted); }
+
+  .hint { text-align: center; font-size: 12.5px; color: var(--muted); padding: 10px 16px 18px; }
+  kbd {
+    font: inherit; font-size: 11.5px; border: 1px solid var(--edge);
+    border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; color: var(--ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scene, .row, .cell, .flow, .parcel { transition: none !important; animation: none !important; }
+    .scene { opacity: 0; }
+    .scene.on { opacity: 1; transform: none; }
+    .row, .cell { opacity: 1; transform: none; }
+    .flow { stroke-dashoffset: 0; }
+    .tick.now i { width: 100%; }
+  }
+</style>
+
+<div class="paper">
+  <div class="bar">
+    <span class="mark">Baker's Inn</span>
+    <span class="ticks" id="ticks"></span>
+    <span class="controls">
+      <button id="back" aria-label="Previous">Back</button>
+      <button id="play" aria-label="Pause or play">Pause</button>
+      <button id="next" aria-label="Next">Next</button>
+    </span>
+  </div>
+
+  <main class="stage" id="stage">
+
+    <!-- 1 -->
+    <section class="scene" data-dur="7000">
+      <span class="when">Three outlets · Faisalabad</span>
+      <h1>A day at Baker's Inn</h1>
+      <p class="say">
+        One bakery, two shops, and everything that has to happen between them —
+        from the order sent at closing time to the figure you write on the pad.
+      </p>
+    </section>
+
+    <!-- 2 -->
+    <section class="scene" data-dur="9000">
+      <h2>One bakery. Two shops.</h2>
+      <p class="say">
+        <b>Susan Road</b> buys the flour, bakes, and sends bread out. The other
+        two only sell. The system is built in exactly that shape.
+      </p>
+      <svg class="map" viewBox="0 0 720 300" role="img" aria-label="Susan Road supplies Gulberg and Gulistan Colony">
+        <path class="spoke" d="M250 150 C 360 150, 380 70, 470 70" />
+        <path class="spoke" d="M250 150 C 360 150, 380 230, 470 230" />
+        <g>
+          <rect class="node-box node-hub" x="60" y="112" width="190" height="76" rx="6" stroke-width="1.5"/>
+          <text class="node-name" x="80" y="142">Susan Road</text>
+          <text class="node-role" x="80" y="163">BAKERY · SHOP</text>
+        </g>
+        <g>
+          <rect class="node-box" x="470" y="38" width="180" height="64" rx="6"/>
+          <text class="node-name" x="490" y="66">Gulberg</text>
+          <text class="node-role" x="490" y="85">SHOP</text>
+        </g>
+        <g>
+          <rect class="node-box" x="470" y="198" width="180" height="64" rx="6"/>
+          <text class="node-name" x="490" y="226">Gulistan Colony</text>
+          <text class="node-role" x="490" y="245">SHOP</text>
+        </g>
+      </svg>
+    </section>
+
+    <!-- 3 -->
+    <section class="scene" data-dur="9500">
+      <span class="when">Closing time</span>
+      <h2>Each shop says what it wants tomorrow</h2>
+      <p class="say">
+        Already filled in from what that shop actually sold on this weekday.
+        They change what they want and send it — <b>nobody types a product name</b>.
+      </p>
+      <div class="panel" style="max-width:520px">
+        <div class="panel-top"><span>Gulberg · tomorrow</span><span>Suggested</span></div>
+        <div class="rows">
+          <div class="row"><span>Bread Small</span><span class="qty">sold 28</span><span class="amt">30</span></div>
+          <div class="row"><span>Bread Large</span><span class="qty">sold 9</span><span class="amt">10</span></div>
+          <div class="row"><span>Rusk</span><span class="qty">sold out</span><span class="amt">16</span></div>
+          <div class="row"><span>Paties</span><span class="qty">sold 18</span><span class="amt">20</span></div>
+        </div>
+      </div>
+      <p class="say">
+        Anything that <b>sold out</b> is nudged up — a shelf that emptied never
+        measured how many more you could have sold.
+      </p>
+    </section>
+
+    <!-- 4 -->
+    <section class="scene" data-dur="9000">
+      <span class="when">When the baker starts</span>
+      <h2>Three orders become one baking list</h2>
+      <p class="say">
+        One tap in the kitchen adds up what the three shops sent last night. One
+        list for all of them — not three to reconcile, and no clock to wait for.
+      </p>
+      <svg class="map" viewBox="0 0 720 250" role="img" aria-label="Three orders combining into one baking list">
+        <path class="spoke" d="M600 55 C 470 55, 400 125, 250 125" />
+        <path class="spoke" d="M600 195 C 470 195, 400 125, 250 125" />
+        <path class="flow go" style="--len:420" d="M600 55 C 470 55, 400 125, 250 125" />
+        <path class="flow go d2" style="--len:420" d="M600 195 C 470 195, 400 125, 250 125" />
+        <g>
+          <rect class="node-box node-hub" x="60" y="95" width="190" height="62" rx="6" stroke-width="1.5"/>
+          <text class="node-name" x="80" y="122">One baking list</text>
+          <text class="node-role" x="80" y="141">44 LINES</text>
+        </g>
+        <g>
+          <rect class="node-box" x="480" y="28" width="170" height="54" rx="6"/>
+          <text class="node-name" x="498" y="52">Gulberg</text>
+          <text class="node-role" x="498" y="70">ORDER SENT</text>
+        </g>
+        <g>
+          <rect class="node-box" x="480" y="168" width="170" height="54" rx="6"/>
+          <text class="node-name" x="498" y="192">Gulistan Colony</text>
+          <text class="node-role" x="498" y="210">ORDER SENT</text>
+        </g>
+      </svg>
+      <p class="say">A shop that did not order gets its last same weekday repeated, and the list says so.</p>
+    </section>
+
+    <!-- 5 -->
+    <section class="scene" data-dur="9500">
+      <span class="when">Morning</span>
+      <h2>The kitchen records what came out</h2>
+      <p class="say">
+        Not what was asked for — what actually came out of the oven. A short
+        bake is a normal morning, and the vans still leave on time.
+      </p>
+      <div class="panel" style="max-width:540px">
+        <div class="panel-top"><span>Today's bake</span><span>Asked / made</span></div>
+        <div class="rows">
+          <div class="row"><span>Bread Small</span><span class="qty">80</span><span class="amt">80</span></div>
+          <div class="row"><span>Bread Large</span><span class="qty">40</span><span class="amt">40</span></div>
+          <div class="row short"><span>VIP Bread</span><span class="qty">23 · 6 short</span><span class="amt">17</span></div>
+          <div class="row"><span>Rusk</span><span class="qty">30</span><span class="amt">30</span></div>
+        </div>
+      </div>
+      <p class="say">The shortfall is recorded, not hidden — so tonight's figures still add up.</p>
+    </section>
+
+    <!-- 6 -->
+    <section class="scene" data-dur="9000">
+      <span class="when">The vans go out</span>
+      <h2>A delivery note per shop, already written</h2>
+      <svg class="map" viewBox="0 0 720 300" role="img" aria-label="Bread travelling from Susan Road to both shops">
+        <path class="spoke" d="M250 150 C 360 150, 380 70, 470 70" />
+        <path class="spoke" d="M250 150 C 360 150, 380 230, 470 230" />
+        <path class="flow go" style="--len:300" d="M250 150 C 360 150, 380 70, 470 70" />
+        <path class="flow go d2" style="--len:300" d="M250 150 C 360 150, 380 230, 470 230" />
+        <rect class="parcel go" x="-7" y="-7" width="14" height="14" rx="3">
+          <animateMotion dur="1.6s" fill="freeze" path="M250 150 C 360 150, 380 70, 470 70"/>
+        </rect>
+        <rect class="parcel go d2" x="-7" y="-7" width="14" height="14" rx="3">
+          <animateMotion dur="1.6s" begin="0.3s" fill="freeze" path="M250 150 C 360 150, 380 230, 470 230"/>
+        </rect>
+        <g>
+          <rect class="node-box node-hub" x="60" y="112" width="190" height="76" rx="6" stroke-width="1.5"/>
+          <text class="node-name" x="80" y="142">Susan Road</text>
+          <text class="node-role" x="80" y="163">DISPATCHING</text>
+        </g>
+        <g>
+          <rect class="node-box" x="470" y="38" width="180" height="64" rx="6"/>
+          <text class="node-name" x="490" y="66">Gulberg</text>
+          <text class="node-role" x="490" y="85">RECEIVING</text>
+        </g>
+        <g>
+          <rect class="node-box" x="470" y="198" width="180" height="64" rx="6"/>
+          <text class="node-name" x="490" y="226">Gulistan Colony</text>
+          <text class="node-role" x="490" y="245">RECEIVING</text>
+        </g>
+      </svg>
+      <p class="say">
+        Each shop counts what actually arrived. Anything short needs a reason —
+        and <b>both numbers are kept</b>, so a light delivery is never counted as
+        that shop's waste.
+      </p>
+      <div><span class="chip on">Damaged in transit</span> <span class="chip">Short at the bakery</span> <span class="chip">Miscounted</span></div>
+    </section>
+
+    <!-- 7 -->
+    <section class="scene" data-dur="10000">
+      <span class="when">All day</span>
+      <h2>The till</h2>
+      <div class="two">
+        <div class="panel">
+          <div class="strip">Cash · Card · JazzCash · Easypaisa · Bank</div>
+          <div class="rows">
+            <div class="row"><span>01 · Bread Small</span><span class="qty">×30</span><span class="amt">3,000</span></div>
+            <div class="row"><span>05 · Rusk</span><span class="qty">×4</span><span class="amt">600</span></div>
+            <div class="row"><span>35 · Biscuits</span><span class="qty">4.5 kg</span><span class="amt">6,300</span></div>
+            <div class="row"><span>Coke <span class="chip">one-off</span></span><span class="qty">×2</span><span class="amt">160</span></div>
+          </div>
+          <div class="till-total"><span class="cap">Total</span><b id="tillTotal">Rs 0</b></div>
+        </div>
+        <div class="stack" style="display:flex;flex-direction:column;gap:16px">
+          <p class="say"><b>Weighed items too.</b> Loose biscuits are typed as 4.5, or 450g — the price follows.</p>
+          <p class="say"><b>Something you don't bake?</b> A bottle of Coke goes on the bill with its own price, so the drawer still matches at close.</p>
+          <p class="say"><b>Paid by phone?</b> JazzCash, Easypaisa and bank transfers are rung like anything else, with the transaction id kept against the sale. Only cash counts against the drawer at closing.</p>
+          <p class="say"><b>No internet, no problem.</b> The tablet keeps every sale and sends them the moment the connection comes back. Nothing is lost and nothing is rung twice.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8 -->
+    <section class="scene" data-dur="9500">
+      <span class="when">Closing time</span>
+      <h2>Count the drawer. Count the shelf.</h2>
+      <div class="two">
+        <div class="panel">
+          <div class="panel-top"><span>Gulberg · cash</span><span>Tonight</span></div>
+          <div class="rows">
+            <div class="row"><span>Opening float</span><span class="qty"></span><span class="amt">5,000</span></div>
+            <div class="row"><span>Cash sales</span><span class="qty"></span><span class="amt">41,300</span></div>
+            <div class="row"><span>Expected in drawer</span><span class="qty"></span><span class="amt">46,300</span></div>
+            <div class="row"><span>Counted</span><span class="qty"></span><span class="amt">46,120</span></div>
+          </div>
+          <div class="till-total">
+            <span class="cap">Short</span>
+            <b class="figure bad">Rs 180</b>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <p class="say">
+            The figure is <b>recorded, not corrected</b>. Red appears in one place
+            in this whole system, and this is it — money that does not add up.
+          </p>
+          <p class="say">
+            Then the shelf: what is left, and of that what goes in the bin, what
+            stays for tomorrow, and what comes back to you.
+          </p>
+          <p class="say">
+            Anyone can cancel a sale or reopen a day without asking you. Every
+            one of them <b>carries a name and reaches your screen the same day</b>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9 -->
+    <section class="scene" data-dur="11000">
+      <span class="when">And then</span>
+      <h2>Your sheet writes itself</h2>
+      <p class="say">The line you write on the pad every night — already written when you look.</p>
+      <div class="panel">
+        <div class="panel-top"><span>13 August</span><span>Rupees</span></div>
+        <div class="sheet">
+          <table>
+            <thead>
+              <tr class="grp">
+                <th rowspan="2">Date</th><th rowspan="2">Production</th>
+                <th colspan="3">Distribution</th><th colspan="3">Sale position</th>
+                <th rowspan="2">Total sale</th><th rowspan="2">Total stale</th>
+              </tr>
+              <tr>
+                <th>Susan Rd</th><th>Gulberg</th><th>Gulistan</th>
+                <th>Susan Rd</th><th>Gulberg</th><th>Gulistan</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>13-8-26</td>
+                <td class="cell" style="animation-delay:.5s">2,00,000</td>
+                <td class="cell" style="animation-delay:.9s">1,00,000</td>
+                <td class="cell" style="animation-delay:1.15s">50,000</td>
+                <td class="cell" style="animation-delay:1.4s">50,000</td>
+                <td class="cell" style="animation-delay:1.85s">80,000</td>
+                <td class="cell" style="animation-delay:2.1s">50,000</td>
+                <td class="cell" style="animation-delay:2.35s">50,000</td>
+                <td class="cell" style="animation-delay:2.8s">1,80,000</td>
+                <td class="cell" style="animation-delay:3.2s">5,000</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="say">A fortnight of these prints on one page. The pad keeps its purpose — nobody writes in it.</p>
+    </section>
+
+    <!-- 10 -->
+    <section class="scene" data-dur="12000">
+      <h2>What it needs from you</h2>
+      <p class="say">The system is built and the three shops are set up. These are the parts only you can decide.</p>
+      <div class="needs">
+        <div class="need"><b>Your prices</b><span>All 44 items, and which are sold by weight.</span></div>
+        <div class="need"><b>Your people</b><span>Who works where. Each chooses their own PIN, privately.</span></div>
+        <div class="need"><b>Opening cash</b><span>What sits in each drawer before the first customer.</span></div>
+        <div class="need"><b>Three tablets</b><span>One per counter, on the shop wifi.</span></div>
+        <div class="need"><b>Two weeks of both</b><span>Run the pad alongside, and compare each evening.</span></div>
+      </div>
+      <p class="say">
+        Nothing here is ever deleted. A sale can be cancelled, a day reopened, a
+        person turned off — and every one of those keeps the original and adds a
+        note saying who, and when.
+      </p>
+    </section>
+
+  </main>
+
+  <p class="hint">
+    <kbd>Space</kbd> pause · <kbd>←</kbd> <kbd>→</kbd> step · or click anywhere
+  </p>
+</div>
+
+<script>
+  const scenes = [...document.querySelectorAll('.scene')];
+  const ticks = document.getElementById('ticks');
+  const playBtn = document.getElementById('play');
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  scenes.forEach(() => {
+    const t = document.createElement('span');
+    t.className = 'tick';
+    t.innerHTML = '<i></i>';
+    ticks.appendChild(t);
+  });
+  const bars = [...ticks.children];
+
+  let at = 0, timer = null, playing = !calm;
+
+  function money(el, to, ms) {
+    if (calm) { el.textContent = 'Rs ' + to.toLocaleString('en-IN'); return; }
+    const t0 = performance.now();
+    (function step(now) {
+      const k = Math.min(1, (now - t0) / ms);
+      const eased = 1 - Math.pow(1 - k, 3);
+      el.textContent = 'Rs ' + Math.round(to * eased).toLocaleString('en-IN');
+      if (k < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+
+  function show(i) {
+    at = (i + scenes.length) % scenes.length;
+    scenes.forEach((s, n) => s.classList.toggle('on', n === at));
+    bars.forEach((b, n) => {
+      b.classList.toggle('done', n < at);
+      b.classList.remove('now');
+      b.style.removeProperty('--dur');
+    });
+
+    // Restart the scene's own animations by reflowing it.
+    const live = scenes[at];
+    live.querySelectorAll('.flow, .parcel').forEach((el) => el.classList.remove('go'));
+    void live.offsetWidth;
+    live.querySelectorAll('.flow, .parcel').forEach((el) => el.classList.add('go'));
+    live.querySelectorAll('animateMotion').forEach((m) => m.beginElement?.());
+
+    const total = live.querySelector('#tillTotal');
+    if (total) money(total, 10060, 1600);
+
+    clearTimeout(timer);
+    if (playing) {
+      const dur = Number(live.dataset.dur || 8000);
+      bars[at].style.setProperty('--dur', dur + 'ms');
+      bars[at].classList.add('now');
+      timer = setTimeout(() => show(at + 1), dur);
+    }
+  }
+
+  function setPlaying(on) {
+    playing = on;
+    playBtn.textContent = on ? 'Pause' : 'Play';
+    if (on) show(at); else { clearTimeout(timer); bars[at].classList.remove('now'); }
+  }
+
+  playBtn.onclick = (e) => { e.stopPropagation(); setPlaying(!playing); };
+  document.getElementById('next').onclick = (e) => { e.stopPropagation(); show(at + 1); };
+  document.getElementById('back').onclick = (e) => { e.stopPropagation(); show(at - 1); };
+  document.body.onclick = () => show(at + 1);
+
+  addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') { e.preventDefault(); show(at + 1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); show(at - 1); }
+    if (e.key === ' ') { e.preventDefault(); setPlaying(!playing); }
+  });
+
+  if (calm) playBtn.textContent = 'Play';
+  show(0);
+</script>
+
+</body>
+</html>

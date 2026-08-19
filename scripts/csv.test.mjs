@@ -34,8 +34,29 @@ test('a sale becomes one row per line, with money unformatted', () => {
   ])
   const rows = csv.split('\r\n')
   assert.equal(rows.length, 3, 'header plus two lines')
-  assert.match(rows[1], /^S-B2-0728-A001,2026-07-28,B2,Bilal,cash,normal,Milk Bread,2,220,440$/)
+  // Payment, then its reference — empty for cash, a transaction id for a
+  // wallet transfer.
+  assert.match(rows[1], /^S-B2-0728-A001,2026-07-28,B2,Bilal,cash,,normal,Milk Bread,2,220,440$/)
+  assert.equal(rows[0].split(',').length, rows[1].split(',').length, 'header matches the rows')
   assert.match(rows[2], /"Cake, large",1,1800,1800$/, 'a comma in a name does not shift columns')
+})
+
+test('a wallet payment exports the reference that proves it', () => {
+  // "JazzCash Rs 5,000" with nothing beside it cannot be matched against the
+  // account statement, which is the only reason the accountant wants the row.
+  const csv = salesCsv([
+    {
+      ref: 'S-B2-0814-A004',
+      businessDate: '2026-08-14',
+      branchId: 'B2',
+      cashierName: 'Bilal',
+      payment: 'jazzcash',
+      paymentRef: 'TID9931204',
+      status: 'normal',
+      items: [{ name: 'Bread Small', price: 120, qty: 5 }],
+    },
+  ])
+  assert.match(csv, /,jazzcash,TID9931204,normal,/)
 })
 
 test('purchases export their lines with the cost that was paid', () => {

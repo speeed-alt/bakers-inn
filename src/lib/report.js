@@ -1,4 +1,5 @@
 import { isCustomItem } from './custom.js'
+import { inDrawer, splitByMethod } from './payments.js'
 
 // Pure money maths, kept out of the UI so it can be tested on its own.
 // Rules that hold everywhere in the system:
@@ -17,6 +18,7 @@ export function summariseDay(sales) {
   let salesTotal = 0
   let cashTotal = 0
   let cardTotal = 0
+  let digitalOther = 0
   let refundTotal = 0
   let txCount = 0
   let refundCount = 0
@@ -25,8 +27,15 @@ export function summariseDay(sales) {
 
   for (const sale of counted) {
     salesTotal += sale.total
-    if (sale.payment === 'cash') cashTotal += sale.total
-    else cardTotal += sale.total
+    // `inDrawer`, not `=== 'cash'`. The drawer figure is what a cashier is
+    // counted against at closing, so anything that is not physically in the
+    // till has to stay out of it — a card, a JazzCash transfer, a bank
+    // deposit. Before payment methods were configurable this line was
+    // `if cash … else card`, which would have quietly filed every wallet
+    // payment as a card sale.
+    if (inDrawer(sale.payment)) cashTotal += sale.total
+    else if (sale.payment === 'card') cardTotal += sale.total
+    else digitalOther += sale.total
 
     if (sale.status === 'refund') {
       refundTotal += sale.total
@@ -65,6 +74,13 @@ export function summariseDay(sales) {
     salesTotal,
     cashTotal,
     cardTotal,
+    // Everything the customer paid that is not in the till tonight. Card plus
+    // the wallets and transfers — the figure to check against the statements
+    // rather than against the drawer.
+    digitalTotal: cardTotal + digitalOther,
+    // One row per way anybody actually paid today, for the screens that show
+    // the split. Methods nobody used are not listed.
+    byMethod: splitByMethod(counted),
     refundTotal,
     txCount,
     refundCount,

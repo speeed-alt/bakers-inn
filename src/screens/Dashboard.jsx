@@ -192,10 +192,15 @@ export default function Dashboard() {
             <div className="label">Cash</div>
             <div className="value sub">{formatMoney(overall.cashTotal)}</div>
           </div>
-          <div className="stat">
-            <div className="label">Card</div>
-            <div className="value sub">{formatMoney(overall.cardTotal)}</div>
-          </div>
+          {/* One tile per way anybody actually paid today. Cash sits beside
+              them because it is the only one that should be in a drawer
+              tonight — the rest are checked against statements. */}
+          {overall.byMethod.filter((m) => !m.drawer).map((m) => (
+            <div className="stat" key={m.id}>
+              <div className="label">{m.label}</div>
+              <div className="value sub">{formatMoney(m.total)}</div>
+            </div>
+          ))}
           <div className="stat">
             {/* Not "Sales": next to a column of rupee figures headed
                 "Takings", the word read like another money stat rather than a

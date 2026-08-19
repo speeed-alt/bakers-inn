@@ -3,6 +3,7 @@ import { formatMoney, lineTotal } from './money.js'
 import { formatQuantity } from './quantity.js'
 import { amountInWords } from './words.js'
 import { formatDate, formatTime } from './dates.js'
+import { inDrawer, labelOf } from './payments.js'
 
 // The slip, as data. What it looks like is `components/Receipt.jsx`.
 //
@@ -100,7 +101,13 @@ export function receiptModel(sale, branch) {
     cashGiven: sale.cashGiven != null ? formatMoney(sale.cashGiven) : null,
     changeGiven: sale.changeGiven != null ? formatMoney(sale.changeGiven) : null,
     // Only worth printing when there is no cash line to imply it.
-    payment: sale.cashGiven == null && sale.status !== 'refund' ? sale.payment : null,
+    // Named, not the stored id: a slip reading "jazzcash" looks like a fault.
+    // Shown whenever there is no cash line to imply it — which is now every
+    // method except cash.
+    payment: !inDrawer(sale.payment) && sale.status !== 'refund' ? labelOf(sale.payment) : null,
+    // The transaction id, on the customer's own copy. It is the only thing
+    // that lets either side prove the transfer later.
+    paymentRef: sale.paymentRef ?? null,
 
     // Under the figures, where it can be checked against them. A figure can be
     // altered with a pen; a line of words cannot.

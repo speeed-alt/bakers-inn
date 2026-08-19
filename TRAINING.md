@@ -68,7 +68,9 @@ Then the payment:
 
 - **Cash** — type what the customer handed over. The change is on screen. Read
   it out loud; that is the habit that catches a mis-key.
-- **Card** — just tap it.
+- **Card** — run it, then confirm.
+- **JazzCash, Easypaisa, bank** — take the payment, then type the transaction id
+  off the customer's phone. Without it nobody can prove later that it arrived.
 - **Print the receipt.**
 
 - **Something not on the list.** Type `coke`. Nothing matches — so tap **Sell
@@ -147,7 +149,9 @@ themselves, any time, without asking the owner. It gets noted, and that is all.
 
 ### The morning list
 
-Open **Bake**. One list, for all three shops, ready by 05:00.
+Open **Bake** and tap **Make the list now**. That adds up what the three shops
+ordered last night into one list for all of them. You decide when the bake
+starts.
 
 For each line, record what actually came out of the oven — the number that came
 out, not the number that was asked for.
@@ -167,20 +171,16 @@ actually different, then send.
 When something comes back from a shop, count what actually came back rather than
 accepting the number on the note.
 
-### If there is no list at 05:15
+### If a shop has not ordered
 
-**Tap "Make the list now" on the Bake screen.** It adds up the orders the shops
-sent last night and gives you exactly the list 5am would have given you. Take
-thirty seconds to check it looks like a normal morning, then bake.
-
-Tell whoever looks after the system afterwards — a morning the list did not
-appear on its own is a fault worth fixing — but do not wait for them.
+The list says so, and repeats that shop's last same weekday rather than leaving
+them with nothing. Worth a phone call to the shop, but it does not stop you
+baking.
 
 ### The card for the kitchen
 
 > **The bake**
-> - The list is ready by 05:00. If it is not there by 05:15, tap **Make the list now** —
->   then tell [name] afterwards.
+> - Tap **Make the list now** when you start. It adds up last night's orders.
 > - Record what actually came out, not what was asked for.
 > - Short is fine. Record it honestly and carry on.
 > - Extra trays go under **Also baked today**.
