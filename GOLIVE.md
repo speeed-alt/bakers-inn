@@ -337,6 +337,61 @@ two and expensive to unpick on day thirty.
 
 ---
 
+## Still open, found 2026-08-19 and not yet fixed
+
+Every screen was audited and then driven by hand. The faults that would have
+stopped the shop working or lost money in week one are fixed. These are the
+rest — all real, all confirmed in the code, none of them likely to bite on the
+first morning. In rough order of how much they would cost.
+
+**Money**
+
+- **Only the last ten sales of the day can be corrected.** The till's recent
+  list is capped at ten rows and the Fix button lives on those rows, so a
+  mistake spotted after a busy hour cannot be voided, refunded or re-keyed
+  anywhere in the app. A Saturday morning passes ten sales quickly.
+- **A refund always goes back by the method the customer originally paid.**
+  A card sale refunded in cash is recorded as money returned to the card, so
+  the drawer count and the card statement both disagree with reality.
+- **Voids are stamped and never shown.** The system's stated bargain is that
+  nothing needs approval because everything is visible to the owner — but the
+  void reason and who did it appear on no screen. They are in the accountant
+  export only. A cashier can void a cash sale and pocket the notes, and the
+  count still balances.
+- **Money's "on course for" figure scales by days *traded*, not days elapsed.**
+  Going live mid-month projects a wildly high month until the month turns.
+
+**Reports and paper**
+
+- **The printed register values past days at today's prices.** Raise a rate on
+  Thursday and Monday's production and distribution columns quietly go up,
+  while the sale figures stay historical, so the sheet stops adding up.
+- **`@page { size: 80mm auto }` is invalid CSS and is silently dropped.** It
+  only matters if `RECEIPT_PAPER` is switched to `'80mm'`, which is still `'a5'`
+  — but the moment somebody follows the thermal-printer note below, the page
+  size will not be set and nobody will know why. Use `80mm 297mm`.
+- **The "By outlet today" table labels a transaction count "Sales"** and shows
+  only cash and card columns, so wallet takings are missing from a row of
+  rupee figures.
+
+**Screens on a bad connection**
+
+- **The till ignores read errors.** Every other screen in the chain now says
+  when it could not read; the till still renders a refused or uncached read as
+  an ordinary empty day, and a day that was closed on another tablet can be
+  sold into.
+- **Materials and the catalogue show an empty list as "nothing here yet"** on a
+  cold cache, inviting the owner to add duplicates of things that already exist.
+- **The stale-sign-in check reports "fine" when it could not complete.** Offline
+  it cannot refresh the token, and the failure is treated as agreement.
+
+**Catalogue**
+
+- **"Add outlet" has no clash check.** Typing an existing code — `MAIN` is
+  printed on the screen above the box — overwrites that outlet and forces
+  `isMain` to false, which cannot be undone from inside the app.
+- **Merging prices twice loses the first merge's alternative names.**
+
 ## Known and accepted
 
 Not blockers. Worth knowing before somebody reports one as a bug.
