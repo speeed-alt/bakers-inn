@@ -60,11 +60,17 @@ export function receivedItems(items = [], counted = {}, reasons = {}) {
  * despatch, and counting it here would have the hub give away its own bread
  * twice over.
  */
-export function committedOut(branchId, transfers = []) {
+export function committedOut(branchId, transfers = [], businessDate = null) {
   const out = {}
   for (const transfer of transfers) {
     if (transfer.fromBranch !== branchId) continue
     if (transfer.direction === 'return') continue
+    // Only notes belonging to the same day's bake. The screens read a window of
+    // three days so that goods can be found whatever date their paperwork
+    // carries, and without this the hub had tomorrow's deliveries deducted from
+    // today's ovens: a tray baked today looked half given away by a van that
+    // has not been loaded yet.
+    if (businessDate && transfer.businessDate !== businessDate) continue
     for (const item of transfer.items ?? []) {
       const qty =
         transfer.status === 'draft'

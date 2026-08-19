@@ -79,7 +79,7 @@ export function productionValue(production, prices = {}) {
  */
 export function distributedTo({ branch, production, transfers = [], prices = {} }) {
   if (branch?.isMain) {
-    const share = hubStock(production, committedOut(branch.id, transfers))
+    const share = hubStock(production, committedOut(branch.id, transfers, production?.businessDate))
     let value = 0
     let qty = 0
     for (const [productId, n] of Object.entries(share)) {

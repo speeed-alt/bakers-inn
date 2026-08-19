@@ -6,8 +6,9 @@ import { useAuth } from '../auth.jsx'
 import { businessDateOf, formatDate, formatTime, nextDate } from '../lib/dates.js'
 import { extrasList, shortfalls } from '../lib/compile.js'
 import { productionDoc } from '../data/production.js'
-import { dispatchTransfer, receiveTransfer, transfersFrom } from '../data/transfers.js'
+import { dispatchTransfer, receiveTransfer, startTransfer, transfersFrom } from '../data/transfers.js'
 import { pendingReturns, useArrivals } from '../data/arrivals.js'
+import { committedOut } from '../lib/dispatch.js'
 import { Empty, Loading, Stepper } from '../components/ui.jsx'
 
 /**
@@ -89,6 +90,25 @@ export default function Dispatch({ branchId }) {
   // anywhere in the app to take yesterday's stock back in. Goods arriving have
   // nothing to do with whether goods are going out.
   const returns = pendingReturns(inbound.data)
+
+  // Outlets with no note at all for this day, and anything baked that is not
+  // already on one.
+  const written = new Set((transfers.data ?? []).map((t) => t.toBranchId))
+  const unwritten = (branches.data ?? []).filter((b) => !b.isMain && !written.has(b.id))
+
+  // How much of each unordered tray is actually still at the hub.
+  //
+  // Every card used to offer the whole tray, capped at what was baked, and each
+  // card decided that on its own — so thirty spare rusks could be given in full
+  // to Gulberg and in full to Gulistan Colony, and the system would believe
+  // sixty had been made. What is on a note is spoken for; only the rest can be
+  // offered. Extras are never products from the compiled list — the Bake screen
+  // will not let them be — so nothing else is subtracted here by mistake.
+  const spokenFor = committedOut(branchId, transfers.data ?? [])
+  const offerable = (po ? extrasList(po) : [])
+    .map((e) => ({ ...e, qty: Math.max(0, (e.qty ?? 0) - (spokenFor[e.productId] ?? 0)) }))
+    .filter((e) => e.qty > 0)
+  const spare = offerable.reduce((n, e) => n + e.qty, 0)
 
   const returnCards = returns.map((transfer) => (
     <ReturnCard
@@ -193,7 +213,45 @@ export default function Dispatch({ branchId }) {
 
       {drafts.length === 0 && sent.length === 0 && (
         <div className="card">
-          <Empty>No deliveries needed for {formatDate(day)} — no other outlet ordered anything.</Empty>
+          <Empty>
+            No outlet ordered anything for {formatDate(day)}, so nothing was made ready to send.
+          </Empty>
+        </div>
+      )}
+
+      {/* Somewhere to put a bake nobody ordered.
+          Notes come pre-filled from the compile, one per outlet that ordered —
+          which left the baker no way at all to send anything on a day when no
+          outlet had. On a bakery whose hub is also its busiest shop that is an
+          ordinary day, and it is exactly the day a spare tray gets baked.
+          Offered only when there is a reason: a tray waiting to go somewhere,
+          or a shop with no note at all. */}
+      {unwritten.length > 0 && (offerable.length > 0 || drafts.length + sent.length === 0) && (
+        <div className="card">
+          <h3>Send something that was not ordered</h3>
+          <p className="muted small">
+            {offerable.length > 0
+              ? `${spare} item${spare === 1 ? '' : 's'} were baked beyond the list and are not on any note yet. Start a note for whoever should get some.`
+              : 'Nothing was ordered for this day. Start a note if a shop needs bread anyway.'}
+          </p>
+          <div className="row wrap">
+            {unwritten.map((branch) => (
+              <button
+                key={branch.id}
+                className="btn"
+                onClick={() =>
+                  startTransfer({
+                    businessDate: day,
+                    fromBranch: branchId,
+                    toBranchId: branch.id,
+                    user: profile,
+                  })
+                }
+              >
+                Start a note for {branch.name}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -203,7 +261,7 @@ export default function Dispatch({ branchId }) {
           transfer={transfer}
           outletName={nameOf(transfer.toBranchId)}
           user={profile}
-          extras={extrasList(po)}
+          extras={offerable}
         />
       ))}
 
@@ -321,6 +379,10 @@ function DispatchCard({ transfer, outletName, user, extras = [] }) {
   const [added, setAdded] = useState({})
 
   const adjusted = transfer.items.filter((i) => sending[i.productId] !== i.qtyDemanded)
+  const goingOut =
+    transfer.items.reduce((n, i) => n + (sending[i.productId] ?? 0), 0) +
+    Object.values(added).reduce((n, v) => n + (v ?? 0), 0)
+  const nothingToSend = goingOut <= 0
   const onNote = new Set(transfer.items.map((i) => i.productId))
   const offerable = extras.filter((e) => !onNote.has(e.productId))
   const addedLines = Object.entries(added).filter(([, n]) => n > 0)
@@ -405,15 +467,21 @@ function DispatchCard({ transfer, outletName, user, extras = [] }) {
         </>
       )}
 
-      <button className="btn primary big block" onClick={send}>
-        {adjusted.length || addedLines.length
-          ? `Send — ${[
-              adjusted.length && `${adjusted.length} adjusted`,
-              addedLines.length && `${addedLines.length} extra`,
-            ]
-              .filter(Boolean)
-              .join(', ')}`
-          : 'Send everything ordered'}
+      {/* An empty note is not a delivery. A note started by hand begins with
+          nothing on it, and sending it in that state dispatched a van with
+          nothing in it — the outlet then gets a delivery to count in that
+          contains no lines at all. */}
+      <button className="btn primary big block" disabled={nothingToSend} onClick={send}>
+        {nothingToSend
+          ? 'Nothing on this note yet'
+          : adjusted.length || addedLines.length
+            ? `Send — ${[
+                adjusted.length && `${adjusted.length} adjusted`,
+                addedLines.length && `${addedLines.length} extra`,
+              ]
+                .filter(Boolean)
+                .join(', ')}`
+            : 'Send everything ordered'}
       </button>
     </div>
   )

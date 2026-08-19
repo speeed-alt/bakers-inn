@@ -305,6 +305,34 @@ test('stock that only moved between outlets is not counted as more to sell', () 
   assert.equal(rusk.unaccounted, 0, 'nothing is missing — it moved')
 })
 
+test('tomorrow’s deliveries are not deducted from today’s ovens', () => {
+  // The screens read three days of notes so goods can be found whatever date
+  // their paperwork carries. Without scoping, a note written for tomorrow's
+  // bake came off today's: a tray baked this morning looked half given away by
+  // a van that had not been loaded.
+  const production = {
+    businessDate: '2026-08-19',
+    items: [],
+    produced: {},
+    extras: { rusk: { productId: 'rusk', productName: 'Rusk', qty: 30 } },
+  }
+  const transfers = [
+    {
+      fromBranch: 'MAIN', toBranchId: 'B2', businessDate: '2026-08-19', status: 'dispatched',
+      items: [{ productId: 'rusk', qtyDemanded: 0, qtySent: 13, extra: true }],
+    },
+    {
+      fromBranch: 'MAIN', toBranchId: 'B2', businessDate: '2026-08-20', status: 'received',
+      items: [{ productId: 'rusk', qtyDemanded: 12, qtySent: 12, qtyReceived: 12 }],
+    },
+  ]
+  assert.deepEqual(
+    receivedAt({ branchId: 'MAIN', isMain: true, transfers, production, businessDate: '2026-08-19' }),
+    { rusk: 17 },
+    'thirty made, thirteen sent today — the twelve for tomorrow are not gone yet',
+  )
+})
+
 test('a voided sale did not sell anything', () => {
   const sales = [
     { branchId: 'B2', status: 'normal', items: [{ productId: 'bread-large', qty: 3 }] },

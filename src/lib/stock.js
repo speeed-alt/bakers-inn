@@ -56,7 +56,9 @@ export function receivedAt({
   }
 
   if (isMain && production) {
-    const spokenFor = committedOut(branchId, transfers)
+    // Scoped to the list's own day: what the hub kept out of Tuesday's bake is
+    // Tuesday's bake less Tuesday's notes.
+    const spokenFor = committedOut(branchId, transfers, production.businessDate ?? businessDate)
     for (const [productId, qty] of Object.entries(hubStock(production, spokenFor))) {
       arrived[productId] = (arrived[productId] ?? 0) + qty
     }

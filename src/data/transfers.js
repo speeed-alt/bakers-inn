@@ -98,6 +98,40 @@ export function receiveTransfer({ transfer, counted = {}, reasons = {}, user }) 
 }
 
 /**
+ * Start a delivery note for an outlet that has not got one.
+ *
+ * Notes normally come pre-filled from the compile, one per outlet that ordered.
+ * That left nowhere at all to put a bake nobody asked for when nobody had
+ * ordered — and on a bakery whose hub is also its busiest shop, a day where the
+ * only order is the hub's own is a completely ordinary day. The baker could
+ * record a second tray of rusks on the Bake screen, watch it counted as
+ * production, and then find the Dispatch screen empty with no way to send a
+ * single one of them anywhere.
+ *
+ * Created empty and in draft, which is exactly the state the compile leaves its
+ * own notes in, so everything downstream — adding extras, adjusting, sending,
+ * counting in at the far end — is the same path as any other delivery. The
+ * natural key means starting one twice lands on the same note rather than
+ * making a second.
+ */
+export function startTransfer({ businessDate, fromBranch, toBranchId, user }) {
+  const record = {
+    ...practiceStamp(),
+    ref: transferRef(businessDate, toBranchId),
+    fromBranch,
+    toBranchId,
+    businessDate,
+    direction: 'out',
+    status: 'draft',
+    items: [],
+    startedBy: user.id,
+    startedByName: user.name,
+    createdAt: Timestamp.fromDate(new Date()),
+  }
+  return setDoc(transferDoc(transferDocId(businessDate, toBranchId)), record, { merge: true })
+}
+
+/**
  * Stock going back to the hub at the end of the day.
  *
  * The one delivery note an outlet creates itself — everything else is written
