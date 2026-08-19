@@ -1,41 +1,39 @@
 import { useMemo } from 'react'
 import { useSnapshot } from '../lib/hooks.js'
-import { businessDateOf, nextDate, previousDate } from '../lib/dates.js'
+import { businessDateOf } from '../lib/dates.js'
 import { transfersTo } from './transfers.js'
 import { arrivalDays } from '../lib/dispatch.js'
 
 export { arrivalDays }
 
-/**
- * Goods that have turned up for this outlet and have not been dealt with yet.
- *
- * Everything else in this system is filed under a business date, and that is
- * right: a day's takings belong to a day. Goods do not. A crate is in the room
- * or it is not, and the date written on its paperwork is somebody else's day.
- *
- * Three separate cases were each broken by asking only about today:
- *
- *   - The baker bakes tomorrow's bread tonight, so the delivery note is stamped
- *     tomorrow. The shop it is addressed to was told "nothing on its way yet"
- *     while the van was outside.
- *   - An outlet sends its leftovers back at closing, so the note is stamped the
- *     day that just ended. The hub confirms it in the morning — by which time
- *     the business date has rolled over and the note is stamped yesterday.
- *     Nobody could ever confirm a return, on any day, since the feature shipped.
- *   - A delivery dispatched at half past three in the morning and not counted in
- *     before four became invisible at four.
- *
- * So the rule here is: **outbound follows the list, inbound follows the goods.**
- * The hub dispatches a particular baking list and picks which one. But anything
- * arriving is looked for across yesterday, today and tomorrow, because those are
- * the only dates a note that is still open can plausibly carry, and a crate in
- * the room does not care which one it is.
- *
- * Three listeners rather than one range query: the security rules require every
- * transfer query to pin a branch, and a range on `businessDate` alongside that
- * equality would need a composite index deployed before it would run at all.
- * Three equality listeners need nothing and cost a few kilobytes.
- */
+// Goods that have turned up for this outlet and have not been dealt with yet. and have not been dealt with yet.
+//
+// Everything else in this system is filed under a business date, and that is
+// right: a day's takings belong to a day. Goods do not. A crate is in the room
+// or it is not, and the date written on its paperwork is somebody else's day.
+//
+// Three separate cases were each broken by asking only about today:
+//
+//   - The baker bakes tomorrow's bread tonight, so the delivery note is stamped
+//     tomorrow. The shop it is addressed to was told "nothing on its way yet"
+//     while the van was outside.
+//   - An outlet sends its leftovers back at closing, so the note is stamped the
+//     day that just ended. The hub confirms it in the morning — by which time
+//     the business date has rolled over and the note is stamped yesterday.
+//     Nobody could ever confirm a return, on any day, since the feature shipped.
+//   - A delivery dispatched at half past three in the morning and not counted in
+//     before four became invisible at four.
+//
+// So the rule is: **outbound follows the list, inbound follows the goods.** The
+// hub dispatches a particular baking list and picks which one. But anything
+// arriving is looked for across yesterday, today and tomorrow — `arrivalDays`,
+// which lives in lib/dispatch.js because the scheduled report has to ask the
+// same question.
+//
+// Three listeners rather than one range query: the security rules require every
+// transfer query to pin a branch, and a range on `businessDate` alongside that
+// equality would need a composite index deployed before it would run at all.
+// Three equality listeners need nothing and cost a few kilobytes.
 
 /**
  * Every note addressed to this outlet across that window, oldest first.
