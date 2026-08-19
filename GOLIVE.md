@@ -2,11 +2,27 @@
 
 Everything between "it is deployed" and "the bakery runs on it".
 
-The app has been built, tested and deployed at
-**https://bakers-inn-pk.web.app** since 2026-08-08. It has never traded. This
-file is the list of what stands between that and a real first day, in the order
-it has to happen, because several steps destroy the work of later ones if run
-early.
+The app is deployed at **https://bakers-inn-pk.web.app** and has never traded.
+This file is the list of what stands between that and a real first day, in the
+order it has to happen, because several steps destroy the work of later ones if
+run early.
+
+**"Deployed and tested" is not the same as "works", and this file said
+otherwise for eleven days.** It read "built, tested and deployed", and below it
+claimed the developer's work was finished and only the owner's steps remained.
+Both were false. The unit tests passed and the deploy succeeded while the chain
+from the oven to the shop's shelf was broken in six places at once — a delivery
+the receiving shop could not see, a return nobody could confirm on any day since
+the feature shipped, spare bread that dispatched as a quantity of zero, stock
+that vanished when it was sent back, a shop that could not close its day, and a
+Bake screen that promised delivery notes which did not exist. None of it was
+visible from a passing test suite, because each part was tested in the shape it
+was written, and every one of those failures lives *between* the parts or across
+the 04:00 date boundary.
+
+They were all found in a single afternoon by signing in as a baker, then as a
+cashier at Gulberg, and doing the day. That is the only test that counts here,
+and until 2026-08-19 nobody had run it.
 
 Realistically: **one phone call, one long session with the owner, and about two
 focused days of work.**
@@ -20,8 +36,16 @@ without step 4 done first.
 > **Done on 2026-08-14:** Blaze is on, all five Cloud Functions are deployed
 > and verified, delete protection and point-in-time recovery are enabled
 > (7-day window), 1,900 demo records are cleared, and the kitchen can now
-> build the baking list itself. Steps 1–6 below are complete. **What is left
-> is steps 7 onward — and those are the owner's.**
+> build the baking list itself. Steps 1–6 below are complete.
+>
+> **Corrected on 2026-08-19.** This note used to end "what is left is steps 7
+> onward — and those are the owner's". That was wrong. The daily loop was
+> broken from the oven to the shelf, and the owner would have hit it on his
+> first morning. It has since been walked end to end across three roles against
+> the emulator, and the stock figures reconcile — but that is a seeded shop on
+> one machine, not his shop with his staff and his tablets. **Step 12, the dry
+> day, is not optional and is not a formality. It is the first time this system
+> will have been asked to do a day's work.**
 
 ## The one thing that unblocks the most
 
