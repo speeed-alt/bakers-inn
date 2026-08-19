@@ -2,6 +2,7 @@ import { collection, doc, query, setDoc, Timestamp, updateDoc, where } from 'fir
 import { db } from '../firebase.js'
 import { fireAndForget } from './errors.js'
 import { transferDocId, transferRef } from '../lib/ids.js'
+import { businessDateOf } from '../lib/dates.js'
 import { HUB_BRANCH_ID } from '../config.js'
 import { practiceStamp } from '../lib/practice.js'
 import { dispatchedItems, receivedItems } from '../lib/dispatch.js'
@@ -83,6 +84,14 @@ export function receiveTransfer({ transfer, counted = {}, reasons = {}, user }) 
       receivedBy: user.id,
       receivedByName: user.name,
       receivedAt: Timestamp.fromDate(new Date()),
+      // Which trading day the goods actually landed on, which is not the day
+      // written on the note. A note carries the day it was *made for* — the
+      // baker bakes tomorrow's bread tonight, an outlet sends its leftovers
+      // back under the day that just ended — and the shop has the crates from
+      // the moment it counts them, not from the date on the paperwork. Without
+      // this the close wizard read a shop that had taken in seventy-two items
+      // as having taken in none.
+      receivedOn: businessDateOf(),
     }),
     `receipt of ${transfer.ref}`,
   )

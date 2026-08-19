@@ -83,6 +83,7 @@ function OnTheShelf({ branchId, branchName, isMain, today }) {
     production: isMain ? production.data : null,
     sales: sales.data ?? [],
     previousClosing: previous.data,
+    businessDate: today,
   })
 
   const lines = shelf.lines.filter((l) => l.expected > 0 || l.sold > 0)

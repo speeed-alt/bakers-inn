@@ -737,6 +737,137 @@ test('no part of the cycle can ever be deleted', async () => {
   await assertFails(deleteDoc(doc(as(OWNER), 'transfers', 'T-draft')))
 })
 
+// --- delivery notes, from both ends ----------------------------------------
+
+test('the owner can send stock back from whichever outlet he is standing in', () => {
+  // He is registered at MAIN and deliberately allowed to work anywhere — App
+  // exempts him from the wrong-outlet guard on purpose. This one clause was
+  // written with a bare myBranch() instead of canWriteBranch(), so closing
+  // Gulberg's day on Gulberg's tablet refused his return, and the return is
+  // part of the same act as counting the drawer.
+  return assertSucceeds(
+    setDoc(doc(as(OWNER), 'transfers', 'T-20260729-B2-R-owner'), {
+      ref: 'DN-R-owner',
+      fromBranch: 'B2',
+      toBranchId: 'MAIN',
+      businessDate: '2026-07-29',
+      direction: 'return',
+      status: 'dispatched',
+      items: [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 4, qtySent: 4, qtyReceived: null }],
+    }),
+  )
+})
+
+test('an outlet can correct a return it has sent, until the hub confirms it', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'transfers', 'T-20260729-B2-R'), {
+      fromBranch: 'B2', toBranchId: 'MAIN', businessDate: '2026-07-29',
+      direction: 'return', status: 'dispatched',
+      items: [{ productId: 'p1', productName: 'Loaf', qtySent: 4, qtyReceived: null }],
+    })
+  })
+  // A day can be reopened, and re-closing it sends the return again onto the
+  // same natural-key document — which is an update, and no clause matched the
+  // outlet that wrote it. Reopening a day left a shop unable to close it again.
+  await assertSucceeds(
+    updateDoc(doc(as(CASHIER_B2), 'transfers', 'T-20260729-B2-R'), {
+      items: [{ productId: 'p1', productName: 'Loaf', qtySent: 6, qtyReceived: null }],
+      status: 'dispatched',
+    }),
+  )
+  // Another outlet's return is still none of their business.
+  await assertFails(
+    updateDoc(doc(as(CASHIER_MAIN), 'transfers', 'T-20260729-B2-R'), {
+      items: [], status: 'dispatched',
+    }),
+  )
+  // Correcting the count, not re-addressing the van.
+  await assertFails(
+    updateDoc(doc(as(CASHIER_B2), 'transfers', 'T-20260729-B2-R'), {
+      items: [], status: 'dispatched', toBranchId: 'B3',
+    }),
+  )
+  await assertFails(
+    updateDoc(doc(as(CASHIER_B2), 'transfers', 'T-20260729-B2-R'), {
+      items: [], status: 'dispatched', businessDate: '2026-07-28',
+    }),
+  )
+})
+
+test('counting a delivery in cannot rewrite anything but the count', async () => {
+  const note = (id) => ({
+    fromBranch: 'MAIN', toBranchId: 'B2', businessDate: '2026-07-29',
+    direction: 'out', status: 'dispatched',
+    items: [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 10, qtySent: 10 }],
+  })
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    for (const id of ['T-in-ok', 'T-in-date', 'T-in-stamp', 'T-in-lines']) {
+      await setDoc(doc(ctx.firestore(), 'transfers', id), note(id))
+    }
+  })
+
+  const counted = [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 10, qtySent: 10, qtyReceived: 8, shortReason: 'Damaged in transit' }]
+
+  await assertSucceeds(
+    updateDoc(doc(as(CASHIER_B2), 'transfers', 'T-in-ok'), {
+      items: counted, status: 'received', receivedBy: CASHIER_B2, receivedByName: 'Sam',
+      // The day the goods actually landed, which is not the day on the note.
+      receivedOn: '2026-07-29',
+    }),
+  )
+  // Moving the note to another day would move the stock to another day's books.
+  await assertFails(
+    updateDoc(doc(as(CASHIER_B2), 'transfers', 'T-in-date'), {
+      items: counted, status: 'received', receivedBy: CASHIER_B2, businessDate: '2026-07-28',
+    }),
+  )
+  // Signing somebody else's name to the count.
+  await assertFails(
+    updateDoc(doc(as(CASHIER_B2), 'transfers', 'T-in-stamp'), {
+      items: counted, status: 'received', receivedBy: CASHIER_MAIN, receivedByName: 'Maya',
+    }),
+  )
+  // Dropping a line rather than declaring it short.
+  await assertFails(
+    updateDoc(doc(as(CASHIER_B2), 'transfers', 'T-in-lines'), {
+      items: [], status: 'received', receivedBy: CASHIER_B2,
+    }),
+  )
+})
+
+test('the hub may add extras when it sends, but not sign for the far end', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    for (const id of ['T-out-ok', 'T-out-forge']) {
+      await setDoc(doc(ctx.firestore(), 'transfers', id), {
+        fromBranch: 'MAIN', toBranchId: 'B2', businessDate: '2026-07-29',
+        direction: 'out', status: 'draft',
+        items: [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 10, qtySent: null }],
+      })
+    }
+  })
+  // A tray nobody ordered becomes a new line, so the line count may grow here.
+  await assertSucceeds(
+    updateDoc(doc(as(SPECIALIST), 'transfers', 'T-out-ok'), {
+      items: [
+        { productId: 'p1', productName: 'Loaf', qtyDemanded: 10, qtySent: 10 },
+        { productId: 'p2', productName: 'Donut', qtyDemanded: 0, qtySent: 20, extra: true },
+      ],
+      status: 'dispatched',
+      dispatchedBy: SPECIALIST,
+      dispatchedByName: 'Ravi',
+    }),
+  )
+  // Marking it received on the outlet's behalf, from the hub.
+  await assertFails(
+    updateDoc(doc(as(SPECIALIST), 'transfers', 'T-out-forge'), {
+      items: [{ productId: 'p1', productName: 'Loaf', qtyDemanded: 10, qtySent: 10, qtyReceived: 10 }],
+      status: 'dispatched',
+      dispatchedBy: SPECIALIST,
+      receivedBy: SPECIALIST,
+    }),
+  )
+})
+
 // --- the reads a compile makes before it writes anything --------------------
 //
 // The batch was the obvious suspect and it was not the only one. `compileNow`

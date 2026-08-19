@@ -32,12 +32,23 @@ import { carryoverFrom } from './dailyReport.js'
  * checked in by name, by a person, and then accounted for nowhere in the
  * system. The stock that went back was silently destroyed every night.
  */
-export function receivedAt({ branchId, isMain = false, transfers = [], production = null }) {
+export function receivedAt({
+  branchId,
+  isMain = false,
+  transfers = [],
+  production = null,
+  businessDate = null,
+}) {
   const arrived = {}
 
   for (const transfer of transfers) {
     if (transfer.toBranchId !== branchId) continue
     if (transfer.status !== 'received') continue
+    // Counted on the day it was taken in, not the day printed on the note.
+    // `receivedOn` is stamped at the moment somebody confirms it; notes written
+    // before that field existed fall back to their own date, which is what they
+    // were being counted on anyway.
+    if (businessDate && (transfer.receivedOn ?? transfer.businessDate) !== businessDate) continue
     for (const item of transfer.items ?? []) {
       arrived[item.productId] =
         (arrived[item.productId] ?? 0) + (item.qtyReceived ?? item.qtySent ?? 0)
@@ -52,6 +63,33 @@ export function receivedAt({ branchId, isMain = false, transfers = [], productio
   }
 
   return arrived
+}
+
+/**
+ * What this outlet has sent back to the hub today.
+ *
+ * Counted from the moment the note is written, not from when the hub confirms
+ * it: the crates are on the van and they are not on this shop's shelf. Without
+ * this, stock sent back was shown in two places at once — still at the shop
+ * that sent it, and now also at the hub that took it in — and the owner's
+ * total for the day was simply larger than the bakery had made.
+ *
+ * Pinned to the day the note carries, which is the sending outlet's closing
+ * day. From the next day the shop's own carryover already excludes it, so
+ * subtracting again would take it off twice.
+ */
+export function sentBackFrom({ branchId, transfers = [], businessDate = null }) {
+  const gone = {}
+  for (const transfer of transfers) {
+    if (transfer.fromBranch !== branchId) continue
+    if (transfer.direction !== 'return') continue
+    if (transfer.status !== 'dispatched' && transfer.status !== 'received') continue
+    if (businessDate && transfer.businessDate !== businessDate) continue
+    for (const item of transfer.items ?? []) {
+      gone[item.productId] = (gone[item.productId] ?? 0) + (item.qtySent ?? item.qtyDemanded ?? 0)
+    }
+  }
+  return gone
 }
 
 /**
@@ -90,6 +128,7 @@ export function stockAt({
   production = null,
   sales = [],
   previousClosing = null,
+  businessDate = null,
 }) {
   const branchId = branch?.id
   const lines = buildLeftovers({
@@ -99,9 +138,15 @@ export function stockAt({
       isMain: Boolean(branch?.isMain),
       transfers,
       production,
+      businessDate,
     }),
     sold: soldAt(sales, branchId),
     carriedIn: carryoverFrom(previousClosing),
+    // Deliberately not passed by the close wizard, which builds its own lines:
+    // the return is created *by* that close, out of the very figures it is
+    // asking the cashier to confirm, so subtracting it there would take the
+    // same crates off twice.
+    returned: sentBackFrom({ branchId, transfers, businessDate }),
   })
 
   return {
@@ -137,6 +182,7 @@ export function stockReport({
       transfers,
       production,
       sales,
+      businessDate,
       previousClosing: closings.find(
         (c) => c.branchId === branch.id && c.businessDate === yesterday,
       ),
@@ -172,6 +218,7 @@ export function byProduct(report) {
         carriedIn: 0,
         received: 0,
         sold: 0,
+        returned: 0,
         left: 0,
       }
 
@@ -182,12 +229,14 @@ export function byProduct(report) {
         carriedIn: line.carriedIn,
         received: line.received,
         sold: line.sold,
+        returned: line.returned ?? 0,
         left: line.expected,
       }
 
       row.carriedIn += line.carriedIn
       row.received += line.received
       row.sold += line.sold
+      row.returned += line.returned ?? 0
       row.left += line.expected
       rows.set(line.productId, row)
     }
@@ -197,8 +246,14 @@ export function byProduct(report) {
     .map((row) => ({
       ...row,
       // Everything the outlets had to sell today: yesterday's leftovers plus
-      // today's deliveries.
-      available: row.carriedIn + row.received,
+      // today's deliveries, less anything that only moved between them.
+      //
+      // Stock a shop sends back is received a second time, at the hub, and
+      // adding both would say the bakery had more to sell than it ever made.
+      // The same twelve rusks cannot be counted as available twice because
+      // they spent the afternoon in a van. Subtracting what went back is exact:
+      // every return leaving a shop arrives somewhere, and both ends are here.
+      available: row.carriedIn + row.received - row.returned,
       // Sold more than was ever recorded as arriving.
       //
       // The shelf is clamped at zero, because there is no such thing as minus
@@ -211,7 +266,8 @@ export function byProduct(report) {
       // out at this level and the gap goes unreported. That is exactly the case
       // that produced a total nobody could reconcile.
       unaccounted: Object.values(row.perOutlet).reduce(
-        (sum, at) => sum + Math.max(0, at.sold - (at.carriedIn + at.received)),
+        (sum, at) =>
+          sum + Math.max(0, at.sold + (at.returned ?? 0) - (at.carriedIn + at.received)),
         0,
       ),
       // What is left is worth what it would sell for. Stock that does not keep

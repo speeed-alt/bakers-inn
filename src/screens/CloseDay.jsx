@@ -11,8 +11,10 @@ import { buildLeftovers, splitLeftovers, wasteValue, CARRY, RETURN, WASTE } from
 import { carryoverFrom } from '../lib/dailyReport.js'
 import { salesForDay } from '../data/sales.js'
 import { closeDay, closingDoc, isClosed, reopenDay } from '../data/closings.js'
+import { demandDoc } from '../data/demands.js'
 import { productionDoc } from '../data/production.js'
-import { sendReturn, transfersFrom, transfersTo } from '../data/transfers.js'
+import { sendReturn, transfersFrom } from '../data/transfers.js'
+import { useArrivals } from '../data/arrivals.js'
 import { WASTE_REASONS } from '../config.js'
 import { Empty, Loading, Modal, Money, Stepper } from '../components/ui.jsx'
 import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
@@ -52,7 +54,12 @@ export default function CloseDay({ branchId, isMain }) {
     () => query(collection(db, 'products'), where('active', '==', true)),
     [],
   )
-  const transfersIn = useSnapshot(() => transfersTo(branchId, target), [branchId, target])
+  // Across yesterday, today and tomorrow, then narrowed by the day the goods
+  // were actually taken in. A note carries the day it was made for, so a
+  // delivery baked for tomorrow and counted in this evening is stamped
+  // tomorrow — and closing today used to read that shop as having received
+  // nothing at all. See src/data/arrivals.js and `receivedAt`.
+  const transfersIn = useArrivals(branchId, target)
   // The hub also needs what it sent out: what it kept is what it made less what
   // it put on a note, so without this it counted its own share of the bake even
   // on a day it gave the whole bake away. Subscribed for every outlet rather
@@ -75,6 +82,22 @@ export default function CloseDay({ branchId, isMain }) {
   // find no order when it came to bake, with no warning anywhere before then.
   const [orderSent, setOrderSent] = useState(false)
 
+  // An order that is already in is already in.
+  //
+  // The gate above catches a cashier clicking past step 3 without pressing
+  // Send. It cannot be the only test, because by closing time the order may
+  // already have gone: sent earlier from the Stock tab, or — the case that
+  // deadlocked the wizard — already locked, because the baker had compiled
+  // tomorrow's list before the shop closed. A locked order has no Send button
+  // to press, by design, so `orderSent` could never become true and the shop
+  // could not finish closing its day at all.
+  const tomorrowsOrder = useSnapshot(
+    () => demandDoc(branchId, nextDate(target)),
+    [branchId, target],
+  )
+  const orderIsIn =
+    orderSent || ['submitted', 'locked'].includes(tomorrowsOrder.data?.status ?? '')
+
   const summary = useMemo(() => summariseDay(sales.data ?? []), [sales.data])
 
   // What the outlet had to sell: a delivery at a shop, what never went in a van
@@ -91,8 +114,9 @@ export default function CloseDay({ branchId, isMain }) {
         isMain,
         transfers: [...(transfersIn.data ?? []), ...(transfersOut.data ?? [])],
         production: production.data,
+        businessDate: target,
       }),
-    [transfersIn.data, transfersOut.data, production.data, isMain, branchId],
+    [transfersIn.data, transfersOut.data, production.data, isMain, branchId, target],
   )
 
   const lines = useMemo(
@@ -301,13 +325,13 @@ export default function CloseDay({ branchId, isMain }) {
             // Demoted to a plain button while step 3 is not actually done yet,
             // so it never stands beside "Send order" at equal weight claiming
             // to be the way forward on its own.
-            className={`btn ${(step === 1 && counted === null) || (step === 3 && !orderSent) ? '' : 'primary'}`}
-            disabled={step === 1 ? counted === null : step === 3 && !orderSent}
+            className={`btn ${(step === 1 && counted === null) || (step === 3 && !orderIsIn) ? '' : 'primary'}`}
+            disabled={step === 1 ? counted === null : step === 3 && !orderIsIn}
             onClick={() => setStep((s) => s + 1)}
           >
             {step === 1 && counted === null
               ? 'Count the cash first'
-              : step === 3 && !orderSent
+              : step === 3 && !orderIsIn
                 ? 'Send the order first'
                 : 'Next'}
           </button>

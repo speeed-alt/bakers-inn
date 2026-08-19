@@ -6,6 +6,7 @@ import { businessDateOf, formatDate, previousDate } from '../lib/dates.js'
 import { formatMoney } from '../lib/money.js'
 import { byProduct, stockReport, stockTotals } from '../lib/stock.js'
 import { productionDoc } from '../data/production.js'
+import { arrivalDays } from '../data/arrivals.js'
 import { printSheet } from '../lib/paper.js'
 import { Empty, Loading, Modal, Money } from '../components/ui.jsx'
 import { BUSINESS_NAME } from '../config.js'
@@ -32,8 +33,14 @@ export default function StockReport() {
     () => query(collection(db, 'sales'), where('businessDate', '==', today)),
     [today],
   )
+  // Across the same three days the shops look at, then narrowed by the day the
+  // goods were actually taken in. A note carries the day it was made for, so a
+  // delivery baked for tomorrow and counted in this afternoon is stamped
+  // tomorrow — and this screen would have shown the shop as having received
+  // nothing. Only the owner reads this, and his list rule needs no branch
+  // pinned, so one query does for all three days.
   const transfers = useSnapshot(
-    () => query(collection(db, 'transfers'), where('businessDate', '==', today)),
+    () => query(collection(db, 'transfers'), where('businessDate', 'in', arrivalDays(today))),
     [today],
   )
   const production = useSnapshot(() => productionDoc(today), [today])

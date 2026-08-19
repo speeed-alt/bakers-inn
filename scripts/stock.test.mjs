@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   byProduct,
   receivedAt,
+  sentBackFrom,
   soldAt,
   stockAt,
   stockReport,
@@ -168,6 +169,142 @@ test('before anything is recorded as baked, the hub has nothing', () => {
   assert.deepEqual(receivedAt({ branchId: 'MAIN', isMain: true, transfers: [], production }), {})
 })
 
+test('a delivery counts on the day it was taken in, not the day on the note', () => {
+  // The baker bakes tomorrow's bread tonight, so the note is stamped tomorrow.
+  // The shop counts it in this evening and sells from it this evening. Read
+  // against the note's own date, closing today showed a shop that had taken in
+  // seventy-two items as having taken in none.
+  const note = {
+    fromBranch: 'MAIN',
+    toBranchId: 'B2',
+    businessDate: '2026-08-20',
+    receivedOn: '2026-08-19',
+    status: 'received',
+    items: [{ productId: 'bread-large', qtySent: 40, qtyReceived: 40 }],
+  }
+  assert.deepEqual(
+    receivedAt({ branchId: 'B2', transfers: [note], businessDate: '2026-08-19' }),
+    { 'bread-large': 40 },
+  )
+  // And it belongs to that day only — otherwise closing both days would count
+  // the same forty loaves twice.
+  assert.deepEqual(
+    receivedAt({ branchId: 'B2', transfers: [note], businessDate: '2026-08-20' }),
+    {},
+  )
+})
+
+test('a note written before arrivals were stamped falls back to its own date', () => {
+  const old = {
+    fromBranch: 'MAIN',
+    toBranchId: 'B2',
+    businessDate: '2026-08-19',
+    status: 'received',
+    items: [{ productId: 'bread-large', qtySent: 10, qtyReceived: 10 }],
+  }
+  assert.deepEqual(
+    receivedAt({ branchId: 'B2', transfers: [old], businessDate: '2026-08-19' }),
+    { 'bread-large': 10 },
+  )
+})
+
+test('stock a shop has sent back is no longer on that shop’s shelf', () => {
+  // It was in two places at once: still at the shop that sent it, and now also
+  // at the hub that took it in, so the owner's total for the day was larger
+  // than the bakery had made.
+  const arrived = {
+    fromBranch: 'MAIN', toBranchId: 'B2', businessDate: '2026-08-19', receivedOn: '2026-08-19',
+    status: 'received', items: [{ productId: 'rusk', qtySent: 12, qtyReceived: 12 }],
+  }
+  const goneBack = {
+    fromBranch: 'B2', toBranchId: 'MAIN', businessDate: '2026-08-19',
+    direction: 'return', status: 'dispatched',
+    items: [{ productId: 'rusk', qtySent: 12, qtyReceived: null }],
+  }
+
+  const shop = stockAt({
+    products,
+    branch: branches[1],
+    transfers: [arrived, goneBack],
+    sales: [],
+    businessDate: '2026-08-19',
+  })
+  assert.equal(shop.lines.find((l) => l.productId === 'rusk').expected, 0)
+
+  // From the moment the note is written, not when the hub confirms it: the
+  // crates are on the van either way.
+  const confirmed = stockAt({
+    products,
+    branch: branches[1],
+    transfers: [arrived, { ...goneBack, status: 'received' }],
+    sales: [],
+    businessDate: '2026-08-19',
+  })
+  assert.equal(confirmed.lines.find((l) => l.productId === 'rusk').expected, 0)
+
+  // And the next day it is not taken off twice — the shop's own carryover has
+  // already excluded it, so a note from yesterday must not subtract again.
+  const tomorrow = stockAt({
+    products,
+    branch: branches[1],
+    transfers: [goneBack],
+    sales: [],
+    previousClosing: { carry: [{ productId: 'rusk', qty: 3 }] },
+    businessDate: '2026-08-20',
+  })
+  assert.equal(tomorrow.lines.find((l) => l.productId === 'rusk').expected, 3)
+})
+
+test('the hub gains exactly what the shop lost', () => {
+  const goneBack = {
+    fromBranch: 'B2', toBranchId: 'MAIN', businessDate: '2026-08-19', receivedOn: '2026-08-19',
+    direction: 'return', status: 'received',
+    items: [{ productId: 'rusk', qtySent: 12, qtyReceived: 12 }],
+  }
+  assert.deepEqual(
+    receivedAt({ branchId: 'MAIN', transfers: [goneBack], businessDate: '2026-08-19' }),
+    { rusk: 12 },
+  )
+  assert.deepEqual(
+    sentBackFrom({ branchId: 'B2', transfers: [goneBack], businessDate: '2026-08-19' }),
+    { rusk: 12 },
+  )
+})
+
+test('stock that only moved between outlets is not counted as more to sell', () => {
+  // Twelve rusks delivered to Gulberg and sent back the same evening are
+  // twelve rusks, not twenty-four. The row is the group's whole story, so both
+  // ends of that journey are in it, and adding them both would tell the owner
+  // his bakery had more to sell than it ever made.
+  const report = stockReport({
+    products,
+    branches,
+    transfers: [
+      {
+        fromBranch: 'MAIN', toBranchId: 'B2', businessDate: '2026-08-12',
+        receivedOn: '2026-08-12', status: 'received',
+        items: [{ productId: 'rusk', qtySent: 12, qtyReceived: 12 }],
+      },
+      {
+        fromBranch: 'B2', toBranchId: 'MAIN', businessDate: '2026-08-12',
+        receivedOn: '2026-08-12', direction: 'return', status: 'received',
+        items: [{ productId: 'rusk', qtySent: 12, qtyReceived: 12 }],
+      },
+    ],
+    sales: [],
+    closings: [],
+    businessDate: '2026-08-12',
+    previousDate: '2026-08-11',
+  })
+
+  const rusk = byProduct(report).find((r) => r.productId === 'rusk')
+  assert.equal(rusk.available, 12, 'twelve rusks, not twenty-four')
+  assert.equal(rusk.left, 12)
+  assert.equal(rusk.perOutlet.B2.left, 0)
+  assert.equal(rusk.perOutlet.MAIN.left, 12)
+  assert.equal(rusk.unaccounted, 0, 'nothing is missing — it moved')
+})
+
 test('a voided sale did not sell anything', () => {
   const sales = [
     { branchId: 'B2', status: 'normal', items: [{ productId: 'bread-large', qty: 3 }] },
@@ -184,6 +321,7 @@ test("one outlet's shelf is what came in less what went out", () => {
     transfers: [
       {
         toBranchId: 'B2',
+        businessDate: '2026-08-12',
         status: 'received',
         items: [{ productId: 'bread-large', qtySent: 40, qtyReceived: 40 }],
       },
@@ -279,6 +417,7 @@ test('each row carries what came in, what sold, what is left, and what it is wor
     transfers: [
       {
         toBranchId: 'B2',
+        businessDate: '2026-08-12',
         status: 'received',
         items: [{ productId: 'bread-large', qtySent: 40, qtyReceived: 40 }],
       },
@@ -310,6 +449,7 @@ test('an outlet with none because it sold out reads differently from one that go
     transfers: [
       {
         toBranchId: 'B2',
+        businessDate: '2026-08-12',
         status: 'received',
         items: [{ productId: 'bread-large', qtySent: 10, qtyReceived: 10 }],
       },

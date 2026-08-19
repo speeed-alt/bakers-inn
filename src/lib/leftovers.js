@@ -26,11 +26,21 @@ export function defaultDisposition(product) {
  * zero, because "we have three left and the system thinks none" is exactly the
  * discrepancy worth catching.
  */
-export function buildLeftovers({ products = [], received = {}, sold = {}, carriedIn = {} }) {
+export function buildLeftovers({
+  products = [],
+  received = {},
+  sold = {},
+  carriedIn = {},
+  // Stock this outlet has already sent back to the hub today. Empty during the
+  // close itself, which is what creates the return; supplied by the live stock
+  // screens, where crates on a van are no longer on the shelf.
+  returned = {},
+}) {
   const touched = new Set([
     ...Object.keys(received),
     ...Object.keys(sold),
     ...Object.keys(carriedIn),
+    ...Object.keys(returned),
   ])
 
   return products
@@ -38,6 +48,7 @@ export function buildLeftovers({ products = [], received = {}, sold = {}, carrie
     .map((product) => {
       const inQty = (received[product.id] ?? 0) + (carriedIn[product.id] ?? 0)
       const soldQty = sold[product.id] ?? 0
+      const backQty = returned[product.id] ?? 0
       return {
         productId: product.id,
         code: product.code ?? '',
@@ -47,9 +58,10 @@ export function buildLeftovers({ products = [], received = {}, sold = {}, carrie
         received: received[product.id] ?? 0,
         carriedIn: carriedIn[product.id] ?? 0,
         sold: soldQty,
+        returned: backQty,
         // Never negative: selling more than the system thinks arrived means the
         // paperwork is wrong, not that there is minus-two bread on the shelf.
-        expected: Math.max(0, inQty - soldQty),
+        expected: Math.max(0, inQty - soldQty - backQty),
         disposition: defaultDisposition(product),
       }
     })

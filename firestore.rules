@@ -289,9 +289,17 @@ service cloud.firestore {
       // by hand. The one exception is stock an outlet sends back at the end of
       // its day: that note is written by the outlet it leaves, already on its
       // way, for the hub to confirm in the morning.
+      //
+      // Through `canWriteBranch` rather than a bare `myBranch()`, which is the
+      // form every other branch-scoped write in this file uses. This one clause
+      // was inlined, and so left the owner out — and the owner is registered at
+      // MAIN while being explicitly allowed to work in whichever outlet he is
+      // standing in. Closing Gulberg's day on Gulberg's tablet, his return was
+      // refused, and the close wizard sends the return as part of the same act
+      // as counting the drawer.
       allow create: if staff()
                     && request.resource.data.direction == 'return'
-                    && request.resource.data.fromBranch == myBranch()
+                    && canWriteBranch(request.resource.data.fromBranch)
                     && request.resource.data.status == 'dispatched'
                     && request.resource.data.businessDate is string;
 
@@ -304,17 +312,58 @@ service cloud.firestore {
                     && request.resource.data.status == 'draft'
                     && request.resource.data.businessDate is string;
 
+      // Both halves name the fields they may touch and have to sign their own
+      // name, like every other mutable record here. Without that, a note was
+      // open house from either end: whoever could move it one step could also
+      // rewrite its date, its branches, its direction, or the other side's
+      // stamp — so a short delivery could be made to read as the sending
+      // outlet's problem, signed by somebody who was not there.
+      //
+      // One hole stays open and is worth stating rather than implying: `items`
+      // has to be writable at both steps, and a rule cannot reach inside an
+      // array, so the receiving outlet can still alter the `qtySent` it is
+      // supposedly counting against. Closing that means moving the counts into
+      // their own map, the way `produced` is on productionOrders. Until then
+      // the line count is pinned, so lines cannot be added or dropped, and
+      // every figure stays visible side by side on the owner's screen.
       allow update: if isOwner()
-                    // The hub sends: draft -> dispatched.
+                    // The hub sends: draft -> dispatched. Extras are added as
+                    // new lines here, so the line count may grow.
                     || (active() && role() == 'specialist'
                         && resource.data.fromBranch == myBranch()
                         && resource.data.status == 'draft'
-                        && request.resource.data.status == 'dispatched')
+                        && request.resource.data.status == 'dispatched'
+                        && changedOnly([
+                             'items', 'status', 'dispatchedBy', 'dispatchedByName', 'dispatchedAt'
+                           ])
+                        && stampedHonestly('dispatchedBy'))
                     // The receiving outlet counts it in: dispatched -> received.
                     || (staff()
                         && resource.data.toBranchId == myBranch()
                         && resource.data.status == 'dispatched'
-                        && request.resource.data.status == 'received');
+                        && request.resource.data.status == 'received'
+                        && request.resource.data.items.size() == resource.data.items.size()
+                        && changedOnly([
+                             'items', 'status', 'receivedBy', 'receivedByName', 'receivedAt',
+                             'receivedOn'
+                           ])
+                        && stampedHonestly('receivedBy'))
+                    // An outlet correcting a return it has already sent, before
+                    // the hub has confirmed it. A day can be reopened — the
+                    // close wizard says so — and re-closing it sends the return
+                    // again onto the same natural-key document, which is an
+                    // update. No clause matched the sender, so reopening a day
+                    // left the outlet unable to finish closing it again.
+                    || (staff()
+                        && resource.data.direction == 'return'
+                        && canWriteBranch(resource.data.fromBranch)
+                        && resource.data.status == 'dispatched'
+                        && request.resource.data.status == 'dispatched'
+                        // Correcting the count on a note, not re-addressing it.
+                        && request.resource.data.direction == 'return'
+                        && request.resource.data.fromBranch == resource.data.fromBranch
+                        && request.resource.data.toBranchId == resource.data.toBranchId
+                        && request.resource.data.businessDate == resource.data.businessDate);
 
       allow delete: if false;
     }
