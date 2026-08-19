@@ -10,6 +10,7 @@ import { installUpdate, useUpdateWaiting } from './lib/updates.js'
 import { Loading } from './components/ui.jsx'
 import { deviceLetter } from './lib/ids.js'
 import { goLive, isPractising } from './lib/practice.js'
+import { pendingDeliveries, useArrivals } from './data/arrivals.js'
 import { NotInPractice } from './components/PracticeCard.jsx'
 import Setup from './screens/Setup.jsx'
 import Login from './screens/Login.jsx'
@@ -174,6 +175,22 @@ export default function App() {
 
   const branch = useSnapshot(() => (branchId ? doc(db, 'branches', branchId) : null), [branchId])
 
+  // Somebody has to be watching for the van.
+  //
+  // A cashier spends the whole day on the till, which is where signing in puts
+  // her and where she stays. When the hub pressed send, nothing anywhere on her
+  // tablet changed — no sound, no mark, no count — and the delivery note simply
+  // waited on a screen she had no reason to open. The only way to find out a
+  // delivery had been sent was to go looking for one.
+  //
+  // Watched here rather than on the Stock screen because the point is to reach
+  // somebody who is not on the Stock screen. Subscribed only for a cashier at a
+  // shop: the hub receives nothing, and the owner has his own screens.
+  const watching =
+    profile?.role === 'cashier' && branch.data && !branch.data.isMain ? branchId : null
+  const arrivals = useArrivals(watching)
+  const waiting = pendingDeliveries(arrivals.data)
+
   if (loading) return stalled ? <StartupTrouble /> : <Loading />
   if (!branchId) return <Setup onDone={setBranchId} />
   if (!user) {
@@ -252,6 +269,20 @@ export default function App() {
           on purpose: turning it on is a decision, turning it off is a safety
           valve, and whoever is holding the tablet must always be able to hand
           it back live without finding the owner first. */}
+      {/* Placed with the other banners rather than on the Stock screen, because
+          the whole point is to reach a cashier who is on the till. It is a
+          delivery, not an alarm, so it uses the app's neutral strip — --alert
+          stays reserved for money that does not add up. */}
+      {waiting.length > 0 && (
+        <div className="strip block no-print">
+          <b>A delivery has arrived.</b>{' '}
+          {waiting.length === 1
+            ? `${waiting[0].ref} was sent by ${waiting[0].dispatchedByName}.`
+            : `${waiting.length} notes are waiting.`}{' '}
+          Count it in on the Stock tab before it goes on the shelf.
+        </div>
+      )}
+
       {practising && (
         <div className="strip block no-print">
           <span style={{ fontWeight: 600 }}>PRACTICE — nothing here is real.</span>{' '}
@@ -348,7 +379,11 @@ export default function App() {
             path="/stock"
             element={
               <Only path="/stock" role={profile.role}>
-                <Stock branchId={branchId} isMain={branch.data?.isMain ?? false} />
+                <Stock
+                  branchId={branchId}
+                  branchName={branch.data?.name ?? branchId}
+                  isMain={branch.data?.isMain ?? false}
+                />
               </Only>
             }
           />
@@ -393,6 +428,11 @@ export default function App() {
           {nav.map((item) => (
             <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? 'active' : '')}>
               {item.label}
+              {item.to === '/stock' && waiting.length > 0 && (
+                <span className="pip" aria-label={`${waiting.length} delivery to count in`}>
+                  {waiting.length}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   query,
   serverTimestamp,
   Timestamp,
@@ -65,15 +66,21 @@ export function recordProduced({ businessDate, productId, qty, user }) {
  */
 export function addExtra({ businessDate, product, qty, user }) {
   return updateDoc(productionDoc(businessDate), {
-    [`extras.${product.id}`]: {
-      productId: product.id,
-      code: product.code ?? '',
-      productName: product.name,
-      qty,
-      by: user.id,
-      byName: user.name,
-      at: Timestamp.fromDate(new Date()),
-    },
+    // Field by field, with the quantity incremented rather than replaced.
+    //
+    // This used to write the whole entry as one object, which meant a second
+    // tray of the same thing silently *replaced* the first. A baker who made
+    // twelve donuts in the morning and six more when the oven came free in the
+    // afternoon ended the day with six on record — and nothing on the screen
+    // said the product was already listed, because the picker offers it again
+    // with the stepper back at one. Six trays of anything vanished the same way.
+    [`extras.${product.id}.productId`]: product.id,
+    [`extras.${product.id}.code`]: product.code ?? '',
+    [`extras.${product.id}.productName`]: product.name,
+    [`extras.${product.id}.qty`]: increment(qty),
+    [`extras.${product.id}.by`]: user.id,
+    [`extras.${product.id}.byName`]: user.name,
+    [`extras.${product.id}.at`]: Timestamp.fromDate(new Date()),
     updatedAt: Timestamp.fromDate(new Date()),
   })
 }

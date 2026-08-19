@@ -124,6 +124,15 @@ h1, h2, h3 { letter-spacing: -0.01em; }
   border-top: 2px solid transparent;
 }
 .tabbar a.active { color: var(--text); font-weight: 600; border-top-color: var(--ink); }
+/* A count on a tab, for work that is waiting rather than for a problem: the
+   ink colour, not --alert. A delivery to count in is a job, not an alarm. */
+.pip {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px;
+  border-radius: 9px; background: var(--ink); color: var(--surface);
+  font-size: 11px; font-weight: 700; line-height: 1;
+  vertical-align: 1px;
+}
 
 /* ---- primitives --------------------------------------------------------- */
 

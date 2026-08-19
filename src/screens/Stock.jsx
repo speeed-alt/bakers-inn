@@ -1,10 +1,17 @@
 import { useState } from 'react'
+import { collection, query, where } from 'firebase/firestore'
+import { db } from '../firebase.js'
+import { useSnapshot } from '../lib/hooks.js'
 import { useAuth } from '../auth.jsx'
-import { businessDateOf, formatDate, nextDate } from '../lib/dates.js'
-import { receiveTransfer } from '../data/transfers.js'
+import { businessDateOf, formatDate, nextDate, previousDate } from '../lib/dates.js'
+import { receiveTransfer, transfersFrom } from '../data/transfers.js'
 import { pendingDeliveries, useArrivals } from '../data/arrivals.js'
+import { salesForDay } from '../data/sales.js'
+import { closingDoc } from '../data/closings.js'
+import { productionDoc } from '../data/production.js'
+import { stockAt } from '../lib/stock.js'
 import { SHORT_REASONS } from '../config.js'
-import { Loading, Stepper } from '../components/ui.jsx'
+import { Empty, Loading, Stepper } from '../components/ui.jsx'
 import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
 
 /**
@@ -12,13 +19,111 @@ import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
  * Neither involves typing a product name — one is pre-filled from the delivery
  * note, the other from what this outlet ordered on the same day last week.
  */
-export default function Stock({ branchId, isMain }) {
+export default function Stock({ branchId, branchName, isMain }) {
   const today = businessDateOf()
 
   return (
     <div className="page">
       {!isMain && <ReceiveDelivery branchId={branchId} today={today} />}
+      <OnTheShelf branchId={branchId} branchName={branchName} isMain={isMain} today={today} />
       <TomorrowsOrder branchId={branchId} businessDate={nextDate(today)} />
+    </div>
+  )
+}
+
+/**
+ * What is actually on the shelf, right now.
+ *
+ * The tab has been called Stock since the first week and did not show any. A
+ * cashier confirmed a delivery, watched the card turn into one line of grey
+ * text, and had no way — anywhere in the app — to see what her own shop was
+ * holding. The one screen that answered it was the owner's.
+ *
+ * Worked out by `stockAt`, the same function behind the owner's report and the
+ * close wizard, so all three agree by construction. Nobody counts continuously:
+ * this is yesterday's leftovers, plus what has been counted in today, less what
+ * has been sold. A delivery still waiting to be confirmed is deliberately not
+ * in it — the card above is what turns it into stock, and that is the point of
+ * having to confirm at all.
+ */
+function OnTheShelf({ branchId, branchName, isMain, today }) {
+  const yesterday = previousDate(today)
+
+  const products = useSnapshot(
+    () => query(collection(db, 'products'), where('active', '==', true)),
+    [],
+  )
+  const sales = useSnapshot(() => salesForDay(branchId, today), [branchId, today])
+  const previous = useSnapshot(() => closingDoc(branchId, yesterday), [branchId, yesterday])
+  const arrivals = useArrivals(branchId, today)
+  // The hub keeps what it baked and did not put on a note, so it needs both the
+  // list and its own outgoing notes. A shop subscribes to them too rather than
+  // behind a condition — a hook cannot be asked for conditionally — and simply
+  // has none.
+  const production = useSnapshot(() => productionDoc(today), [today])
+  const outbound = useSnapshot(() => transfersFrom(branchId, today), [branchId, today])
+
+  const loading =
+    products.loading || sales.loading || previous.loading || arrivals.loading ||
+    production.loading || outbound.loading
+
+  if (loading) {
+    return (
+      <div className="card">
+        <h3>On the shelf</h3>
+        <Loading inline>Working out what is left…</Loading>
+      </div>
+    )
+  }
+
+  const shelf = stockAt({
+    products: products.data ?? [],
+    branch: { id: branchId, name: branchName, isMain },
+    transfers: [...(arrivals.data ?? []), ...(outbound.data ?? [])],
+    production: isMain ? production.data : null,
+    sales: sales.data ?? [],
+    previousClosing: previous.data,
+  })
+
+  const lines = shelf.lines.filter((l) => l.expected > 0 || l.sold > 0)
+
+  return (
+    <div className="card">
+      <div className="row between wrap">
+        <h3 style={{ margin: 0 }}>On the shelf</h3>
+        <span className="muted small">{shelf.onShelf} item{shelf.onShelf === 1 ? '' : 's'} left</span>
+      </div>
+      <p className="muted small">
+        Yesterday's leftovers plus today's delivery, less what has sold. A delivery you have not
+        counted in yet is not on this list.
+      </p>
+
+      {lines.length === 0 ? (
+        <Empty>Nothing has come in or gone out today yet.</Empty>
+      ) : (
+        <div className="bill">
+          <div className="bill-row bill-head">
+            <span>Code</span>
+            <span>Item</span>
+            <span>Sold</span>
+            <span className="bill-amount">Left</span>
+          </div>
+          {lines.map((line) => (
+            <div className="bill-row" key={line.productId}>
+              <span className="bill-code">{line.code}</span>
+              <span>
+                <span className="bill-name">{line.productName}</span>
+                <div className="muted small">
+                  {line.carriedIn > 0 && `${line.carriedIn} carried · `}
+                  {line.received} in
+                </div>
+              </span>
+              <span className="muted">{line.sold}</span>
+              <span className="bill-amount">{line.expected}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

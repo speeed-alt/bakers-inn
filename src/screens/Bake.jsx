@@ -15,6 +15,7 @@ import {
   reopenOrder,
 } from '../data/production.js'
 import { demandsForDate } from '../data/demands.js'
+import { transfersFrom } from '../data/transfers.js'
 import { byCategoryThenName } from '../lib/search.js'
 import { Empty, Loading, Stepper } from '../components/ui.jsx'
 
@@ -49,11 +50,24 @@ export default function Bake() {
   const [dayChosen, setDayChosen] = useState(false)
 
   const order = useSnapshot(() => productionDoc(bakeFor), [bakeFor])
+  // So the screen can say what is actually waiting on Dispatch rather than
+  // assuming. On a day when the only order came from the hub itself, nothing
+  // goes in a van and no note is written — and this screen used to promise the
+  // baker delivery notes that did not exist.
+  const notes = useSnapshot(
+    () => transfersFrom(profile.branchId, bakeFor),
+    [profile.branchId, bakeFor],
+  )
   const todayOrders = useSnapshot(() => demandsForDate(today), [today])
   const tomorrowOrders = useSnapshot(() => demandsForDate(tomorrow), [tomorrow])
   const products = useSnapshot(() => collection(db, 'products'), [])
 
+  // Keyed by day as well as product. Keyed by product alone, a number typed on
+  // one day's list and never saved was still sitting in the stepper when the
+  // baker switched to the other day — so a line needing 12 showed 41, and one
+  // tap wrote 41 against it. Nothing on screen would have looked wrong.
   const [draft, setDraft] = useState({})
+  const keyFor = (productId) => `${bakeFor}:${productId}`
 
   const sent = (snap) => (snap.data ?? []).filter((d) => d.status !== 'draft')
   const todaySent = sent(todayOrders)
@@ -104,6 +118,28 @@ export default function Bake() {
   const po = order.data
   const produced = po.produced ?? {}
   const progress = productionProgress(po)
+
+  /**
+   * Record a line, then let the row fall back onto what is actually saved.
+   *
+   * Dropping the draft is the whole confirmation. Firestore applies the write
+   * to the local cache before it leaves the tablet, so the listener has the new
+   * figure by the next render — the number stays where the baker put it, the
+   * button changes from "Change to 35" to "Recorded", and both of those are
+   * facts about the server's copy rather than about what he typed.
+   */
+  // What is actually waiting on Dispatch, and what has already gone.
+  const waiting = (notes.data ?? []).filter((t) => t.status === 'draft')
+  const gone = (notes.data ?? []).filter((t) => t.status !== 'draft')
+
+  function record(productId, qty) {
+    recordProduced({ businessDate: bakeFor, productId, qty, user: profile })
+    setDraft((current) => {
+      const next = { ...current }
+      delete next[keyFor(productId)]
+      return next
+    })
+  }
   const perOutlet = (item) =>
     Object.entries(item.perOutlet ?? {})
       .filter(([, n]) => n > 0)
@@ -146,8 +182,15 @@ export default function Bake() {
         {po.items.length === 0 && <Empty>Nothing on the list.</Empty>}
         {po.items.map((item) => {
           const recorded = produced[item.productId]
-          const value = draft[item.productId] ?? recorded ?? item.qtyNeeded
+          const value = draft[keyFor(item.productId)] ?? recorded ?? item.qtyNeeded
           const isDone = recorded !== undefined
+          // Whether pressing the button would actually do anything. The button
+          // used to read "Change" whether or not there was a change to make, so
+          // a baker who tapped it without moving the stepper — the obvious
+          // thing to try — saw absolutely nothing happen, on a screen that
+          // never confirms anything anyway. It read as a dead button, and it
+          // was reported as one.
+          const pending = isDone && value !== recorded
           return (
             <div className={`bill-row${isDone ? ' bill-row-done' : ''}`} key={item.productId}>
               <span className="bill-code">{item.code}</span>
@@ -159,20 +202,14 @@ export default function Bake() {
               <span className="row" style={{ gap: 8 }}>
                 <Stepper
                   value={value}
-                  onChange={(v) => setDraft((c) => ({ ...c, [item.productId]: v }))}
+                  onChange={(v) => setDraft((c) => ({ ...c, [keyFor(item.productId)]: v }))}
                 />
                 <button
-                  className={`btn small ${isDone ? 'ghost' : 'primary'}`}
-                  onClick={() =>
-                    recordProduced({
-                      businessDate: bakeFor,
-                      productId: item.productId,
-                      qty: value,
-                      user: profile,
-                    })
-                  }
+                  className={`btn small ${isDone && !pending ? 'ghost' : 'primary'}`}
+                  disabled={isDone && !pending}
+                  onClick={() => record(item.productId, value)}
                 >
-                  {isDone ? 'Change' : 'Baked'}
+                  {!isDone ? 'Baked' : pending ? `Change to ${value}` : 'Recorded'}
                 </button>
               </span>
               <span className="bill-amount">{item.qtyNeeded}</span>
@@ -193,38 +230,51 @@ export default function Bake() {
           this same screen. Stacking both used to double the gap to 28px right
           before the primary submit button. */}
       <div className="card">
+        {/* Shown in both states. It used to live only in the unfinished branch,
+            so the moment a list was marked done the one number that reflects a
+            correction disappeared — and correcting a line on a finished list
+            then genuinely changed nothing visible anywhere on the screen. */}
+        <div className="total">
+          <span className="muted">Baked so far</span>
+          <b>
+            {progress.made} of {progress.needed}
+            {extrasTotal(po) > 0 && <span className="muted small"> + {extrasTotal(po)} extra</span>}
+          </b>
+        </div>
+
         {po.status === 'done' ? (
           <>
-            <h3>Finished</h3>
             <p className="muted small">
-              Marked finished by {po.doneByName}. The delivery notes are ready on the Dispatch
-              screen.
+              Marked finished by {po.doneByName}.{' '}
+              {/* Read off the notes that exist, not assumed. When the only
+                  order came from the hub itself nothing goes in a van, no note
+                  is written, and this sentence used to send the baker to a
+                  screen that had nothing on it — which is exactly how the
+                  Dispatch tab came to look broken. */}
+              {notes.loading
+                ? 'Checking the delivery notes…'
+                : waiting.length > 0
+                  ? `${waiting.length} delivery note${waiting.length === 1 ? '' : 's'} ${
+                      waiting.length === 1 ? 'is' : 'are'
+                    } ready on the Dispatch screen.`
+                  : gone.length > 0
+                    ? 'Everything has been sent — nothing is left on Dispatch.'
+                    : 'Nothing goes in a van today: every line on this list was for this outlet, so it stays here.'}
             </p>
             <button className="btn" onClick={() => reopenOrder({ businessDate: bakeFor })}>
               Still baking — reopen
             </button>
           </>
         ) : (
-          <>
-            <div className="total">
-              <span className="muted">Baked so far</span>
-              <b>
-                {progress.made} of {progress.needed}
-                {extrasTotal(po) > 0 && (
-                  <span className="muted small"> + {extrasTotal(po)} extra</span>
-                )}
-              </b>
-            </div>
-            <button
-              className="btn primary big block"
-              disabled={!progress.complete}
-              onClick={() => markOrderDone({ businessDate: bakeFor, user: profile })}
-            >
-              {progress.complete
-                ? 'All recorded — send to Dispatch'
-                : `${progress.lines - progress.linesRecorded} line(s) still to record`}
-            </button>
-          </>
+          <button
+            className="btn primary big block"
+            disabled={!progress.complete}
+            onClick={() => markOrderDone({ businessDate: bakeFor, user: profile })}
+          >
+            {progress.complete
+              ? 'All recorded — send to Dispatch'
+              : `${progress.lines - progress.linesRecorded} line(s) still to record`}
+          </button>
         )}
       </div>
     </div>

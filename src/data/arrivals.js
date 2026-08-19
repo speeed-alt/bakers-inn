@@ -48,9 +48,13 @@ export function arrivalDays(today = businessDateOf()) {
 export function useArrivals(branchId, today = businessDateOf()) {
   const [yesterday, , tomorrow] = arrivalDays(today)
 
-  const before = useSnapshot(() => transfersTo(branchId, yesterday), [branchId, yesterday])
-  const now = useSnapshot(() => transfersTo(branchId, today), [branchId, today])
-  const after = useSnapshot(() => transfersTo(branchId, tomorrow), [branchId, tomorrow])
+  // A falsy branch means "nothing to watch" and subscribes to nothing, so this
+  // can be called unconditionally — including high up in App, where the rules
+  // of hooks forbid deciding later whether to ask.
+  const at = (date) => (branchId ? transfersTo(branchId, date) : null)
+  const before = useSnapshot(() => at(yesterday), [branchId, yesterday])
+  const now = useSnapshot(() => at(today), [branchId, today])
+  const after = useSnapshot(() => at(tomorrow), [branchId, tomorrow])
 
   return useMemo(() => {
     const parts = [before, now, after]
