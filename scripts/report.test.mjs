@@ -92,20 +92,26 @@ test('a long name is kept whole — the table wraps it, nothing truncates it', (
   assert.equal(row.amount, '9,000')
 })
 
-test('a weighed line names its unit and keeps the quantity a bare number', () => {
-  // The unit rides on the name because every printed bill here has a column of
-  // bare numbers under Qty, and "4.5 kg" in it breaks that scan.
-  const row = itemRow({ name: 'Biscuits', price: 1400, qty: 4.5, soldByWeight: true, unit: 'kg' })
-  assert.equal(row.name, 'Biscuits (kg)')
-  assert.equal(row.rate, '1,400')
-  assert.equal(row.qty, '4.5')
-  assert.equal(row.amount, '6,300')
+test('a weighed line names the weight and keeps the quantity a bare number', () => {
+  // The weight rides on the name because every printed bill here has a column
+  // of bare numbers under Qty. The quantity is the portion count, so rate and
+  // quantity multiply out to the amount in plain sight: a customer can check
+  // 4 x 350 = 1,400 without knowing what a portion is.
+  const row = itemRow({ name: 'Biscuits', price: 350, qty: 4, soldByWeight: true, unit: '250 g' })
+  assert.equal(row.name, 'Biscuits (1 kg)')
+  assert.equal(row.rate, '350')
+  assert.equal(row.qty, '4')
+  assert.equal(row.amount, '1,400')
 })
 
-test('a weighed quantity does not trail meaningless zeros', () => {
-  const whole = itemRow({ name: 'Biscuits', price: 1400, qty: 12.5, soldByWeight: true, unit: 'kg' })
-  assert.equal(whole.qty, '12.5')
-  assert.equal(whole.amount, '17,500')
+test('a part-kilo says so on the slip', () => {
+  const half = itemRow({ name: 'Biscuits', price: 350, qty: 2, soldByWeight: true, unit: '250 g' })
+  assert.equal(half.name, 'Biscuits (500 g)')
+  assert.equal(half.amount, '700')
+
+  const over = itemRow({ name: 'Biscuits', price: 350, qty: 5, soldByWeight: true, unit: '250 g' })
+  assert.equal(over.name, 'Biscuits (1.25 kg)')
+  assert.equal(over.amount, '1,750')
 })
 
 test('two lines of the same thing get different keys', () => {

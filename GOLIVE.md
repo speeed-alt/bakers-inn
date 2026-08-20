@@ -101,9 +101,12 @@ Sit down together. Write it on paper first — it doubles as the owner's trainin
 - **`sellsNextDay` per item** — what is still sellable tomorrow versus what is
   stale tonight. This is currently a developer's guess and it decides what gets
   counted as waste every night.
-- **Which items are sold by weight**, and in what unit. Only Biscuits (code 35)
-  is set today. The whole system now counts these in the unit they are sold in,
-  so getting the list right matters.
+- **Which items are sold by weight.** Only Biscuits (code 35) is set today.
+  A weighed item is sold in **250 g portions**, and the price on it is the price
+  of one portion — so quantity 4 is a kilo. Give the price per quarter, not per
+  kilo: four portions then come to exactly the kilo price on the shelf, with no
+  rounding anywhere. Biscuits are seeded at 350, which is the 1,400 a kilo they
+  were priced at before.
 - **Which items are re-priced each morning** (eggs and bread were the example).
 - **The opening cash float** for each outlet.
 - **Each outlet's address and phone** — these print on every receipt.

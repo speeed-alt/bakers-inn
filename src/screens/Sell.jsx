@@ -26,6 +26,7 @@ import { lineNameFor, variantsOf } from '../lib/grouping.js'
 import { rateDoc } from '../data/rates.js'
 import {
   formatQuantity,
+  weightOf,
   isWeighed,
   maxFor,
   parseQuantity,
@@ -676,6 +677,9 @@ function Bill({ lines, onQty, oddOf = () => null }) {
             <span className="muted small">
               {' · '}
               {formatMoney(l.price, { symbol: false })} {l.soldByWeight ? `per ${l.unit}` : 'each'}
+              {/* Four portions is a kilo, and the cashier should not have to do
+                  that sum in front of a customer. */}
+              {l.soldByWeight && l.qty > 0 && ` · ${weightOf(l.qty, l)}`}
               {l.custom && ' · one-off'}
             </span>
             {/* Said on the line itself, where the number that caused it is.

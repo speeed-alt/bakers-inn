@@ -121,10 +121,11 @@ function checkPins() {
 // are whole rupees. `sellsNextDay` drives the default at the daily close: false
 // means unsold stock is counted as stale, true means it carries over.
 //
-// The last column is `weighed`. A weighed item is priced per kilo and the
-// cashier types what the customer asked for — 4.5, or 450g — instead of a
-// count. Loose biscuits are the case this exists for: nobody buys "one
-// biscuit", they buy however much they want.
+// The last column is `weighed`. A weighed item is sold in 250 g portions and
+// priced per portion, so the quantity on every screen stays a whole number:
+// four is a kilo, and 350 a portion is the 1,400 a kilo the shelf says. Loose
+// biscuits are the case this exists for — nobody buys "one biscuit", they buy
+// however much they want.
 //
 // It was missing from this table entirely until 2026-08-13, which is why no
 // product in the live project had it and the till offered no way to sell
@@ -170,7 +171,7 @@ const PRODUCTS = [
   // Rs 1400 per kilo, loose, scooped to order — not Rs 1400 for one biscuit.
   // Code 04 above is the boxed kind and stays counted. CONFIRM WITH THE OWNER:
   // if any other item is scooped or cut to order, add `true` to its row too.
-  ['biscuits', '35', 'Biscuits', 'Bakery', 1400, true, true],
+  ['biscuits', '35', 'Biscuits', 'Bakery', 350, true, true],
   ['customised-cake', '36', 'Customised Cake', 'Cakes', 1300, false],
   ['sandwich-bread', '37', 'Sandwich Bread', 'Bread', 250, false],
   ['special-rusk', '38', 'Special Rusk', 'Bakery', 300, true],

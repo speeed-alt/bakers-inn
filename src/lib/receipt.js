@@ -1,6 +1,6 @@
 import { BUSINESS_ADDRESS, BUSINESS_NAME, BUSINESS_PHONE } from '../config.js'
 import { formatMoney, lineTotal } from './money.js'
-import { formatQuantity } from './quantity.js'
+import { formatQuantity, weightOf } from './quantity.js'
 import { amountInWords } from './words.js'
 import { formatDate, formatTime } from './dates.js'
 import { inDrawer, labelOf } from './payments.js'
@@ -50,11 +50,16 @@ export function itemRow(item, index = 0) {
     // Position, not product id: two variants of one merged product share an id,
     // and two one-offs can share a name and a price.
     key: `${item.productId ?? 'x'}:${index}`,
-    name: weighed ? `${item.name ?? ''} (${item.unit || 'kg'})` : String(item.name ?? ''),
+    // The weight rides on the name — "Biscuits (1 kg)" — rather than in the
+    // quantity column, which stays a column of bare whole numbers on every
+    // printed bill people here already handle. The quantity is the portion
+    // count, so it and the rate multiply out to the amount in plain sight: a
+    // customer can check 4 × 350 = 1,400 without knowing what a portion is.
+    name: weighed
+      ? `${item.name ?? ''} (${weightOf(item.qty, item)})`
+      : String(item.name ?? ''),
     rate: formatMoney(item.price, { symbol: false }),
-    qty: weighed
-      ? String(Number(Number(item.qty ?? 0).toFixed(3)))
-      : formatQuantity(item.qty, item),
+    qty: formatQuantity(item.qty),
     amount: formatMoney(lineTotal(item), { symbol: false }),
   }
 }

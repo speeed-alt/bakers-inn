@@ -6,7 +6,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { oddLines, BIG_LINE } from '../src/lib/oddities.js'
-import { maxFor, MAX_COUNTED_UNITS, MAX_WEIGHED_UNITS } from '../src/lib/quantity.js'
+import { maxFor, MAX_LINE_UNITS } from '../src/lib/quantity.js'
 
 const line = (over = {}) => ({
   productId: 'bread',
@@ -46,14 +46,17 @@ test('a product genuinely down to none is over the shelf', () => {
 })
 
 test('the line that started this is caught on its size alone', () => {
-  // 9,999 kg of biscuits, with no shelf figure to compare against.
+  // The bill that prompted the guard: a stuck `+` on the biscuits line, with no
+  // shelf figure to compare against. It cannot reach this quantity any more —
+  // the ceiling stops it at 999 — but the size check is what catches whatever
+  // the next one is.
   const odd = oddLines(
-    [{ productId: 'biscuits', name: 'Biscuits', price: 1400, qty: 9999, soldByWeight: true }],
+    [{ productId: 'biscuits', name: 'Biscuits', price: 350, qty: 999, soldByWeight: true }],
     { onShelf: null },
   )
   assert.equal(odd.length, 1)
   assert.equal(odd[0].kind, 'large')
-  assert.equal(odd[0].amount, 13998600)
+  assert.equal(odd[0].amount, 349650)
 })
 
 test('a real wedding order is not flagged for being big', () => {
@@ -70,8 +73,11 @@ test('over the shelf wins over merely large, so one line says one thing', () => 
   assert.equal(odd[0].kind, 'over-shelf')
 })
 
-test('a weighed line is capped in kilos, a counted one in units', () => {
-  assert.equal(maxFor({ soldByWeight: true }), MAX_WEIGHED_UNITS)
-  assert.equal(maxFor({}), MAX_COUNTED_UNITS)
-  assert.ok(MAX_WEIGHED_UNITS < 9999, 'nine tonnes of biscuits is not a bakery order')
+test('every line is capped, weighed or counted', () => {
+  // One ceiling now that everything is counted in whole things. 999 portions is
+  // two hundred and fifty kilos of biscuits — generous for a wedding order, and
+  // nowhere near the 9,999 that one stuck `+` turned into Rs 13,998,600.
+  assert.equal(maxFor({ soldByWeight: true }), MAX_LINE_UNITS)
+  assert.equal(maxFor({}), MAX_LINE_UNITS)
+  assert.ok(MAX_LINE_UNITS < 9999)
 })
