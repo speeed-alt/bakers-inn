@@ -180,13 +180,48 @@ shop's own connection, at the counter:
 The PIN can be **typed** as well as clicked — digits, Backspace to correct,
 Escape to clear. Four digits sign in on their own; there is no Enter to press.
 
-**One tablet, one person, one tab.** Two tabs signed in as different people
+### Setting up the printer · once per till
+
+The app fixes the page itself — width, length, margins and type size — so
+nobody should ever touch the paper size or the scale in the print dialog. What
+Chrome adds on top of that does need setting once, and it is remembered per
+printer afterwards.
+
+**In Windows, before Chrome sees it:** install the printer, make it the
+**default**, and in its properties set the paper to the 80mm roll and turn on
+the auto-cutter. The driver decides where the paper is cut; the app only says
+how long the slip is.
+
+**In Chrome's print dialog, once:**
+
+- **Headers and footers — turn OFF.** This is the one that matters. Left on,
+  every receipt carries the page URL and the date across the top and bottom.
+- **Margins — Default.** The 3mm comes from the app. Only reach for None or
+  Custom if the real printer clips an edge.
+- **Scale — 100%**, never "Fit to printable area". The slip is already the
+  width of the roll; fitting it again shrinks the type.
+- **Paper size** should already read 80mm. If it does not, the driver's default
+  is overriding it — fix it in the Windows printer properties rather than here.
+
+**Then get rid of the dialog altogether.** A cashier should press Print and
+have paper come out, not answer a dialog with a customer waiting. Chrome will
+print straight to the default printer with no dialog at all if it is started
+with `--kiosk-printing`:
+
+1. Right-click the shortcut → Properties.
+2. Add ` --kiosk-printing` to the end of the Target box, after the closing
+   quote and a space.
+3. Open the till from that shortcut from then on.
+
+Test it before relying on it: with the flag on there is no preview and no
+cancel, so a wrong printer or paper setting prints silently. **This is part of
+the fifty test receipts, not something to switch on the first busy morning.**
+
+**One till, one person, one tab.** Two tabs signed in as different people
 share a single Firestore connection, and every read goes out under whichever tab
 owns it — which produces a flood of permission errors on rules that are
 perfectly correct. A real till is one tab; this is a hazard for whoever is
 testing, not for the shop.
-
-If a shop ever gets a second till, give it letter **B** at setup.
 
 ---
 
