@@ -142,7 +142,6 @@ test('the slip carries everything a customer would check', () => {
       status: 'normal',
       payment: 'cash',
       cashierName: 'Ayesha',
-      device: 'A',
       total: 3030,
       cashGiven: 5000,
       changeGiven: 1970,
@@ -156,7 +155,6 @@ test('the slip carries everything a customer would check', () => {
 
   assert.equal(r.outlet, 'Susan Road')
   assert.equal(r.cashier, 'Ayesha')
-  assert.equal(r.till, 'A')
   assert.equal(r.itemCount, 2)
   assert.equal(r.rows.length, 2)
   assert.equal(r.total, 'Rs 3,030')

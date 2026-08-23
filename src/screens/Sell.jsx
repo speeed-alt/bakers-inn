@@ -618,7 +618,7 @@ function CustomModal({ initialName, onAdd, onClose }) {
         />
         {remembered != null && (
           <p className="muted small" style={{ marginBottom: 0 }}>
-            Last time this tablet sold {initialName} it was{' '}
+            Last time this till sold {initialName} it was{' '}
             {formatMoney(remembered)}. Change it if that is wrong.
           </p>
         )}

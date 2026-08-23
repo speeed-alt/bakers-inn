@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { isPractising, startPractice } from '../lib/practice.js'
 
 /**
- * The owner's switch for turning a tablet into a training tablet.
+ * The owner's switch for turning a till into a training till.
  *
  * Deliberately at the bottom of his dashboard. It is used on the day somebody
  * new starts and then not again for months, and a control that wipes the
@@ -38,17 +38,17 @@ export default function PracticeCard() {
       </p>
 
       {!asking ? (
-        <button className="btn" onClick={() => setAsking(true)}>Start practice on this tablet</button>
+        <button className="btn" onClick={() => setAsking(true)}>Start practice on this till</button>
       ) : (
         <>
           <p className="small" style={{ fontWeight: 600 }}>
-            Turn this tablet into a practice tablet?
+            Turn this till into a practice till?
           </p>
           <ul className="muted small" style={{ marginTop: 0, paddingLeft: 18 }}>
-            <li>Only this tablet. The other shops keep trading normally.</li>
+            <li>Only this till. The other shops keep trading normally.</li>
             <li>Nothing rung up here will appear in your takings, reports or profit.</li>
             <li>
-              It ends by itself tomorrow morning, so a tablet left in practice cannot quietly
+              It ends by itself tomorrow morning, so a till left in practice cannot quietly
               swallow a real day's trading.
             </li>
             <li>Raw materials and the money screens stay switched off while practising.</li>

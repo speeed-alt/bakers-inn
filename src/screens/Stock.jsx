@@ -160,7 +160,7 @@ function ReceiveDelivery({ branchId, today }) {
       <div className="card">
         <h3>Delivery</h3>
         <p className="muted small" style={{ margin: 0 }}>
-          The delivery notes could not be read on this tablet, so this is not a reliable answer.
+          The delivery notes could not be read on this till, so this is not a reliable answer.
           Sign out and back in, and if it still will not load, ring the main outlet before assuming
           nothing is coming.
         </p>

@@ -326,7 +326,7 @@ function MakeTheList({ today, tomorrow, bakeFor, chooseDay, todaySent, tomorrowS
         /insufficient permissions/i.test(error?.message ?? '')
       setFailed(
         denied
-          ? 'this tablet is not allowed to make the list. Sign out and back in, and if it still refuses, tell whoever looks after the system.'
+          ? 'this till is not allowed to make the list. Sign out and back in, and if it still refuses, tell whoever looks after the system.'
           : `${error?.message ?? 'it did not work.'} Check the connection and try again.`,
       )
     } finally {

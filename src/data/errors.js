@@ -1,7 +1,6 @@
 import { addDoc, collection, limit, orderBy, query, Timestamp } from 'firebase/firestore'
 import { auth, db } from '../firebase.js'
 import { deviceBranchId } from '../auth.jsx'
-import { deviceLetter } from '../lib/ids.js'
 import { businessDateOf } from '../lib/dates.js'
 
 // When the till breaks at eight in the evening in Model Town, the cashier goes
@@ -57,10 +56,9 @@ export function reportClientError(error, where = 'app') {
       where,
       userId: user.uid,
       branchId: deviceBranchId() ?? null,
-      device: deviceLetter(),
       businessDate: businessDateOf(),
       // Device clock, like sales: this has to be written offline too, and a
-      // serverTimestamp would read as null until the tablet reconnects.
+      // serverTimestamp would read as null until the till reconnects.
       at: Timestamp.fromDate(new Date()),
       path: String(window.location?.pathname ?? '').slice(0, 120),
       agent: String(navigator.userAgent ?? '').slice(0, 200),

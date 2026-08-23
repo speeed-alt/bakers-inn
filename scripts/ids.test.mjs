@@ -14,14 +14,12 @@ globalThis.localStorage = {
 const {
   closingDocId,
   demandDocId,
-  deviceLetter,
   installId,
   nextSaleSeq,
   productionDocId,
   rateDocId,
   saleDocId,
   saleRef,
-  setDeviceLetter,
   transferDocId,
 } = await import('../src/lib/ids.js')
 
@@ -30,10 +28,16 @@ const {
 // This one is printed on a receipt a customer may bring back, so its shape is
 // fixed by what has already been handed out.
 
-test('the reference on the receipt keeps its published shape', () => {
-  assert.equal(saleRef('B2', '2026-08-08', 1, 'A'), 'S-B2-0808-A001')
-  assert.equal(saleRef('B2', '2026-08-08', 17, 'A'), 'S-B2-0808-A017')
-  assert.equal(saleRef('MAIN', '2026-12-31', 402, 'B'), 'S-MAIN-1231-B402')
+test('the reference on the receipt is the outlet, the day and the count', () => {
+  // The till letter came out when the shops settled on one till each: it was a
+  // label for a distinction that does not exist, and it cost a question at
+  // setup with only one right answer. Nothing had been handed to a customer at
+  // the time, so there is no published shape to keep.
+  assert.equal(saleRef('B2', '2026-08-08', 1), 'S-B2-0808-0001')
+  assert.equal(saleRef('B2', '2026-08-08', 17), 'S-B2-0808-0017')
+  assert.equal(saleRef('MAIN', '2026-12-31', 402), 'S-MAIN-1231-0402')
+  // Four digits, so a busy Eid does not roll over into five.
+  assert.equal(saleRef('MAIN', '2026-12-31', 1200), 'S-MAIN-1231-1200')
 })
 
 // --- the document id -------------------------------------------------------
@@ -41,38 +45,40 @@ test('the reference on the receipt keeps its published shape', () => {
 test('the same sale asked for twice lands on the same document', () => {
   // What makes a retry after a flaky connection safe: it must overwrite the
   // sale it already wrote rather than take the money a second time.
-  const once = saleDocId('B2', '2026-08-08', 4, 'A', 'K3F9Q')
-  const again = saleDocId('B2', '2026-08-08', 4, 'A', 'K3F9Q')
+  const once = saleDocId('B2', '2026-08-08', 4, 'K3F9Q')
+  const again = saleDocId('B2', '2026-08-08', 4, 'K3F9Q')
   assert.equal(once, again)
 })
 
-test('two tills both left on A do not mint the same id', () => {
-  // The bug this file exists for. Same outlet, same day, same letter, same
-  // counter — two tablets that have never heard of each other. Before the
-  // install token these were one id, the second write was refused as an
-  // illegal edit, and the sale just rung up was rolled back out of the cache.
-  const tillOne = saleDocId('B2', '2026-08-08', 1, 'A', 'K3F9Q')
-  const tillTwo = saleDocId('B2', '2026-08-08', 1, 'A', 'X72MB')
-  assert.notEqual(tillOne, tillTwo)
+test('two machines at one shop do not mint the same id', () => {
+  // The bug this file exists for. Same outlet, same day, same counter — two
+  // machines that have never heard of each other. Before the install token
+  // these were one id, the second write was refused as an illegal edit, and the
+  // sale just rung up was rolled back out of the cache. This matters more now
+  // that there is no till letter to tell them apart: the token is the only
+  // thing keeping them separate, which is what it was always doing.
+  const one = saleDocId('B2', '2026-08-08', 1, 'K3F9Q')
+  const two = saleDocId('B2', '2026-08-08', 1, 'X72MB')
+  assert.notEqual(one, two)
 })
 
-test('a tablet whose storage was cleared does not reuse its old ids', () => {
-  // "Reset this tablet" clears localStorage, so the counter restarts at 1 over
+test('a till whose storage was cleared does not reuse its old ids', () => {
+  // "Reset this till" clears localStorage, so the counter restarts at 1 over
   // ids that already exist. A fresh install token is what makes that harmless.
-  const before = saleDocId('B2', '2026-08-08', 1, 'A', 'K3F9Q')
-  const afterWipe = saleDocId('B2', '2026-08-08', 1, 'A', 'P04WD')
+  const before = saleDocId('B2', '2026-08-08', 1, 'K3F9Q')
+  const afterWipe = saleDocId('B2', '2026-08-08', 1, 'P04WD')
   assert.notEqual(before, afterWipe)
 })
 
 test('the scripts can still mint ids with no browser to mint a token from', () => {
-  assert.equal(saleDocId('B2', '2026-08-08', 1, 'A', ''), 'S-20260808-B2-A001')
+  assert.equal(saleDocId('B2', '2026-08-08', 1, ''), 'S-20260808-B2-0001')
 })
 
-test('the id carries the date, the outlet, the till and the count', () => {
+test('the id carries the date, the outlet and the count', () => {
   // Not cosmetic: this is what someone reads when comparing the app against
   // the paper sheet, so each part has to stay findable.
-  const id = saleDocId('B2', '2026-08-08', 17, 'C', 'K3F9Q')
-  assert.match(id, /^S-20260808-B2-C017-/)
+  const id = saleDocId('B2', '2026-08-08', 17, 'K3F9Q')
+  assert.match(id, /^S-20260808-B2-0017-/)
 })
 
 // --- the install token -----------------------------------------------------
@@ -109,22 +115,6 @@ test('tokens do not repeat across a shop-sized number of tablets', () => {
     seen.add(installId())
   }
   assert.equal(seen.size, 500)
-})
-
-// --- the till letter -------------------------------------------------------
-
-test('a till with no letter chosen answers A, and remembers it', () => {
-  store.clear()
-  assert.equal(deviceLetter(), 'A')
-  assert.equal(store.get('bakery.deviceLetter'), 'A')
-})
-
-test('a chosen letter is stored as one upper-case character', () => {
-  store.clear()
-  setDeviceLetter('b')
-  assert.equal(deviceLetter(), 'B')
-  setDeviceLetter('counter two')
-  assert.equal(deviceLetter(), 'C')
 })
 
 // --- the per-day counter ---------------------------------------------------

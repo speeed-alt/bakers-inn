@@ -12,7 +12,7 @@ import {
 import { db } from '../firebase.js'
 import { fireAndForget } from './errors.js'
 import { businessDateOf } from '../lib/dates.js'
-import { deviceLetter, nextSaleSeq, saleDocId, saleRef } from '../lib/ids.js'
+import { nextSaleSeq, saleDocId, saleRef } from '../lib/ids.js'
 import { basketTotal } from '../lib/money.js'
 import { inDrawer } from '../lib/payments.js'
 import { practiceStamp } from '../lib/practice.js'
@@ -41,20 +41,18 @@ export function salesForDay(branchId, businessDate) {
 
 export function recordSale({ branchId, cashier, lines, payment, cashGiven = null }) {
   const businessDate = businessDateOf()
-  const letter = deviceLetter()
   const seq = nextSaleSeq(businessDate)
-  const id = saleDocId(branchId, businessDate, seq, letter)
+  const id = saleDocId(branchId, businessDate, seq)
   const total = basketTotal(lines)
 
   const sale = {
     // Carries the mode it was made in. See src/lib/practice.js.
     ...practiceStamp(),
-    ref: saleRef(branchId, businessDate, seq, letter),
+    ref: saleRef(branchId, businessDate, seq),
     branchId,
     businessDate,
     cashierId: cashier.id,
     cashierName: cashier.name,
-    device: letter,
     payment,
     status: 'normal',
     items: lines.map((l) => ({
@@ -100,19 +98,17 @@ export function voidSale(sale, reason, user) {
 /** A refund is a new negative sale pointing at the original. */
 export function recordRefund({ original, cashier, payment }) {
   const businessDate = businessDateOf()
-  const letter = deviceLetter()
   const seq = nextSaleSeq(businessDate)
-  const id = saleDocId(original.branchId, businessDate, seq, letter)
+  const id = saleDocId(original.branchId, businessDate, seq)
 
   const refund = {
     // Carries the mode it was made in. See src/lib/practice.js.
     ...practiceStamp(),
-    ref: saleRef(original.branchId, businessDate, seq, letter),
+    ref: saleRef(original.branchId, businessDate, seq),
     branchId: original.branchId,
     businessDate,
     cashierId: cashier.id,
     cashierName: cashier.name,
-    device: letter,
     payment: payment ?? original.payment,
     status: 'refund',
     refundOf: original.ref,

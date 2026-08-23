@@ -8,7 +8,6 @@ import { describeDrift, driftMatters } from './lib/clock.js'
 import { useTheme } from './lib/theme.js'
 import { installUpdate, useUpdateWaiting } from './lib/updates.js'
 import { Loading } from './components/ui.jsx'
-import { deviceLetter } from './lib/ids.js'
 import { goLive, isPractising } from './lib/practice.js'
 import { pendingDeliveries, useArrivals } from './data/arrivals.js'
 import { NotInPractice } from './components/PracticeCard.jsx'
@@ -111,10 +110,10 @@ function Only({ path, role, children }) {
  */
 async function resetThisTablet() {
   const sure = window.confirm(
-    'Reset this tablet?\n\n' +
-      'Any sale rung up while this tablet was off the internet, and not yet sent, ' +
+    'Reset this till?\n\n' +
+      'Any sale rung up while this till was off the internet, and not yet sent, ' +
       'will be lost — there is no way to get it back.\n\n' +
-      'If the tablet has been offline today, try "Try again" first, or wait until ' +
+      'If it has been offline today, try "Try again" first, or wait until ' +
       'it is back on the wifi and the sales have gone through.',
   )
   if (!sure) return
@@ -154,7 +153,7 @@ function StartupTrouble() {
             "Try again", not toward "Reset". */}
         <div className="grid2">
           <button className="btn primary" onClick={() => window.location.reload()}>Try again</button>
-          <button className="btn" onClick={resetThisTablet}>Reset this tablet</button>
+          <button className="btn" onClick={resetThisTablet}>Reset this till</button>
         </div>
         <p className="muted small" style={{ marginBottom: 0 }}>
           Try again first. Resetting clears the saved sign-in and this tablet's outlet, so it has
@@ -279,7 +278,7 @@ export default function App() {
       <header className="topbar">
         <span className="brand">Bakery</span>
         <span className="outlet muted small">
-          {branch.data?.name ?? branchId} · till {deviceLetter()}
+          {branch.data?.name ?? branchId}
         </span>
         <span className="spacer" />
         <span className="who">
@@ -310,7 +309,7 @@ export default function App() {
           <button
             className="btn ghost small"
             onClick={() => signOut({ force: true })}
-            title="Only if the tablet is being taken away and the sales are being written down instead"
+            title="Only if the till is being taken away and the sales are being written down instead"
           >
             Sign out anyway
           </button>

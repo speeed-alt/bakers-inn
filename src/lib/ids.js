@@ -26,24 +26,8 @@ function forMode(id, practising) {
 // devices do not mix. Ids are either natural keys (one per outlet per day) or
 // come from a counter with exactly one writer.
 
-const DEVICE_KEY = 'bakery.deviceLetter'
 const INSTALL_KEY = 'bakery.installId'
 const SEQ_KEY = 'bakery.saleSeq'
-
-/**
- * One letter per till, set once at setup. A second till at the same outlet
- * becomes 'B' and the two read apart on a receipt with no coordination between
- * them. It is a label for people — `installId` is what actually keeps the
- * documents apart.
- */
-export function deviceLetter() {
-  let letter = localStorage.getItem(DEVICE_KEY)
-  if (!letter) {
-    letter = 'A'
-    localStorage.setItem(DEVICE_KEY, letter)
-  }
-  return letter
-}
 
 // No I, L, O or U: this never has to be read aloud, but it does end up in a
 // document id someone may one day be comparing against another on a screen.
@@ -67,7 +51,7 @@ function mintInstallId() {
  * Neither half of a sale id is safe on its own. The till letter is chosen by a
  * person, so two tablets at one outlet both left on the default 'A' mint the
  * same ids; and the sequence lives in localStorage, so clearing this browser's
- * storage — which "Reset this tablet" does — restarts it at 1 over ids that
+ * storage — which "Reset this till" does — restarts it at 1 over ids that
  * already exist.
  *
  * Either way the second write lands on an existing document. `setDoc` with no
@@ -89,10 +73,6 @@ export function installId() {
   return id
 }
 
-export function setDeviceLetter(letter) {
-  localStorage.setItem(DEVICE_KEY, letter.toUpperCase().slice(0, 1))
-}
-
 /** Per-device, per-day counter. Survives reloads; resets itself each day. */
 export function nextSaleSeq(businessDate) {
   let state
@@ -107,8 +87,17 @@ export function nextSaleSeq(businessDate) {
   return state.n
 }
 
-export function saleRef(branchId, businessDate, seq, letter = deviceLetter()) {
-  return `S-${branchId}-${shortDate(businessDate)}-${letter}${String(seq).padStart(3, '0')}`
+/**
+ * The reference a customer sees, and the one somebody reads back over a phone.
+ *
+ * There used to be a till letter in here — `S-B2-0819-A005` — for telling two
+ * tills at one shop apart on a receipt. Each shop has one, so the letter was a
+ * label for a distinction that does not exist, and it cost a question at setup
+ * that had only one right answer. `installId` on the document id is what
+ * actually keeps records apart, and it always was.
+ */
+export function saleRef(branchId, businessDate, seq) {
+  return `S-${branchId}-${shortDate(businessDate)}-${String(seq).padStart(4, '0')}`
 }
 
 /**
@@ -119,15 +108,9 @@ export function saleRef(branchId, businessDate, seq, letter = deviceLetter()) {
  * thing by accident — see `installId`. Pass '' for it where the ids are being
  * generated outside a browser, as the demo and backfill scripts do.
  */
-export function saleDocId(
-  branchId,
-  businessDate,
-  seq,
-  letter = deviceLetter(),
-  install = installId(),
-) {
+export function saleDocId(branchId, businessDate, seq, install = installId()) {
   const tail = install ? `-${install}` : ''
-  return `S-${compactDate(businessDate)}-${branchId}-${letter}${String(seq).padStart(3, '0')}${tail}`
+  return `S-${compactDate(businessDate)}-${branchId}-${String(seq).padStart(4, '0')}${tail}`
 }
 
 export function closingDocId(businessDate, branchId, practising = isPractising()) {

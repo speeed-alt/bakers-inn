@@ -130,7 +130,7 @@ export default function Dispatch({ branchId }) {
         <div className="card">
           <h2>The delivery notes could not be read</h2>
           <p className="muted">
-            This is not the same as there being nothing to send — the tablet was refused, so it
+            This is not the same as there being nothing to send — the till was refused, so it
             cannot say either way. Sign out and back in. If it still will not load, tell whoever
             looks after the system rather than assuming there is no delivery.
           </p>

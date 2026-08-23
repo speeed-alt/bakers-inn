@@ -43,7 +43,7 @@ can be done from a keyboard here.
 | 1 | Clear the trial data now sitting in the live database | dev | 15 min |
 | 2 | The data session — prices, people, floats, accounts | owner + dev | 2–3 hrs |
 | 3 | Everyone picks their own PIN, and the owner's is rotated | owner | 40 min |
-| 4 | Set up each tablet at its counter | dev | 30 min each |
+| 4 | Set up each till at its counter | dev | 30 min each |
 | 5 | **One full dry day** | both | a day |
 | 6 | Train, hand out the counter cards | owner | 2 hrs |
 | 7 | Watch the first week | dev | daily |
@@ -162,18 +162,23 @@ Nobody can look an existing one up.
 
 ---
 
-## 4 · [dev] Set up each tablet · 30 min each
+## 4 · [dev] Set up each till · 30 min each
 
-On the wifi **at the counter**, not by the door:
+Each shop runs **one till**, on Windows in a browser — not a tablet. On the
+shop's own connection, at the counter:
 
-1. Open the URL in Chrome → **Add to Home Screen**.
-2. Open it from the home screen, not from Chrome.
-3. Run Setup and pick the right outlet. Leave the till letter on **A** — each
-   shop has one till, so there is nothing to tell apart.
-4. Sign in once, so the catalogue caches.
-5. **Turn the wifi off and ring a test sale.** A tablet that has never been
-   online has an empty product list and cannot sell.
-6. Void that test sale, or clear it in step 1's sweep.
+1. Open the URL in Chrome and pin it to the taskbar, or install it (Chrome menu
+   → Cast, save and share → Install). Installed, it opens in its own window
+   with no address bar to type in by accident.
+2. Run Setup and pick the outlet. That is the only question — there is no till
+   letter to choose any more.
+3. Sign in once, so the catalogue caches.
+4. **Pull the network cable or turn the wifi off, and ring a test sale.** A till
+   that has never been online has an empty product list and cannot sell.
+5. Void that test sale, or clear it in step 1's sweep.
+
+The PIN can be **typed** as well as clicked — digits, Backspace to correct,
+Escape to clear. Four digits sign in on their own; there is no Enter to press.
 
 **One tablet, one person, one tab.** Two tabs signed in as different people
 share a single Firestore connection, and every read goes out under whichever tab

@@ -91,7 +91,6 @@ export function receiptModel(sale, branch) {
     outlet: outlet.name ?? sale.branchId,
 
     ref: sale.ref ?? '',
-    till: String(sale.till ?? sale.device ?? '').trim(),
     date: formatDate(sale.businessDate),
     time: when ? formatTime(when) : '',
     cashier: sale.cashierName ?? '',

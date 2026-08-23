@@ -41,10 +41,9 @@ export default function Receipt({ sale, branch, branchName }) {
           <tr>
             <td>{r.date}</td>
             <td>{r.time}</td>
-            <td>{r.till ? `Till ${r.till}` : ''}</td>
           </tr>
           <tr>
-            <td colSpan={2}>{r.ref}</td>
+            <td>{r.ref}</td>
             <td>{r.cashier}</td>
           </tr>
         </tbody>

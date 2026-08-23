@@ -429,7 +429,7 @@ function Faults({ rows, today, nameOf }) {
         ))}
       </div>
       <p className="muted small" style={{ marginBottom: 0 }}>
-        The tablet recovered on its own — no sales are lost. If the same outlet keeps appearing,
+        The till recovered on its own — no sales are lost. If the same outlet keeps appearing,
         that screen needs looking at.
       </p>
     </div>
@@ -467,7 +467,7 @@ function TodaysRates({ today, products }) {
       <div className="card">
         <h3>Today's rates</h3>
         <p className="muted small" style={{ margin: 0 }}>
-          Not while this tablet is practising. Rates are the real ones every till sells at, so they
+          Not while this till is practising. Rates are the real ones every till sells at, so they
           are never changed from a training session. End practice to set them.
         </p>
       </div>
