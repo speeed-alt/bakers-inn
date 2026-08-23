@@ -212,6 +212,46 @@ the app only says how big the page is.
   If it reads anything else the slip will print adrift in the middle of the
   page; fix it here and in the Windows printer properties both.
 
+**The printer's own Device Settings** (POS-80 Properties → Device Settings) are
+what the working till is set to. A fresh install should already look like this;
+if anything has been fiddled with, this is the state to come back to:
+
+| Setting | Value |
+|---|---|
+| Print Speed | Fast mode |
+| Print Mode | **Print as image** |
+| Cash Drawer | Cash Drawer #1 Before Printing — set to *do not open* if no drawer is wired |
+| Print method | **Line by Line** |
+| Blank space at page's end | **Do not print** |
+| Feed distance after print | feed 27mm |
+| Paper Cutting | After one page |
+| Beeper | Beep before every page — a matter of taste |
+| NV Logo | Do not print NV Logo |
+| Character Set | PC437(Std.Europe)(1) |
+
+Three of those will produce a blank or truncated slip on their own, so change one
+at a time and print after each. **Print Mode** off "Print as image" stops the
+driver rendering graphics, and a browser receipt is entirely graphics — every
+rule and every heading. **Print method** off "Line by Line" makes the printer
+buffer the whole 210mm page and overrun its memory. And **Feed distance** set too
+low does print, but the text never clears the cutter, so what is torn off is
+blank and the words turn up on the next customer's slip.
+
+### When a slip comes out blank
+
+Almost always the paper roll, and it cost an evening here to work out. **Hold the
+blank slip up to a light.** If a faint impression of the receipt is stamped into
+it, the printer is working perfectly and the roll is in **upside down** — the
+head is pressing and heating against the uncoated back of the paper. Take the
+roll out, turn it over, put it back so the paper comes off the **underside** and
+out towards you.
+
+Two things that look like proof and are not. A coin dragged across the paper
+leaves a dark line — that proves the paper is thermal, not which way round it is
+facing. And a blank **Windows test page**, or a blank firmware self-test, proves
+nothing about the driver either: an upside-down roll blanks those exactly the
+same way. Check the light first, before touching a single setting.
+
 **Then get rid of the dialog altogether.** A cashier should press Print and
 have paper come out, not answer a dialog with a customer waiting. Chrome will
 print straight to the default printer with no dialog at all if it is started
@@ -225,6 +265,13 @@ with `--kiosk-printing`:
 Test it before relying on it: with the flag on there is no preview and no
 cancel, so a wrong printer or paper setting prints silently. **This is part of
 the fifty test receipts, not something to switch on the first busy morning.**
+
+**Check the scale before switching the dialog off.** Chrome remembers Scale per
+printer, for good. A till left on 200% prints every sale across three sheets in
+letters an inch high, and with `--kiosk-printing` on there is no preview to
+notice it in. Set **Scale → Default** rather than typing 100 into the box — the
+number only applies when the field loses focus, so typing it and clicking Print
+leaves the old value in place.
 
 **One till, one person, one tab.** Two tabs signed in as different people
 share a single Firestore connection, and every read goes out under whichever tab
