@@ -16,8 +16,11 @@ export const BUSINESS_PHONE = ''
 // What receipts are printed on. This sets the page size, margins and type size
 // together so the slip comes out right at 100% — nobody should have to touch
 // the scale or margins in the print dialog.
-// Each option fills the width of its paper, so the type is larger on bigger
-// sheets — about 11pt on a roll, 19pt on A5, 27pt on A4.
+//
+// The type is sized for the paper: 9pt on a roll, 11pt on A5, 12pt on A4. (This
+// comment used to say 11, 19 and 27, which was left over from an earlier design
+// and matched nothing in the code — the numbers live in `PAPERS` in
+// src/lib/paper.js and that is the place to change them.)
 //   '80mm' — thermal till roll, the usual point-of-sale printer
 //   'a5'   — half sheet on an ordinary printer
 //   'a4'   — full sheet

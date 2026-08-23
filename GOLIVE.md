@@ -279,14 +279,31 @@ expensive to unpick on day thirty.
 
 ## Open questions for the owner
 
-**Which printer?** Printing is `window.print()` and the app is set to A5. Three
-options: a network printer Android can already see (works today, change
-nothing), an 80mm roll printer that speaks Android print, or a Bluetooth/USB
-thermal printer (needs new code). If the answer is 80mm, note that
-`@page { size: 80mm auto }` in `src/lib/paper.js` is invalid CSS and is silently
-dropped — it needs two lengths, e.g. `80mm 297mm` — and that the type sizes in
-`config.js`'s comment do not match the numbers the code applies. **Whichever is
-chosen, run fifty real receipts through it.**
+**Which printer?** Printing is `window.print()` and the app is still set to
+**A5**. On Windows that already works with any printer the PC can see, so
+nothing is blocked.
+
+The **80mm roll path is now fixed and ready** if you want it. It was broken:
+`@page { size: 80mm auto }` is not valid CSS — a length cannot be paired with
+the keyword — so browsers discarded the whole declaration and printed on
+whatever the dialog happened to be set to. It now emits two lengths, and the
+length is **measured from the slip about to be printed**, so a roll is cut just
+after the last line instead of feeding a fixed page. A five-line bill comes out
+as `80mm 98mm`; with nothing to measure it falls back to `80mm 200mm`.
+
+Checked by hand at 80mm with the longest names in the catalogue, a weighed line
+and a one-off: the slip is exactly 74mm wide inside the 3mm margins, with no
+column overflowing.
+
+To switch, change one line in `src/config.js`:
+
+```js
+export const RECEIPT_PAPER = '80mm'
+```
+
+**Whichever is chosen, run fifty real receipts through it.** The one thing that
+cannot be settled without the hardware is whether the driver feeds blank paper
+after a short slip; if it does, lower `ROLL_LENGTH` in `src/lib/paper.js`.
 
 **What does a line on the daily pad cover — the day's clock, or the day's bake?**
 The dashboard's daily sheet reads today's transfers and today's production. A
