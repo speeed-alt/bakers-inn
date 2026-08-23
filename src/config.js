@@ -24,7 +24,14 @@ export const BUSINESS_PHONE = ''
 //   '80mm' — thermal till roll, the usual point-of-sale printer
 //   'a5'   — half sheet on an ordinary printer
 //   'a4'   — full sheet
-export const RECEIPT_PAPER = 'a5'
+//
+// On a roll this is only half of one setting. The printer's Windows driver does
+// not offer a roll of unlimited length; it offers a fixed list of paper — the
+// POS-80 here has 80x210, 80x297 and 80x3276 — and Chrome floats the slip inside
+// a longer one rather than printing short, and shrinks it whole to fit a
+// narrower one. ROLL_LENGTH in src/lib/paper.js names the paper this expects:
+// **80 x 210mm**. Change both together or neither.
+export const RECEIPT_PAPER = '80mm'
 
 // Pakistani Rupee. Paisa have long been out of circulation, so the rupee itself
 // is the smallest unit there is — every amount in the system is a whole number

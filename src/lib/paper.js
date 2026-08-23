@@ -17,25 +17,47 @@ import { RECEIPT_PAPER } from '../config.js'
 // is what the printed bills here use, and a bigger sheet can carry more without
 // looking like large print.
 /**
- * How long a page the till roll is given.
+ * The page the till roll is given.
  *
  * `@page { size: ... }` takes one or two lengths, `auto`, or a named page size
  * — and nothing else. `80mm auto` mixes a length with the keyword, which is not
- * in the grammar, so the browser threw the whole declaration away and printed
- * on whatever the print dialog happened to be set to. It looked right in the
- * file, and nowhere else. Both lengths have to be given.
+ * in the grammar, so the browser threw the whole declaration away and printed on
+ * whatever the print dialog happened to be set to. Both lengths have to be given.
  *
- * 200mm is about forty-five lines at 9pt, which is more than any bakery slip
- * needs. It is a ceiling, not a length of paper: what actually comes out is
- * decided by the printer's own driver, and a roll set up as continuous media
- * cuts after the last line. **If the real printer feeds blank paper after every
- * slip, this is the number to bring down** — that is the one thing to watch on
- * the fifty test receipts, and it cannot be settled without the hardware.
+ * **The height has to be one the printer's driver actually offers.** A till
+ * printer does not present a roll of unlimited length to Windows; it presents a
+ * short list of fixed media — the POS-80 here offers 80x210, 80x297 and 80x3276
+ * — and Chrome lays the CSS page out *inside* whichever of those is selected.
+ * The two have to agree, because Chrome does not simply print what it is asked
+ * for when they do not:
+ *
+ *   - a page **shorter** than the media is floated inside the sheet rather than
+ *     printed short, which is where the band of blank above and below the slip
+ *     came from;
+ *   - a page of a **different width** is shrunk whole to fit, which is how an A5
+ *     receipt arrived on the roll as a stamp in the middle of the page.
+ *
+ * So 210mm is neither a ceiling nor an estimate. It is the shortest paper the
+ * driver offers, named exactly. **If the shop's printer is set to one of the
+ * other two, change this to match it** — this and the Windows paper setting are
+ * two halves of one setting, and RECEIPT_PAPER in src/config.js says so too.
+ *
+ * This used to measure the slip and ask for a page cut to it, on the reasoning
+ * that a roll has no pages. That is right about the paper and wrong about the
+ * browser: Chrome has no continuous page either, so a measured 98mm page did not
+ * become a 98mm slip — it became a 98mm page adrift in the driver's 210mm one.
+ * How much paper actually comes out is the driver's business; it feeds what it
+ * rasters and cuts where its own paper-cut setting says. That is a thing to
+ * settle on the test receipts, not in here.
  */
-const ROLL_LENGTH = '200mm'
+const ROLL_LENGTH = '210mm'
 
 const PAPERS = {
-  '80mm': { size: `80mm ${ROLL_LENGTH}`, margin: '3mm', pt: 9 },
+  // 4mm margins leave 72mm of content, which is the printable width of a
+  // 576-dot head — the usual 80mm printer. At 3mm the slip was 74mm, and the two
+  // millimetres hanging over the edge take the right-hand rule of the Amount
+  // column with them.
+  '80mm': { size: `80mm ${ROLL_LENGTH}`, margin: '4mm', pt: 9 },
   a5: { size: 'A5 portrait', margin: '8mm', pt: 11 },
   a4: { size: 'A4 portrait', margin: '12mm', pt: 12 },
 }
@@ -82,68 +104,17 @@ function rule(text) {
   styleEl.textContent = text
 }
 
-const PX_PER_MM = 96 / 25.4
-
-/**
- * How long this particular slip is, in millimetres, at the size it will print.
- *
- * A roll has no pages — it has a length of paper and a cutter — so a fixed page
- * height either truncates a long bill or feeds blank paper after a short one.
- * Neither is acceptable when the shop is buying the roll.
- *
- * So the slip is measured just before printing. It is cloned into the live
- * document rather than measured where it sits, because on screen it is 13px in
- * a padded card and on paper it is 9pt across 74mm; and cloned into the *live*
- * document rather than a bare one, because the last time a receipt was checked
- * against a stripped-down copy of its own CSS the copy left out the app's
- * global table rules and the preview lied about what came out.
- *
- * Returns null when there is nothing to measure — at start-up, or when a sheet
- * is being printed — and the caller falls back to the fixed length.
- */
-function measuredLength(spec, marginMm) {
-  if (typeof document === 'undefined') return null
-  const source = document.querySelector('.receipt')
-  if (!source) return null
-
-  const printableMm = 80 - marginMm * 2
-  const host = document.createElement('div')
-  host.setAttribute('aria-hidden', 'true')
-  host.style.cssText =
-    `position:fixed;left:-99999px;top:0;width:${printableMm * PX_PER_MM}px;` +
-    'visibility:hidden;pointer-events:none;'
-
-  const clone = source.cloneNode(true)
-  clone.style.cssText = `font-size:${spec.pt}pt;width:auto;padding:0;background:#fff;`
-  host.appendChild(clone)
-  document.body.appendChild(host)
-
-  const heightMm = clone.getBoundingClientRect().height / PX_PER_MM
-  host.remove()
-
-  if (!Number.isFinite(heightMm) || heightMm <= 0) return null
-  // Slack for the difference between this measurement and the print engine's
-  // own line breaking, which is close but not identical. Cutting a slip short
-  // is far worse than a centimetre of paper.
-  const total = Math.ceil(heightMm) + marginMm * 2 + 8
-  return Math.min(Math.max(total, 60), 400)
-}
-
 /** Set the page up for a receipt on whatever paper the shop actually uses. */
 export function applyPaperSettings(paper = RECEIPT_PAPER) {
   const spec = PAPERS[paper] ?? PAPERS['80mm']
-  // Only the roll is cut to the slip. A5 and A4 are sheets: they are the size
-  // they are whether the bill fills them or not.
-  const rollMm = paper === '80mm' ? measuredLength(spec, 3) : null
-  const size = rollMm ? `80mm ${rollMm}mm` : spec.size
-  rule(`@page { size: ${size}; margin: ${spec.margin}; }
+  rule(`@page { size: ${spec.size}; margin: ${spec.margin}; }
 @media print {
   .receipt { font-size: ${spec.pt}pt; width: auto; padding: 0; background: #fff; }
   /* Rules have to be genuinely black on a thermal head. Anything grey is
      dithered into a dotted line that reads as a printer running out of heat. */
   .receipt th, .receipt td { border-color: #000 !important; }
 }`)
-  return { paper, pt: spec.pt, size }
+  return { paper, pt: spec.pt, size: spec.size }
 }
 
 export function printReceipt() {

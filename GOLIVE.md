@@ -183,25 +183,34 @@ Escape to clear. Four digits sign in on their own; there is no Enter to press.
 ### Setting up the printer · once per till
 
 The app fixes the page itself — width, length, margins and type size — so
-nobody should ever touch the paper size or the scale in the print dialog. What
-Chrome adds on top of that does need setting once, and it is remembered per
+nobody should ever touch the scale in the print dialog. What Chrome and the
+driver add on top of that does need setting once, and it is remembered per
 printer afterwards.
 
+**The paper has to be set in two places and they have to agree.** A till printer
+does not offer Windows a roll of unlimited length; it offers a fixed list, and
+the POS-80 offers three: **80 x 210mm**, 80 x 297mm and 80 x 3276mm. The app is
+set to the first of those. If Windows is set to one of the others, Chrome does
+not print the slip short — it prints an 80 x 210 page adrift in the middle of
+the longer one, with a band of blank above and below it.
+
 **In Windows, before Chrome sees it:** install the printer, make it the
-**default**, and in its properties set the paper to the 80mm roll and turn on
-the auto-cutter. The driver decides where the paper is cut; the app only says
-how long the slip is.
+**default**, and in its properties set the paper to **Printer Paper(80 x
+210mm)** and turn on the auto-cutter. The driver decides where the paper is cut;
+the app only says how big the page is.
 
 **In Chrome's print dialog, once:**
 
 - **Headers and footers — turn OFF.** This is the one that matters. Left on,
   every receipt carries the page URL and the date across the top and bottom.
-- **Margins — Default.** The 3mm comes from the app. Only reach for None or
-  Custom if the real printer clips an edge.
+- **Margins — Default.** The 4mm comes from the app, and leaves 72mm of slip,
+  which is the printable width of an 80mm head. Only reach for None or Custom
+  if the real printer still clips an edge.
 - **Scale — 100%**, never "Fit to printable area". The slip is already the
   width of the roll; fitting it again shrinks the type.
-- **Paper size** should already read 80mm. If it does not, the driver's default
-  is overriding it — fix it in the Windows printer properties rather than here.
+- **Paper size — Printer Paper(80 x 210mm)**, the same one Windows is set to.
+  If it reads anything else the slip will print adrift in the middle of the
+  page; fix it here and in the Windows printer properties both.
 
 **Then get rid of the dialog altogether.** A cashier should press Print and
 have paper come out, not answer a dialog with a customer waiting. Chrome will
@@ -314,31 +323,35 @@ expensive to unpick on day thirty.
 
 ## Open questions for the owner
 
-**Which printer?** Printing is `window.print()` and the app is still set to
-**A5**. On Windows that already works with any printer the PC can see, so
-nothing is blocked.
+**Which printer?** Answered: the shop has an 80mm thermal roll printer, and the
+app is set to it — `RECEIPT_PAPER = '80mm'` in `src/config.js`, page `80mm
+210mm`, 4mm margins, 9pt. Step 4 above has what Windows and Chrome need told.
 
-The **80mm roll path is now fixed and ready** if you want it. It was broken:
-`@page { size: 80mm auto }` is not valid CSS — a length cannot be paired with
-the keyword — so browsers discarded the whole declaration and printed on
-whatever the dialog happened to be set to. It now emits two lengths, and the
-length is **measured from the slip about to be printed**, so a roll is cut just
-after the last line instead of feeding a fixed page. A five-line bill comes out
-as `80mm 98mm`; with nothing to measure it falls back to `80mm 200mm`.
+That took three goes, and the two wrong ones are worth knowing about because
+both printed something rather than failing:
 
-Checked by hand at 80mm with the longest names in the catalogue, a weighed line
-and a one-off: the slip is exactly 74mm wide inside the 3mm margins, with no
-column overflowing.
+1. `@page { size: 80mm auto }` is not valid CSS — a length cannot be paired with
+   the keyword — so browsers discarded the whole declaration and printed on
+   whatever the dialog happened to be set to.
+2. Then the page length was **measured from the slip about to be printed**, on
+   the reasoning that a roll has no pages. True of the paper, false of the
+   browser: Chrome has no continuous page either, so a measured 98mm page did
+   not come out as a 98mm slip. It came out as a 98mm page floating in the
+   middle of the driver's 210mm one.
 
-To switch, change one line in `src/config.js`:
+And underneath both of those, the setting was still on **A5** from testing on an
+office printer, which is what put a legible but postage-stamp-sized receipt in
+the middle of the roll. A test now asserts that the roll's page is one of the
+three the driver actually offers, and that receipts are set to the roll at all.
 
-```js
-export const RECEIPT_PAPER = '80mm'
-```
-
-**Whichever is chosen, run fifty real receipts through it.** The one thing that
-cannot be settled without the hardware is whether the driver feeds blank paper
-after a short slip; if it does, lower `ROLL_LENGTH` in `src/lib/paper.js`.
+**Run fifty real receipts through it.** The one thing that cannot be settled
+without the hardware is how much paper the driver feeds after a short slip. The
+app now asks for a full 210mm page, so if the driver feeds the lot, every
+receipt costs 21cm of roll. Two things to try, in order: the printer's own
+**paper-cut / feed** setting, which on most of these drivers truncates the
+trailing blank; and failing that, set Windows **and** `ROLL_LENGTH` in
+`src/lib/paper.js` to 80 x 3276mm together and see whether the driver treats it
+as continuous. Do not change one without the other.
 
 **What does a line on the daily pad cover — the day's clock, or the day's bake?**
 The dashboard's daily sheet reads today's transfers and today's production. A
