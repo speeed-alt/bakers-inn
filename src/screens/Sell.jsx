@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { collection, query, where } from 'firebase/firestore'
 import { db } from '../firebase.js'
@@ -6,7 +6,7 @@ import { useSnapshot } from '../lib/hooks.js'
 import { useAuth } from '../auth.jsx'
 import { businessDateOf, formatDate, formatTime, previousDate } from '../lib/dates.js'
 import { basketTotal, formatMoney, lineTotal, parseMoney, toMinor } from '../lib/money.js'
-import { exactCodeMatch, findProducts } from '../lib/search.js'
+import { findChoices } from '../lib/search.js'
 import {
   changePaymentType,
   recordRefund,
@@ -22,7 +22,7 @@ import { stockAt } from '../lib/stock.js'
 import { oddLines } from '../lib/oddities.js'
 import { isClosed, tillBlocked } from '../lib/closing.js'
 import { priceOf, ratesNotSet, ratesOf } from '../lib/rates.js'
-import { lineNameFor, variantsOf } from '../lib/grouping.js'
+import { lineNameFor } from '../lib/grouping.js'
 import { rateDoc } from '../data/rates.js'
 import {
   formatQuantity,
@@ -90,7 +90,6 @@ export default function Sell({ branchId, branch }) {
   // The name typed into the entry box when the cashier asked to sell it as a
   // one-off. Null when the dialogue is closed.
   const [customFor, setCustomFor] = useState(null)
-  const [picking, setPicking] = useState(null)
   const entry = useRef(null)
 
   // This morning's rates for the items that are priced fresh. A missing sheet
@@ -102,7 +101,32 @@ export default function Sell({ branchId, branch }) {
   const unpriced = ratesNotSet(catalogue, prices)
   // An empty box lists the whole catalogue, so the same panel is both the
   // search result and the price list a new cashier reads codes off.
-  const results = useMemo(() => findProducts(catalogue, text), [catalogue, text])
+  //
+  // Choices, not products: the four cakes sharing code 3 are four rows here,
+  // each one click from the bill. They used to be one row that opened a dialogue
+  // over the whole screen to ask which — slower than reading a list that is
+  // already open, and it hid the bill while a customer waited.
+  const results = useMemo(() => findChoices(catalogue, text), [catalogue, text])
+
+  // Which row Enter takes. Reset by every keystroke in the box, and clamped to
+  // what is actually on screen.
+  //
+  // The first attempt remembered the position against the text it was chosen
+  // for, so that it reset itself when the query changed. It did — and it also
+  // came *back* when the query did: type 3, arrow down to Oreo, backspace,
+  // type 3 again, and the marker was still on Oreo while the eye said Kit Kat.
+  // Enter then rang up the wrong cake. Nothing about a bill should be
+  // remembered from a query the cashier has already abandoned.
+  const [marker, setMarker] = useState(0)
+  const highlight = Math.min(marker, Math.max(0, results.length - 1))
+
+  // Eighteen names sit under the four biscuit and pastry codes, and the panel
+  // is not tall enough for all of them. Walking off the bottom of what is drawn
+  // and having the marker vanish is how a cashier loses their place.
+  const highlighted = useRef(null)
+  useEffect(() => {
+    highlighted.current?.scrollIntoView({ block: 'nearest' })
+  }, [highlight, text])
 
   // Derived, not stored. This used to be a piece of state set only inside the
   // Enter handler, which meant the till knew nothing matched the moment the
@@ -150,15 +174,18 @@ export default function Sell({ branchId, branch }) {
       salesYesterday: yesterdaySales.data?.length ?? 0,
     })
 
-  function addProduct(p, variant = null) {
-    // Several names can share one id — five cakes at the same price are one
-    // stock line and one code. Which one the customer asked for still has to be
-    // chosen, so the slip says Lotus rather than "cakes at 2,000".
-    const choices = variantsOf(p)
-    if (choices.length > 0 && !variant) {
-      setPicking(p)
-      return
-    }
+  /**
+   * Put one row of the results panel on the bill.
+   *
+   * It takes a choice rather than a product on purpose. Several names share one
+   * id — four cakes at the same price are one stock line and one code — and the
+   * slip has to say Ferrero rather than "cakes at 1,800". Taking the pair means
+   * there is no path through here that can forget to say which.
+   */
+  function addChoice(choice) {
+    if (!choice?.product) return
+    const p = choice.product
+    const variant = choice.variant ?? null
 
     // The price is resolved once, here, and copied onto the line. Whatever
     // happens to a rate later, this sale keeps what the customer was charged.
@@ -193,6 +220,7 @@ export default function Sell({ branchId, branch }) {
       return next
     })
     setText('')
+    setMarker(0)
     entry.current?.focus()
   }
 
@@ -210,15 +238,28 @@ export default function Sell({ branchId, branch }) {
   function onEntryKey(e) {
     if (e.key === 'Escape') {
       setText('')
+      setMarker(0)
+      return
+    }
+    // The hands never leave the keyboard. Type the code, and the names under it
+    // are already listed beside the bill — down and up walk them, Enter takes
+    // the one under the marker. Three keystrokes for a Ferrero, and the bill
+    // stays visible throughout.
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (results.length === 0) return
+      e.preventDefault()
+      const step = e.key === 'ArrowDown' ? 1 : -1
+      setMarker((highlight + step + results.length) % results.length)
       return
     }
     if (e.key !== 'Enter') return
     e.preventDefault()
     if (!typed) return
-    // A typed code wins outright, even if some product name contains the digits.
-    const pick = exactCodeMatch(catalogue, text) ?? results[0]
+    // The exact code already sorts to the top, so the marker starts on it and
+    // Enter alone still rings up a code the cashier knows by heart.
+    const pick = results[highlight]
     if (pick) {
-      addProduct(pick)
+      addChoice(pick)
       return
     }
     // Enter on something that matches nothing means "I meant that". Nothing is
@@ -241,6 +282,7 @@ export default function Sell({ branchId, branch }) {
     setLines((cur) => [...cur, customLine({ name, price, qty })])
     setCustomFor(null)
     setText('')
+    setMarker(0)
     entry.current?.focus()
   }
 
@@ -341,9 +383,12 @@ export default function Sell({ branchId, branch }) {
           value={text}
           onChange={(e) => {
             setText(e.target.value)
+            // Every keystroke puts the marker back on the top row. What is on
+            // screen and what Enter would take must never disagree.
+            setMarker(0)
           }}
           onKeyDown={onEntryKey}
-          placeholder="Type item code or name, then press Enter"
+          placeholder="Type a code or name · ↓ ↑ to choose · Enter to add"
           aria-label="Add an item by code or name"
         />
         {/* No "not found" message here any more. The results panel already
@@ -383,17 +428,28 @@ export default function Sell({ branchId, branch }) {
               </div>
             )}
             {results.length === 0 && !typed && <Empty>No products yet</Empty>}
-            {results.map((p, i) => (
+            {results.map((choice, i) => (
               <button
-                key={p.id}
-                className={`result ${text.trim() && i === 0 ? 'top' : ''}`}
-                onClick={() => addProduct(p)}
+                key={choice.key}
+                ref={i === highlight ? highlighted : null}
+                className={`result ${typed && i === highlight ? 'top' : ''}`}
+                onClick={() => addChoice(choice)}
               >
-                <span className="result-code">{p.code}</span>
-                <span className="result-name">{p.name}</span>
+                <span className="result-code">{choice.product.code}</span>
+                <span className="result-name">
+                  {choice.name}
+                  {/* Which tier it belongs to, when the name alone will not do.
+                      Three different things on this price list are called Candy
+                      — a cake at 1,800, a pastry at 200, and a biscuit sold by
+                      weight — and the cashier has to be able to tell at a
+                      glance which row is which. */}
+                  {choice.variant && <span className="result-group">{choice.product.name}</span>}
+                </span>
                 <span className="result-price">
-                  {formatMoney(priceOf(p, prices), { symbol: false })}
-                  {isWeighed(p) && <span className="muted">/{unitOf(p)}</span>}
+                  {formatMoney(priceOf(choice.product, prices), { symbol: false })}
+                  {isWeighed(choice.product) && (
+                    <span className="muted">/{unitOf(choice.product)}</span>
+                  )}
                 </span>
               </button>
             ))}
@@ -448,35 +504,10 @@ export default function Sell({ branchId, branch }) {
         />
       )}
 
-      {picking && (
-        <Modal title={picking.name} onClose={() => setPicking(null)}>
-          <p className="muted small">
-            These share a code and a price. Which one is it? The slip will say the name you pick.
-          </p>
-          <div className="grid2">
-            {variantsOf(picking).map((variant) => (
-              <button
-                key={variant}
-                className="btn big"
-                onClick={() => {
-                  const product = picking
-                  setPicking(null)
-                  addProduct(product, variant)
-                }}
-              >
-                {variant}
-              </button>
-            ))}
-          </div>
-          <button
-            className="btn ghost block"
-            style={{ marginTop: 12 }}
-            onClick={() => setPicking(null)}
-          >
-            Cancel
-          </button>
-        </Modal>
-      )}
+      {/* The dialogue that used to ask "which one is it?" is gone. The names
+          under a code are rows in the results panel now, each one click or one
+          arrow key from the bill — which is the same number of actions, without
+          covering the bill while a customer waits for it. */}
 
       {checking && (
         <Modal title="Does this look right?" onClose={() => setChecking(false)}>
