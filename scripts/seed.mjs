@@ -269,27 +269,46 @@ async function main() {
     for (const d of existing.docs) if (!keep.has(d.id)) await d.ref.delete()
   }
 
-  for (const [id, code, name, category, price, sellsNextDay, weighed = false] of PRODUCTS) {
-    const description = {
-      code,
-      name,
-      category,
-      price,
-      sellsNextDay,
-      soldByWeight: weighed,
-      unit: weighed ? DEFAULT_WEIGHT_UNIT : null,
-      active: true,
+  // The catalogue below is demo furniture, and on a real project it is now
+  // actively wrong.
+  //
+  // The shop's own catalogue is scripts/catalogue.mjs — the owner's twenty
+  // price tiers, with the sixty-odd names as variants underneath them. This
+  // table is the forty-four separate products that came before it, and every
+  // one of them is archived in the live database.
+  //
+  // Writing them here sets `active: true`, so running this against the bakery
+  // would un-archive all forty-four on top of the twenty. The codes do not
+  // collide outright — `04` and `4` are different strings, and an exact code
+  // still wins — but the till would list sixty-four products where the shop
+  // sells twenty, "Chicken Bread" would appear both as its own item and as a
+  // name under code 11, and every stock sheet, baking list and delivery note
+  // would carry the doubled rows. Nothing errors. It just quietly stops
+  // matching the shop. Hence a refusal rather than a warning.
+  if (!useEmulator) {
+    console.log(
+      '\n! Products skipped — this table is the catalogue the shop replaced.\n' +
+        '  The live price list is scripts/catalogue.mjs. Seeding these back would\n' +
+        '  un-archive all 44 alongside the 20 and double every sheet in the shop.\n' +
+        '  Outlets and raw materials are still seeded; only products are held back.',
+    )
+  } else {
+    for (const [id, code, name, category, price, sellsNextDay, weighed = false] of PRODUCTS) {
+      const description = {
+        code,
+        name,
+        category,
+        price,
+        sellsNextDay,
+        soldByWeight: weighed,
+        unit: weighed ? DEFAULT_WEIGHT_UNIT : null,
+        active: true,
+      }
+      await db.collection('products').doc(id).set(description, {})
     }
-    // Merge on a real project, replace on the emulator.
-    //
-    // A plain `set` replaces the whole document, and on a live project that
-    // would quietly destroy anything the owner has set from the app that this
-    // table does not know about — most importantly the `variants` written when
-    // several products are merged onto one code, which cannot be reconstructed.
-    await db.collection('products').doc(id).set(description, useEmulator ? {} : { merge: true })
+    const weighedCount = PRODUCTS.filter((p) => p[6]).length
+    console.log(`✓ ${PRODUCTS.length} products, ${weighedCount} sold by weight`)
   }
-  const weighedCount = PRODUCTS.filter((p) => p[6]).length
-  console.log(`✓ ${PRODUCTS.length} products, ${weighedCount} sold by weight`)
 
   for (const [id, name, unit, costPerUnit, reorderLevel] of MATERIALS) {
     const ref = db.collection('rawMaterials').doc(id)
