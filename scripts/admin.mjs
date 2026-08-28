@@ -12,7 +12,19 @@ import { initializeApp, applicationDefault } from 'firebase-admin/app'
  *
  * Now they default to the emulator, exactly as `seed.mjs` always has. Reaching
  * the real project is deliberate — a project id that does not start with
- * `demo-`, plus a key — rather than the only thing that works.
+ * `demo-`, plus credentials named on purpose — rather than the only thing that
+ * works.
+ *
+ * "Named on purpose" is either a service-account key in
+ * GOOGLE_APPLICATION_CREDENTIALS, or `USE_ADC=1` to use whatever account is
+ * already signed in. The second is for Cloud Shell, where the owner is
+ * authenticated to the project the moment the terminal opens, and downloading a
+ * private key to make that fact usable would be a step backwards: a key on a
+ * laptop is a key that can be copied, mailed, and left in a Downloads folder.
+ *
+ * It still has to be typed, and that is the whole point of the guard. Ambient
+ * credentials are exactly the thing that must not become the default — in Cloud
+ * Shell, every script here would otherwise reach the live bakery on its own.
  *
  * Note the ordering: the emulator host variables have to be set before
  * `initializeApp`, so this must be called before anything touches Firestore.
@@ -26,11 +38,14 @@ export function initAdmin({ needsAuth = false } = {}) {
   if (useEmulator) {
     process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080'
     if (needsAuth) process.env.FIREBASE_AUTH_EMULATOR_HOST ||= '127.0.0.1:9099'
-  } else if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  } else if (!process.env.GOOGLE_APPLICATION_CREDENTIALS && process.env.USE_ADC !== '1') {
     console.error(
-      `\nRefusing to touch '${projectId}': GOOGLE_APPLICATION_CREDENTIALS is not set.\n` +
-        'Point it at a service-account key from the Firebase console, or leave\n' +
-        'SEED_PROJECT unset to work against the emulators instead.\n',
+      `\nRefusing to touch '${projectId}': no credentials were named.\n\n` +
+        'Either point GOOGLE_APPLICATION_CREDENTIALS at a service-account key from\n' +
+        'the Firebase console, or set USE_ADC=1 to use the account already signed\n' +
+        'in — which is what Cloud Shell has, and anywhere you have run\n' +
+        '`gcloud auth application-default login`.\n\n' +
+        'Leave SEED_PROJECT unset to work against the emulators instead.\n',
     )
     process.exit(1)
   }

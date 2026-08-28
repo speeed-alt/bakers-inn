@@ -2,9 +2,17 @@
 // The shop's price list, as the owner keeps it, written into the catalogue.
 //
 //   node scripts/catalogue.mjs                       # emulator, writes
+//
+// Against the real shop, from Cloud Shell — where the owner is already signed
+// in, so there is no private key to download and leave lying about:
+//
+//   SEED_PROJECT=bakers-inn-pk USE_ADC=1 node scripts/catalogue.mjs   # DRY RUN
+//   SEED_PROJECT=bakers-inn-pk USE_ADC=1 node scripts/catalogue.mjs --write
+//
+// Or from a laptop, with a service-account key:
+//
 //   SEED_PROJECT=bakers-inn-pk GOOGLE_APPLICATION_CREDENTIALS=…/key.json \
-//     node scripts/catalogue.mjs                     # real project, DRY RUN
-//   … node scripts/catalogue.mjs --write             # real project, for real
+//     node scripts/catalogue.mjs [--write]
 //
 // A real project needs `--write` on top of the credentials. Rebuilding a live
 // catalogue is not a thing to do by pressing up-arrow and Enter in the wrong
