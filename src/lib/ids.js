@@ -121,6 +121,22 @@ export function closingRef(businessDate, branchId) {
   return `C-${shortDate(businessDate)}-${branchId}`
 }
 
+/**
+ * One sheet of shelf corrections per outlet per day.
+ *
+ * A natural key, like the close, rather than a document per correction. Six
+ * loaves dropped and a tray arriving from the kitchen are two entries on one
+ * sheet, which is how they are written down on paper and how they are read back
+ * — and it means there is no counter for two devices to fight over.
+ */
+export function adjustmentDocId(businessDate, branchId, practising = isPractising()) {
+  return forMode(`ADJ-${compactDate(businessDate)}-${branchId}`, practising)
+}
+
+export function adjustmentRef(businessDate, branchId) {
+  return `ADJ-${shortDate(businessDate)}-${branchId}`
+}
+
 // --- the daily cycle -------------------------------------------------------
 //
 // Natural keys, not counters: there is exactly one order per outlet per day and

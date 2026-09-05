@@ -215,8 +215,12 @@ export default function App() {
   // Watched here rather than on the Stock screen because the point is to reach
   // somebody who is not on the Stock screen. Subscribed only for a cashier at a
   // shop: the hub receives nothing, and the owner has his own screens.
-  const watching =
-    profile?.role === 'cashier' && branch.data && !branch.data.isMain ? branchId : null
+  // Any cashier, including the one at the hub. The hub does not normally take a
+  // delivery in — what it keeps is worked out from the bake — but the owner can
+  // address a note to any outlet, and `pendingDeliveries` already leaves returns
+  // out. So the only thing the old `!isMain` bought was a real delivery arriving
+  // at the busiest shop in the business with nobody told about it.
+  const watching = profile?.role === 'cashier' && branch.data ? branchId : null
   const arrivals = useArrivals(watching)
   const waiting = pendingDeliveries(arrivals.data)
 
@@ -331,7 +335,10 @@ export default function App() {
           stays reserved for money that does not add up. */}
       {waiting.length > 0 && (
         <div className="strip block no-print">
-          <b>A delivery has arrived.</b>{' '}
+          {/* Not "has arrived". This fires when the hub presses send, and the van
+              may be twenty minutes away — a cashier who looks, finds nothing, and
+              learns the banner lies is a cashier who stops reading it. */}
+          <b>A delivery is on its way.</b>{' '}
           {waiting.length === 1
             ? `${waiting[0].ref} was sent by ${waiting[0].dispatchedByName}.`
             : `${waiting.length} notes are waiting.`}{' '}

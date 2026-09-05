@@ -18,6 +18,7 @@ import { closingDoc } from '../data/closings.js'
 import { productionDoc } from '../data/production.js'
 import { transfersFrom } from '../data/transfers.js'
 import { useArrivals } from '../data/arrivals.js'
+import { adjustmentDoc } from '../data/adjustments.js'
 import { stockAt } from '../lib/stock.js'
 import { oddLines } from '../lib/oddities.js'
 import { isClosed, tillBlocked } from '../lib/closing.js'
@@ -79,6 +80,11 @@ export default function Sell({ branchId, branch }) {
   const arrivals = useArrivals(branchId, today)
   const production = useSnapshot(() => productionDoc(today), [today])
   const sentOut = useSnapshot(() => transfersFrom(branchId, today), [branchId, today])
+  // Corrections the counter made to its own shelf today. Read here as well as on
+  // the Stock screen because the two must agree: a cashier who has just written
+  // off six dropped loaves should not then be warned she is selling past the
+  // shelf on the seventh.
+  const corrections = useSnapshot(() => adjustmentDoc(branchId, today), [branchId, today])
 
   const [text, setText] = useState('')
   const [lines, setLines] = useState([])
@@ -140,7 +146,7 @@ export default function Sell({ branchId, branch }) {
   // Product by product, from `stockAt`. Null until it can be worked out, which
   // reads as "no opinion" downstream rather than as "none".
   const onShelf = useMemo(() => {
-    if (products.loading || arrivals.loading || todaySales.loading) return null
+    if (products.loading || arrivals.loading || todaySales.loading || corrections.loading) return null
     const shelf = stockAt({
       products: products.data ?? [],
       branch: { id: branchId, name: branchName, isMain: branch?.isMain ?? false },
@@ -149,11 +155,13 @@ export default function Sell({ branchId, branch }) {
       sales: todaySales.data ?? [],
       previousClosing: yesterdayClosing.data,
       businessDate: today,
+      adjustments: corrections.data,
     })
     return Object.fromEntries(shelf.lines.map((l) => [l.productId, l.expected]))
   }, [
     products.loading, products.data, arrivals.loading, arrivals.data, sentOut.data,
     production.data, todaySales.loading, todaySales.data, yesterdayClosing.data,
+    corrections.loading, corrections.data,
     branchId, branchName, branch, today,
   ])
 

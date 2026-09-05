@@ -35,12 +35,20 @@ export function buildLeftovers({
   // close itself, which is what creates the return; supplied by the live stock
   // screens, where crates on a van are no longer on the shelf.
   returned = {},
+  // Net of the corrections the counter made today: six dropped, a tray from the
+  // kitchen nobody wrote a note for. Signed, so it moves the figure either way.
+  // See src/lib/adjustments.js for why these are entries rather than an override.
+  adjusted = {},
 }) {
   const touched = new Set([
     ...Object.keys(received),
     ...Object.keys(sold),
     ...Object.keys(carriedIn),
     ...Object.keys(returned),
+    // A product whose only event today is a correction still belongs on the
+    // sheet. Leaving it out would mean a cashier could write down six dropped
+    // loaves and watch the line they wrote it against disappear.
+    ...Object.keys(adjusted),
   ])
 
   return products
@@ -49,6 +57,7 @@ export function buildLeftovers({
       const inQty = (received[product.id] ?? 0) + (carriedIn[product.id] ?? 0)
       const soldQty = sold[product.id] ?? 0
       const backQty = returned[product.id] ?? 0
+      const fixQty = adjusted[product.id] ?? 0
       return {
         productId: product.id,
         code: product.code ?? '',
@@ -60,9 +69,17 @@ export function buildLeftovers({
         carriedIn: carriedIn[product.id] ?? 0,
         sold: soldQty,
         returned: backQty,
+        // Kept on the line, not folded away into `expected`. The close screen
+        // and the owner's sheet both have to be able to say *why* the figure is
+        // not the plain arithmetic, and a correction that vanishes into a total
+        // is indistinguishable from stock going missing.
+        adjusted: fixQty,
         // Never negative: selling more than the system thinks arrived means the
         // paperwork is wrong, not that there is minus-two bread on the shelf.
-        expected: Math.max(0, inQty - soldQty - backQty),
+        // A correction is inside the clamp for the same reason — a cashier who
+        // writes off more than the shelf believes it has is telling you the
+        // paperwork was wrong, not that the shelf owes bread.
+        expected: Math.max(0, inQty - soldQty - backQty + fixQty),
         disposition: defaultDisposition(product),
       }
     })

@@ -10,6 +10,7 @@
 import { hubStock } from './compile.js'
 import { committedOut } from './dispatch.js'
 import { buildLeftovers } from './leftovers.js'
+import { netAdjustments } from './adjustments.js'
 import { carryoverFrom } from './dailyReport.js'
 
 /**
@@ -131,6 +132,9 @@ export function stockAt({
   sales = [],
   previousClosing = null,
   businessDate = null,
+  // The day's shelf corrections for this outlet — the whole document, not the
+  // net, so the one place that knows how to add them up is `netAdjustments`.
+  adjustments = null,
 }) {
   const branchId = branch?.id
   const lines = buildLeftovers({
@@ -149,6 +153,7 @@ export function stockAt({
     // asking the cashier to confirm, so subtracting it there would take the
     // same crates off twice.
     returned: sentBackFrom({ branchId, transfers, businessDate }),
+    adjusted: netAdjustments(adjustments),
   })
 
   return {
@@ -174,6 +179,10 @@ export function stockReport({
   production = null,
   sales = [],
   closings = [],
+  // One sheet of corrections per outlet, for the day being reported. Passed
+  // through so the owner's figure is the same one the shop is looking at — the
+  // point of every input on this function.
+  adjustments = [],
   businessDate,
   previousDate: yesterday,
 }) {
@@ -187,6 +196,9 @@ export function stockReport({
       businessDate,
       previousClosing: closings.find(
         (c) => c.branchId === branch.id && c.businessDate === yesterday,
+      ),
+      adjustments: adjustments.find(
+        (a) => a.branchId === branch.id && a.businessDate === businessDate,
       ),
     }),
   )

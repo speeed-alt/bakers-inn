@@ -8,6 +8,7 @@ import { formatMoney, parseMoney } from '../lib/money.js'
 import { summariseDay } from '../lib/report.js'
 import { receivedAt } from '../lib/stock.js'
 import { buildLeftovers, splitLeftovers, wasteValue, CARRY, RETURN, WASTE } from '../lib/leftovers.js'
+import { adjustmentDoc, netAdjustments } from '../data/adjustments.js'
 import { carryoverFrom } from '../lib/dailyReport.js'
 import { salesForDay } from '../data/sales.js'
 import { closeDay, closingDoc, isClosed, reopenDay } from '../data/closings.js'
@@ -55,6 +56,9 @@ export default function CloseDay({ branchId, isMain }) {
     () => query(collection(db, 'products'), where('active', '==', true)),
     [],
   )
+  // The day being closed, not today: a close done the morning after reads the
+  // corrections made on the day it is closing, not the ones made since.
+  const corrections = useSnapshot(() => adjustmentDoc(branchId, target), [branchId, target])
   // Across yesterday, today and tomorrow, then narrowed by the day the goods
   // were actually taken in. A note carries the day it was made for, so a
   // delivery baked for tomorrow and counted in this evening is stamped
@@ -127,12 +131,18 @@ export default function CloseDay({ branchId, isMain }) {
         received,
         sold: Object.fromEntries(summary.byProduct.map((p) => [p.productId, p.qty])),
         carriedIn: carryoverFrom(previous.data),
+        // Without this the six loaves the cashier wrote off at eleven come back
+        // as a shortfall at closing — the count she is asked to confirm would be
+        // measured against a shelf that never had the correction applied, and
+        // the gap reads exactly like stock going missing.
+        adjusted: netAdjustments(corrections.data),
       }),
-    [products.data, received, summary.byProduct, previous.data],
+    [products.data, received, summary.byProduct, previous.data, corrections.data],
   )
 
   const stillLoading =
-    yesterdayClosing.loading || sales.loading || closing.loading || previous.loading || products.loading
+    yesterdayClosing.loading || sales.loading || closing.loading || previous.loading ||
+    products.loading || corrections.loading
 
   if (stillLoading) {
     return <div className="page"><Loading>Loading today's figures…</Loading></div>

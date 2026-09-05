@@ -419,6 +419,41 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // --- Corrections the counter makes to its own shelf ---------------------
+    //
+    // One document per outlet per day, holding a list of entries. The cashier
+    // appends to it all day — six dropped at eleven, a tray from the kitchen at
+    // three — so `update` has to be open to her, which is the whole risk here:
+    // this is the one place a cashier can move the figure her closing count is
+    // checked against.
+    //
+    // So the trail is the permission. Entries may only ever be added, never
+    // removed or rewritten, and each one carries the name of whoever made it.
+    // A correction that has to be explained and cannot be unsaid is a very
+    // different thing from a number that can be typed over — the same bargain
+    // as voids and re-closes, visibility rather than prohibition.
+    match /shelfAdjustments/{adjustmentId} {
+      // Fetched by id, and absent for most of the day — see the long note on
+      // closings about why `resource == null` has to be allowed or the Stock
+      // screen logs a denial every morning.
+      allow get: if isOwner()
+                 || (active() && (resource == null || resource.data.branchId == myBranch()));
+      allow list: if isOwner();
+      allow list: if active() && resource.data.branchId == myBranch();
+
+      allow create: if staff() && canWriteBranch(request.resource.data.branchId);
+
+      allow update: if isOwner()
+                    || (staff()
+                        && canWriteBranch(resource.data.branchId)
+                        && request.resource.data.branchId == resource.data.branchId
+                        && request.resource.data.businessDate == resource.data.businessDate
+                        && request.resource.data.get('entries', []).size()
+                             > resource.data.get('entries', []).size());
+
+      allow delete: if false;
+    }
+
     // --- Faults reported by the tablets ------------------------------------
 
     match /clientErrors/{errorId} {

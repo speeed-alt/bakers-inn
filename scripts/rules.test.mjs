@@ -1007,3 +1007,85 @@ test('nobody can smuggle a real order in as an automatic one', async () => {
     }),
   )
 })
+
+// --- shelf corrections -----------------------------------------------------
+//
+// This is the one place a cashier can move the figure her own closing count is
+// checked against, so the trail is the permission: entries may be added and
+// never removed, and each carries the name of whoever made it.
+
+const adjFor = (branchId) => ({
+  ref: `ADJ-05Sep-${branchId}`,
+  branchId,
+  businessDate: '2026-09-05',
+  entries: [
+    { productId: 'bread-300', delta: -6, reason: 'Dropped', byName: 'Maya', at: '2026-09-05T06:00:00.000Z' },
+  ],
+})
+
+test('a cashier can correct her own shelf', async () => {
+  const db = as(CASHIER_MAIN)
+  await assertSucceeds(setDoc(doc(db, 'shelfAdjustments', 'ADJ-20260905-MAIN'), adjFor('MAIN')))
+})
+
+test('a cashier cannot correct another outlet\'s shelf', async () => {
+  const db = as(CASHIER_MAIN)
+  await assertFails(setDoc(doc(db, 'shelfAdjustments', 'ADJ-20260905-B2'), adjFor('B2')))
+})
+
+test('a correction can be added to but never taken away', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'shelfAdjustments', 'ADJ-trail'), adjFor('MAIN'))
+  })
+  const db = as(CASHIER_MAIN)
+  const ref = doc(db, 'shelfAdjustments', 'ADJ-trail')
+
+  // Adding today's second correction: fine, and the ordinary case.
+  await assertSucceeds(
+    updateDoc(ref, {
+      entries: [
+        ...adjFor('MAIN').entries,
+        { productId: 'cakes-400', delta: 4, reason: 'Found some', byName: 'Maya', at: '2026-09-05T09:00:00.000Z' },
+      ],
+    }),
+  )
+
+  // Rewriting the morning into one tidy entry is exactly what the trail is for.
+  // Without this a cashier could write off six loaves, sell them, and leave a
+  // document that reads as though the correction never happened.
+  await assertFails(updateDoc(ref, { entries: [] }))
+})
+
+test('a correction cannot be moved to another outlet or another day', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'shelfAdjustments', 'ADJ-move'), adjFor('MAIN'))
+  })
+  const db = as(CASHIER_MAIN)
+  const ref = doc(db, 'shelfAdjustments', 'ADJ-move')
+  const grown = [...adjFor('MAIN').entries, { productId: 'x', delta: 1, reason: 'Found some', at: 'z' }]
+
+  await assertFails(updateDoc(ref, { branchId: 'B2', entries: grown }))
+  await assertFails(updateDoc(ref, { businessDate: '2026-09-04', entries: grown }))
+})
+
+test('nobody can delete a correction, not even the owner', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'shelfAdjustments', 'ADJ-del'), adjFor('MAIN'))
+  })
+  await assertFails(deleteDoc(doc(as(OWNER), 'shelfAdjustments', 'ADJ-del')))
+})
+
+test('a cashier cannot read another outlet\'s corrections', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'shelfAdjustments', 'ADJ-20260905-B2'), adjFor('B2'))
+  })
+  await assertFails(getDoc(doc(as(CASHIER_MAIN), 'shelfAdjustments', 'ADJ-20260905-B2')))
+  await assertSucceeds(getDoc(doc(as(OWNER), 'shelfAdjustments', 'ADJ-20260905-B2')))
+})
+
+test('asking for a correction sheet that does not exist yet is not an error', async () => {
+  // Every morning, on every till: the Stock screen fetches this by id before
+  // anybody has corrected anything. A rule that reaches for resource.data would
+  // refuse it and bury the console in denials that look exactly like real ones.
+  await assertSucceeds(getDoc(doc(as(CASHIER_MAIN), 'shelfAdjustments', 'ADJ-nothing-here')))
+})
