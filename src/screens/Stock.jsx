@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { collection, query, where } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
@@ -10,7 +10,16 @@ import { salesForDay } from '../data/sales.js'
 import { closingDoc } from '../data/closings.js'
 import { productionDoc } from '../data/production.js'
 import { stockAt } from '../lib/stock.js'
-import { adjustmentDoc, entriesOf, reasonsFor, recordAdjustment } from '../data/adjustments.js'
+import {
+  adjustmentDoc,
+  countBaseline,
+  countEntries,
+  entriesOf,
+  parseCount,
+  reasonsFor,
+  recordAdjustment,
+  recordAdjustments,
+} from '../data/adjustments.js'
 import { weighedProps } from '../lib/quantity.js'
 import { findProducts } from '../lib/search.js'
 import { SHORT_REASONS } from '../config.js'
@@ -55,6 +64,10 @@ function OnTheShelf({ branchId, branchName, isMain, today }) {
   // The product a correction is being written against, or `true` for the button
   // at the top of the card, which starts with nothing chosen.
   const [correcting, setCorrecting] = useState(null)
+  // Set while a full shelf count is open: what each product had sold when the
+  // count began. See `countBaseline` for why sales are frozen there and nothing
+  // else is.
+  const [counting, setCounting] = useState(null)
 
   const products = useSnapshot(
     () => query(collection(db, 'products'), where('active', '==', true)),
@@ -112,54 +125,92 @@ function OnTheShelf({ branchId, branchName, isMain, today }) {
         counted in yet is not on this list.
       </p>
 
-      {lines.length === 0 ? (
-        <Empty>Nothing has come in or gone out today yet.</Empty>
+      {counting ? (
+        <CountShelf
+          products={products.data ?? []}
+          baseline={countBaseline(shelf.lines, counting.soldAtStart)}
+          onCancel={() => setCounting(null)}
+          onSave={(counts) => {
+            // Worked out again at the moment of saving, from the live shelf, so
+            // a delivery confirmed while she was counting is already in it.
+            recordAdjustments({
+              branchId,
+              businessDate: today,
+              entries: countEntries({
+                products: products.data ?? [],
+                baseline: countBaseline(shelf.lines, counting.soldAtStart),
+                counts,
+                user: profile,
+              }),
+            })
+            setCounting(null)
+          }}
+        />
       ) : (
-        <div className="bill">
-          <div className="bill-row bill-head">
-            <span>Code</span>
-            <span>Item</span>
-            <span>Sold</span>
-            <span className="bill-amount">Left</span>
-          </div>
-          {lines.map((line) => (
-            <div className="bill-row" key={line.productId}>
-              <span className="bill-code">{line.code}</span>
-              <span>
-                <span className="bill-name">{line.productName}</span>
-                <div className="muted small">
-                  {line.carriedIn > 0 && `${line.carriedIn} carried · `}
-                  {line.received} in
-                  {/* Said on the line rather than folded into the figure. A
-                      correction that disappears into a total looks exactly like
-                      stock going missing, which is the one thing the closing
-                      count exists to notice. */}
-                  {line.adjusted !== 0 &&
-                    ` · ${line.adjusted > 0 ? '+' : ''}${line.adjusted} corrected`}
+        <>
+          {lines.length === 0 ? (
+            <Empty>Nothing has come in or gone out today yet.</Empty>
+          ) : (
+            <div className="bill">
+              <div className="bill-row bill-head">
+                <span>Code</span>
+                <span>Item</span>
+                <span>Sold</span>
+                <span className="bill-amount">Left</span>
+              </div>
+              {lines.map((line) => (
+                <div className="bill-row" key={line.productId}>
+                  <span className="bill-code">{line.code}</span>
+                  <span>
+                    <span className="bill-name">{line.productName}</span>
+                    <div className="muted small">
+                      {line.carriedIn > 0 && `${line.carriedIn} carried · `}
+                      {line.received} in
+                      {/* Said on the line rather than folded into the figure. A
+                          correction that disappears into a total looks exactly
+                          like stock going missing, which is the one thing the
+                          closing count exists to notice. */}
+                      {line.adjusted !== 0 &&
+                        ` · ${line.adjusted > 0 ? '+' : ''}${line.adjusted} corrected`}
+                    </div>
+                  </span>
+                  <span className="muted">{line.sold}</span>
+                  <span className="bill-amount">
+                    {line.expected}
+                    <button
+                      className="btn ghost small"
+                      style={{ marginLeft: 8 }}
+                      onClick={() => setCorrecting(line.productId)}
+                    >
+                      Correct
+                    </button>
+                  </span>
                 </div>
-              </span>
-              <span className="muted">{line.sold}</span>
-              <span className="bill-amount">
-                {line.expected}
-                <button
-                  className="btn ghost small"
-                  style={{ marginLeft: 8 }}
-                  onClick={() => setCorrecting(line.productId)}
-                >
-                  Correct
-                </button>
-              </span>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      {/* Separate from the rows, because the commonest correction is for
-          something that is not on them: a tray the kitchen carried over without
-          paperwork, of an item today's delivery never included. */}
-      <button className="btn block" style={{ marginTop: 12 }} onClick={() => setCorrecting(true)}>
-        Correct the shelf — something dropped, spoiled or arrived
-      </button>
+          {/* Counting comes first because it is the everyday job: walk the
+              shelf, type what is there. The one-item correction stays for the
+              case where the cashier knows exactly what happened and why. */}
+          <div className="row wrap" style={{ gap: 8, marginTop: 12 }}>
+            <button
+              className="btn primary"
+              style={{ flex: 1 }}
+              onClick={() =>
+                setCounting({
+                  soldAtStart: Object.fromEntries(shelf.lines.map((l) => [l.productId, l.sold])),
+                })
+              }
+            >
+              Count the shelf
+            </button>
+            <button className="btn" style={{ flex: 1 }} onClick={() => setCorrecting(true)}>
+              Correct one item
+            </button>
+          </div>
+        </>
+      )}
 
       {written.length > 0 && (
         <div style={{ marginTop: 14 }}>
@@ -197,6 +248,134 @@ function OnTheShelf({ branchId, branchName, isMain, today }) {
         />
       )}
     </div>
+  )
+}
+
+/** Numeric where the codes are numbers, so 2 comes before 10 as on the sheet. */
+function byCode(a, b) {
+  const x = Number(a.code)
+  const y = Number(b.code)
+  if (Number.isFinite(x) && Number.isFinite(y) && x !== y) return x - y
+  return String(a.code ?? '').localeCompare(String(b.code ?? ''))
+}
+
+/**
+ * The whole shelf, typed in one go.
+ *
+ * Every product, not just the ones with something recorded against them
+ * today — the tray the kitchen carried over without paperwork is exactly the
+ * row that would otherwise be missing. In the order of the printed code sheet,
+ * because that is the order the shelf is walked in.
+ *
+ * Blank means "not counted", so a cashier can count the six things she is
+ * unsure of and leave the rest. The system's figure sits in the box as a faded
+ * hint rather than as a value, so leaving it untouched can never be mistaken
+ * for having typed it. Enter moves to the next row: the hands stay on the
+ * keyboard and the eyes stay on the shelf.
+ */
+function CountShelf({ products, baseline, onCancel, onSave }) {
+  const [counts, setCounts] = useState({})
+  const inputs = useRef([])
+
+  const rows = [...products].sort(byCode)
+  const shownOf = (id) => Math.max(0, baseline[id] ?? 0)
+  const typedOf = (id) => String(counts[id] ?? '').trim()
+
+  const changed = rows.filter((p) => {
+    const counted = parseCount(counts[p.id])
+    return counted !== null && counted !== shownOf(p.id)
+  })
+  const unreadable = rows.filter((p) => typedOf(p.id) !== '' && parseCount(counts[p.id]) === null)
+
+  return (
+    <>
+      <p className="muted small">
+        Type what you can actually see. Leave a row empty if you did not count it — empty is not
+        zero. Press Enter to jump to the next item. Every change is kept with your name.
+      </p>
+
+      <div className="bill">
+        <div className="bill-row bill-head">
+          <span>Code</span>
+          <span>Item</span>
+          <span>System</span>
+          <span className="bill-amount">Counted</span>
+        </div>
+        {rows.map((p, i) => {
+          const shown = shownOf(p.id)
+          const counted = parseCount(counts[p.id])
+          const diff = counted === null ? 0 : counted - shown
+          const bad = typedOf(p.id) !== '' && counted === null
+          return (
+            <div className="bill-row" key={p.id}>
+              <span className="bill-code">{p.code}</span>
+              <span>
+                <span className="bill-name">{p.name}</span>
+                {p.soldByWeight && (
+                  <div className="muted small">in {p.unit ?? '250 g'} portions</div>
+                )}
+              </span>
+              <span className="muted">
+                {shown}
+                {/* The column heading says "System" on a wide screen. A phone
+                    hides the headings and moves this figure to a second line,
+                    where a bare number beside a box of numbers means nothing. */}
+                <span className="count-label"> on system</span>
+              </span>
+              <span className="bill-amount count-cell">
+                {diff !== 0 && (
+                  <span className={`count-diff ${diff < 0 ? 'bad' : ''}`}>
+                    {diff > 0 ? '+' : ''}
+                    {diff}
+                  </span>
+                )}
+                <input
+                  ref={(el) => {
+                    inputs.current[i] = el
+                  }}
+                  className={`count-input ${bad ? 'is-bad' : ''}`}
+                  type="text"
+                  inputMode="numeric"
+                  autoFocus={i === 0}
+                  value={counts[p.id] ?? ''}
+                  placeholder={String(shown)}
+                  aria-label={`counted, ${p.name}`}
+                  onChange={(e) => setCounts((cur) => ({ ...cur, [p.id]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return
+                    e.preventDefault()
+                    inputs.current[i + 1]?.focus()
+                  }}
+                />
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Stuck to the bottom of the screen, because the list is twenty rows
+          long and Save must not be a scroll away from the last figure typed. */}
+      <div className="count-footer">
+        <span className="muted small">
+          {changed.length === 0
+            ? 'Nothing changed yet'
+            : `${changed.length} item${changed.length === 1 ? '' : 's'} will change`}
+          {unreadable.length > 0 && ` · ${unreadable.length} not a whole number`}
+        </span>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn ghost" onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            className="btn primary"
+            disabled={changed.length === 0 || unreadable.length > 0}
+            onClick={() => onSave(counts)}
+          >
+            {changed.length === 0 ? 'Save count' : `Save ${changed.length} change${changed.length === 1 ? '' : 's'}`}
+          </button>
+        </div>
+      </div>
+    </>
   )
 }
 

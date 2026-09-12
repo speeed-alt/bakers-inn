@@ -5,7 +5,16 @@ import { adjustmentDocId, adjustmentRef } from '../lib/ids.js'
 import { practiceStamp } from '../lib/practice.js'
 import { adjustmentEntry, validAdjustment } from '../lib/adjustments.js'
 
-export { netAdjustments, entriesOf, reasonsFor, validAdjustment } from '../lib/adjustments.js'
+export {
+  COUNT_REASON,
+  countBaseline,
+  countEntries,
+  entriesOf,
+  netAdjustments,
+  parseCount,
+  reasonsFor,
+  validAdjustment,
+} from '../lib/adjustments.js'
 
 /** The day's corrections for one outlet. Absent until the first one is made. */
 export function adjustmentDoc(branchId, businessDate) {
@@ -13,21 +22,25 @@ export function adjustmentDoc(branchId, businessDate) {
 }
 
 /**
- * Add one correction to the day's sheet.
+ * Add corrections to the day's sheet — one, or a whole shelf count.
+ *
+ * All of them in a single write. A count of twenty lines is one thing the
+ * cashier did, and it must land as one: twenty separate writes over a shop's
+ * connection is twenty chances for the count to arrive half-saved, with the
+ * shelf showing some of her figures and not others and nothing to say which.
  *
  * `setDoc` with merge and `arrayUnion` rather than a read-then-write: the
  * document does not exist until the first correction of the day, and two
- * corrections made seconds apart must not be able to lose one another. It also
- * makes a retry safe — `arrayUnion` compares whole objects, and the entry is
- * built once by the caller with a fixed timestamp, so the same six dropped
- * loaves sent twice over a flaky line are added once.
+ * devices adding at once must not lose each other's entries. It also makes a
+ * retry safe — `arrayUnion` compares whole objects, and each entry is built
+ * once with a fixed timestamp, so the same count sent twice is added once.
  *
- * Refuses silently invalid input rather than writing a zero with no reason,
- * which would be a row on the owner's sheet that explains nothing.
+ * Invalid entries are dropped rather than written, since a zero with no reason
+ * is a row on the owner's sheet that explains nothing. Returns how many landed.
  */
-export function recordAdjustment({ branchId, businessDate, product, delta, reason, user }) {
-  const entry = adjustmentEntry({ product, delta, reason, user })
-  if (!validAdjustment(entry)) return false
+export function recordAdjustments({ branchId, businessDate, entries = [] }) {
+  const valid = entries.filter((entry) => validAdjustment(entry))
+  if (valid.length === 0) return 0
 
   fireAndForget(
     setDoc(
@@ -39,11 +52,17 @@ export function recordAdjustment({ branchId, businessDate, product, delta, reaso
         ref: adjustmentRef(businessDate, branchId),
         branchId,
         businessDate,
-        entries: arrayUnion(entry),
+        entries: arrayUnion(...valid),
       },
       { merge: true },
     ),
-    `shelf correction at ${branchId}`,
+    valid.length === 1 ? `shelf correction at ${branchId}` : `shelf count at ${branchId}`,
   )
-  return true
+  return valid.length
+}
+
+/** One correction, from the one-item dialogue. */
+export function recordAdjustment({ branchId, businessDate, product, delta, reason, user }) {
+  const entry = adjustmentEntry({ product, delta, reason, user })
+  return recordAdjustments({ branchId, businessDate, entries: [entry] }) > 0
 }

@@ -339,6 +339,34 @@ label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px
 }
 .result-price { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
 
+/* A full shelf count: every item, one box each.
+   16px in the box so a phone does not zoom the page on focus, and the figures
+   right-aligned in a fixed width so a column of counts reads down like a pad. */
+.count-cell { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+/* Two classes deep, and every width pinned, on purpose. The app's general text
+   input rule outranks a single class and stretches the box to fill its cell; on
+   a phone that cell is an `auto` grid column, so the stretched box took the row
+   and crushed the item name into a 66px sliver. */
+.count-cell .count-input {
+  flex: 0 0 76px; width: 76px; min-width: 0; max-width: 76px;
+  text-align: right; font-variant-numeric: tabular-nums; font-size: 16px;
+  padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 8px;
+  background: var(--surface); color: var(--text);
+}
+/* Only needed where the column headings are not shown — see the phone block. */
+.count-label { display: none; }
+/* The system's figure, as a hint only — faint enough that an untouched box can
+   never be mistaken for one that has been typed in. */
+.count-input::placeholder { color: var(--muted); opacity: 0.55; }
+.count-input.is-bad { border-color: var(--alert); }
+.count-diff { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.count-footer {
+  position: sticky; bottom: 0; z-index: 2;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 12px; padding: 12px 0;
+  background: var(--surface); border-top: 1px solid var(--border);
+}
+
 /* amount due */
 .till-total {
   flex-shrink: 0;
@@ -729,6 +757,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
      reach the row's actual controls — its value still lives in that row's
      muted subtext line. */
   .hide-narrow { display: none; }
+
+  /* The headings are hidden above, so the shelf count names its own figure. */
+  .count-label { display: inline; }
 }
 
 /* Nothing smaller than a fingertip.

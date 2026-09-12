@@ -44,8 +44,19 @@ export function reasonsFor(delta) {
   return delta >= 0 ? MORE_REASONS : FEWER_REASONS
 }
 
+/**
+ * The reason on every line of a full count.
+ *
+ * A cashier walking the shelf and typing twenty figures cannot be asked twenty
+ * times why each one moved — that is exactly the tedium the count exists to
+ * remove — and mostly she does not know why. What she does know is true and
+ * worth keeping: she counted, and this is what was there. The one-item
+ * correction is still there for the loaves she watched go on the floor.
+ */
+export const COUNT_REASON = 'Counted the shelf'
+
 /** Every reason the app will accept, for checking one that arrived from a device. */
-export const ALL_REASONS = [...new Set([...MORE_REASONS, ...FEWER_REASONS])]
+export const ALL_REASONS = [...new Set([...MORE_REASONS, ...FEWER_REASONS, COUNT_REASON])]
 
 /**
  * Is this something worth writing down?
@@ -103,4 +114,67 @@ export function adjustmentEntry({ product, delta, reason, user, at = new Date() 
 /** The day's entries, newest first, for showing back to whoever made them. */
 export function entriesOf(record) {
   return [...(record?.entries ?? [])].sort((a, b) => String(b.at).localeCompare(String(a.at)))
+}
+
+// ---------------------------------------------------------------------------
+// A whole shelf at once.
+
+/**
+ * Read one typed count.
+ *
+ * Blank means "I did not count this one", which is a different fact from zero —
+ * treating it as zero would write off every row the cashier skipped. Anything
+ * that is not a plain whole number is unreadable rather than guessed at.
+ */
+export function parseCount(text) {
+  const raw = String(text ?? '').trim()
+  if (!/^\d+$/.test(raw)) return null
+  return Number(raw)
+}
+
+/**
+ * What each product is measured against when the count is saved.
+ *
+ * The till goes on selling while the cashier walks the shelf. Measuring her
+ * count against the figure at the moment she presses Save would quietly undo
+ * every sale rung in between — the shelf would claim bread that has already
+ * left in a customer's bag. So sales are frozen at the figure from when the
+ * count *started*, and everything else — a delivery confirmed mid-count, a
+ * correction someone else made — is taken as it stands now, because those
+ * goods are on the shelf she is looking at.
+ *
+ * `raw`, not `expected`: see the note on `raw` in buildLeftovers.
+ */
+export function countBaseline(lines = [], soldAtStart = {}) {
+  const base = {}
+  for (const line of lines) {
+    const raw = line.raw ?? line.expected ?? 0
+    base[line.productId] = raw + (line.sold ?? 0) - (soldAtStart[line.productId] ?? 0)
+  }
+  return base
+}
+
+/**
+ * Turn a whole shelf count into corrections — one entry per line that moved.
+ *
+ * Whether a line moved is judged against the figure the cashier was *shown*,
+ * which never goes below zero: typing 0 over a 0 on the screen is agreement,
+ * not a correction, even when the arithmetic underneath is negative. How far it
+ * moves is measured from the unclamped figure, so the shelf lands on exactly
+ * the number she typed.
+ *
+ * Every entry is an ordinary correction with its name, time and reason, so the
+ * owner's trail reads the same whether it came from one dropped tray or from a
+ * full count.
+ */
+export function countEntries({ products = [], baseline = {}, counts = {}, user, at = new Date() }) {
+  const entries = []
+  for (const product of products) {
+    const counted = parseCount(counts[product.id])
+    if (counted === null) continue
+    const raw = baseline[product.id] ?? 0
+    if (counted === Math.max(0, raw)) continue
+    entries.push(adjustmentEntry({ product, delta: counted - raw, reason: COUNT_REASON, user, at }))
+  }
+  return entries
 }

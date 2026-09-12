@@ -80,6 +80,11 @@ export function buildLeftovers({
         // writes off more than the shelf believes it has is telling you the
         // paperwork was wrong, not that the shelf owes bread.
         expected: Math.max(0, inQty - soldQty - backQty + fixQty),
+        // The same figure before the clamp. Nothing on screen shows it, but a
+        // full shelf count needs it: a shop the paperwork has at −3 shows 0, and
+        // a count of 5 there has to move the figure by 8 to land on 5, not by 5
+        // to land on 2. See `countEntries` in lib/adjustments.js.
+        raw: inQty - soldQty - backQty + fixQty,
         disposition: defaultDisposition(product),
       }
     })

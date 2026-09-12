@@ -177,3 +177,139 @@ test('no sheet means the shelf is exactly what it always was', () => {
   assert.equal(stockAt(args).lines[0].expected, 30)
   assert.equal(stockAt({ ...args, adjustments: null }).lines[0].expected, 30)
 })
+
+// ---------------------------------------------------------------------------
+// A whole shelf at once.
+//
+// The count replaces twenty trips through a dialogue. What it must not do is
+// get the arithmetic wrong in the ways a count taken on a live till can: undo
+// the sales rung while the cashier was walking the shelf, double a delivery
+// confirmed halfway through, or write off every row she simply skipped.
+
+import { COUNT_REASON, countBaseline, countEntries, parseCount } from '../src/lib/adjustments.js'
+
+const loaves = { 'bread-300': 40 }
+
+test('an empty box is not a zero', () => {
+  // Treating it as zero would write off every item the cashier did not get to.
+  assert.equal(parseCount(''), null)
+  assert.equal(parseCount('   '), null)
+  assert.equal(parseCount(undefined), null)
+  assert.equal(parseCount('0'), 0)
+  assert.equal(parseCount(' 12 '), 12)
+  // Unreadable is not guessed at: the screen refuses to save until it is fixed.
+  assert.equal(parseCount('1.5'), null)
+  assert.equal(parseCount('-2'), null)
+  assert.equal(parseCount('abc'), null)
+})
+
+test('the line keeps its figure before the clamp', () => {
+  const [line] = buildLeftovers({ products: [bread], received: { 'bread-300': 5 }, sold: { 'bread-300': 8 } })
+  assert.equal(line.expected, 0)
+  assert.equal(line.raw, -3)
+})
+
+test('a count writes one entry per line that moved, and nothing for the rest', () => {
+  const lines = buildLeftovers({ products: [bread, cake], received: loaves, sold: { 'bread-300': 10 } })
+  const entries = countEntries({
+    products: [bread, cake],
+    baseline: countBaseline(lines, { 'bread-300': 10 }),
+    counts: { 'bread-300': '27', 'cakes-400': '' },
+    user,
+    at: new Date('2026-09-12T10:00:00Z'),
+  })
+  assert.equal(entries.length, 1)
+  assert.equal(entries[0].delta, -3)
+  assert.equal(entries[0].reason, COUNT_REASON)
+  assert.equal(entries[0].byName, 'Ayesha')
+  // An ordinary correction in every respect, so the owner's trail reads the same.
+  assert.equal(validAdjustment(entries[0]), true)
+})
+
+test('typing the figure already on screen is agreement, not a correction', () => {
+  const lines = buildLeftovers({ products: [bread], received: loaves, sold: { 'bread-300': 10 } })
+  const entries = countEntries({
+    products: [bread],
+    baseline: countBaseline(lines, { 'bread-300': 10 }),
+    counts: { 'bread-300': '30' },
+    user,
+  })
+  assert.deepEqual(entries, [])
+})
+
+test('an item nothing happened to today can be counted onto the shelf', () => {
+  // The tray the kitchen carried over without paperwork: no delivery, no sale,
+  // no row — until the count puts four on it.
+  const lines = buildLeftovers({ products: [bread, cake], received: loaves, sold: { 'bread-300': 10 } })
+  const entries = countEntries({
+    products: [bread, cake],
+    baseline: countBaseline(lines, { 'bread-300': 10 }),
+    counts: { 'cakes-400': '4' },
+    user,
+  })
+  const after = buildLeftovers({
+    products: [bread, cake], received: loaves, sold: { 'bread-300': 10 },
+    adjusted: netAdjustments({ entries }),
+  })
+  assert.equal(after.find((l) => l.productId === 'cakes-400').expected, 4)
+})
+
+test('the shelf lands on exactly the number typed, even below zero on paper', () => {
+  const inputs = { products: [bread], received: { 'bread-300': 5 }, sold: { 'bread-300': 8 } }
+  const entries = countEntries({
+    products: [bread],
+    baseline: countBaseline(buildLeftovers(inputs), { 'bread-300': 8 }),
+    counts: { 'bread-300': '5' },
+    user,
+  })
+  assert.equal(entries[0].delta, 8)
+  assert.equal(buildLeftovers({ ...inputs, adjusted: netAdjustments({ entries }) })[0].expected, 5)
+})
+
+test('a 0 typed over a 0 on screen writes nothing, whatever the paperwork says underneath', () => {
+  const lines = buildLeftovers({ products: [bread], received: { 'bread-300': 5 }, sold: { 'bread-300': 8 } })
+  const entries = countEntries({
+    products: [bread],
+    baseline: countBaseline(lines, { 'bread-300': 8 }),
+    counts: { 'bread-300': '0' },
+    user,
+  })
+  assert.deepEqual(entries, [])
+})
+
+test('a loaf sold while the cashier is still counting still comes off', () => {
+  // The count opens with 10 sold and 30 on the shelf. She counts 26. Before
+  // she presses Save, the till sells two more. The shelf must end at 24 —
+  // measuring against the figure at save time would have put it back to 26.
+  const atStart = { 'bread-300': 10 }
+  const now = { products: [bread], received: loaves, sold: { 'bread-300': 12 } }
+  const entries = countEntries({
+    products: [bread],
+    baseline: countBaseline(buildLeftovers(now), atStart),
+    counts: { 'bread-300': '26' },
+    user,
+  })
+  assert.equal(buildLeftovers({ ...now, adjusted: netAdjustments({ entries }) })[0].expected, 24)
+
+  // And counting exactly what was there at the start is still agreement.
+  const agree = countEntries({
+    products: [bread],
+    baseline: countBaseline(buildLeftovers(now), atStart),
+    counts: { 'bread-300': '30' },
+    user,
+  })
+  assert.deepEqual(agree, [])
+})
+
+test('a delivery confirmed halfway through the count is not counted twice', () => {
+  // 30 on the shelf when the count opens; twenty more counted in off the van
+  // before Save; she counts the 50 now in front of her.
+  const now = { products: [bread], received: { 'bread-300': 60 }, sold: { 'bread-300': 10 } }
+  const entries = countEntries({
+    products: [bread],
+    baseline: countBaseline(buildLeftovers(now), { 'bread-300': 10 }),
+    counts: { 'bread-300': '50' },
+    user,
+  })
+  assert.deepEqual(entries, [])
+})
