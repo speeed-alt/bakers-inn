@@ -10,6 +10,7 @@ import { installUpdate, useUpdateWaiting } from './lib/updates.js'
 import { Loading } from './components/ui.jsx'
 import { goLive, isPractising } from './lib/practice.js'
 import { pendingDeliveries, useArrivals } from './data/arrivals.js'
+import { useHubBake } from './data/handovers.js'
 import { NotInPractice } from './components/PracticeCard.jsx'
 import Setup from './screens/Setup.jsx'
 import Login from './screens/Login.jsx'
@@ -224,6 +225,14 @@ export default function App() {
   const arrivals = useArrivals(watching)
   const waiting = pendingDeliveries(arrivals.data)
 
+  // And the hub's own bake, which never comes on a van and so never raised the
+  // notice above: the kitchen finished tomorrow's bread and the hub's cashier
+  // was the one person in the business not told. Cashier at the hub only — the
+  // kitchen already knows its own bake is done. See src/lib/handover.js.
+  const hubWatching = profile?.role === 'cashier' && branch.data?.isMain ? branchId : null
+  const bakeWaiting = useHubBake(hubWatching).ready
+  const toCountIn = waiting.length + bakeWaiting.length
+
   if (loading) return stalled ? <StartupTrouble /> : <Loading />
   if (!branchId) return <Setup onDone={setBranchId} />
   if (!user) {
@@ -343,6 +352,17 @@ export default function App() {
             ? `${waiting[0].ref} was sent by ${waiting[0].dispatchedByName}.`
             : `${waiting.length} notes are waiting.`}{' '}
           Count it in on the Stock tab before it goes on the shelf.
+        </div>
+      )}
+
+      {bakeWaiting.length > 0 && (
+        <div className="strip block no-print">
+          <b>
+            {bakeWaiting.some((d) => d.when === 'tomorrow')
+              ? "Tomorrow's bake is ready."
+              : "Today's bake is ready."}
+          </b>{' '}
+          Count what the kitchen handed over on the Stock tab before it goes on the shelf.
         </div>
       )}
 
@@ -498,9 +518,9 @@ export default function App() {
           {nav.map((item) => (
             <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? 'active' : '')}>
               {item.label}
-              {item.to === '/stock' && waiting.length > 0 && (
-                <span className="pip" aria-label={`${waiting.length} delivery to count in`}>
-                  {waiting.length}
+              {item.to === '/stock' && toCountIn > 0 && (
+                <span className="pip" aria-label={`${toCountIn} to count in`}>
+                  {toCountIn}
                 </span>
               )}
             </NavLink>

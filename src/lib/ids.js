@@ -137,6 +137,21 @@ export function adjustmentRef(businessDate, branchId) {
   return `ADJ-${shortDate(businessDate)}-${branchId}`
 }
 
+/**
+ * The hub counter's count-in of one day's bake.
+ *
+ * A natural key, so there can only ever be one per outlet per baking list — a
+ * second confirm lands on the same document, and the rules refuse to let it be
+ * written twice, rather than booking the same short tray a second time.
+ */
+export function handoverDocId(businessDate, branchId, practising = isPractising()) {
+  return forMode(`H-${compactDate(businessDate)}-${branchId}`, practising)
+}
+
+export function handoverRef(businessDate, branchId) {
+  return `H-${shortDate(businessDate)}-${branchId}`
+}
+
 // --- the daily cycle -------------------------------------------------------
 //
 // Natural keys, not counters: there is exactly one order per outlet per day and

@@ -56,6 +56,7 @@ const TRADING = [
   'expenses',
   'stockMovements',
   'shelfAdjustments',
+  'bakeHandovers',
   'clientErrors',
 ]
 

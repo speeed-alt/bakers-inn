@@ -38,6 +38,9 @@ export const FEWER_REASONS = [
   'Spoiled',
   'Given to staff',
   'Miscounted earlier',
+  // The hub's count-in writes this when a tray comes out short. Listed here as
+  // well so the one-item dialogue can say it too, and so it validates.
+  'Short from the kitchen',
 ]
 
 export function reasonsFor(delta) {

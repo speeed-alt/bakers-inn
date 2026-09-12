@@ -20,6 +20,7 @@ import {
   recordAdjustment,
   recordAdjustments,
 } from '../data/adjustments.js'
+import { recordHandover, useHubBake } from '../data/handovers.js'
 import { weighedProps } from '../lib/quantity.js'
 import { findProducts } from '../lib/search.js'
 import { SHORT_REASONS } from '../config.js'
@@ -37,6 +38,8 @@ export default function Stock({ branchId, branchName, isMain }) {
   return (
     <div className="page">
       {!isMain && <ReceiveDelivery branchId={branchId} today={today} />}
+      {/* The hub has no van to wait for; it has the kitchen's bake. */}
+      {isMain && <HubBake branchId={branchId} today={today} />}
       <OnTheShelf branchId={branchId} branchName={branchName} isMain={isMain} today={today} />
       <TomorrowsOrder branchId={branchId} businessDate={nextDate(today)} />
     </div>
@@ -561,6 +564,172 @@ function ReceiveDelivery({ branchId, today }) {
         </div>
       )}
     </>
+  )
+}
+
+/**
+ * The hub counter's side of the kitchen: is its bake ready, and counting it in.
+ *
+ * Always says where things stand rather than showing an empty space, for the
+ * same reason the delivery card does — a blank here reads as "nothing is
+ * coming", and a cashier who believes that stops asking the kitchen.
+ */
+function HubBake({ branchId, today }) {
+  const { profile } = useAuth()
+  const bake = useHubBake(branchId, today)
+  const products = useSnapshot(
+    () => query(collection(db, 'products'), where('active', '==', true)),
+    [],
+  )
+
+  if (bake.loading || products.loading) {
+    return (
+      <div className="card">
+        <h3>Bake</h3>
+        <Loading inline>Checking the kitchen…</Loading>
+      </div>
+    )
+  }
+
+  if (bake.error) {
+    return (
+      <div className="card">
+        <h3>Bake</h3>
+        <p className="muted small" style={{ margin: 0 }}>
+          The baking list could not be read on this till, so this is not a reliable answer. Ask the
+          kitchen before assuming nothing is ready.
+        </p>
+      </div>
+    )
+  }
+
+  if (bake.ready.length > 0) {
+    return bake.ready.map((day) => (
+      <HubBakeCard
+        key={day.businessDate}
+        day={day}
+        products={products.data ?? []}
+        branchId={branchId}
+        user={profile}
+      />
+    ))
+  }
+
+  return (
+    <div className="card">
+      <h3>Bake</h3>
+      <p className="muted small" style={{ margin: 0 }}>
+        {bakeLine(bake.days)}
+      </p>
+    </div>
+  )
+}
+
+/** One sentence on the most relevant day — tomorrow's bake if there is one. */
+function bakeLine(days) {
+  const [today, tomorrow] = days
+  const day = tomorrow.status !== 'none' ? tomorrow : today
+  const whose = day.when === 'tomorrow' ? "Tomorrow's" : "Today's"
+  switch (day.status) {
+    case 'baking':
+      return `The kitchen is still baking ${whose.toLowerCase()} list. It appears here the moment the baking list is marked done.`
+    case 'dispatching':
+      return `${whose} bake is done. It opens here once the vans for the other outlets have been sent — until then the kitchen can still move trays between shops.`
+    case 'counted':
+      return `${whose} bake was counted in by ${day.handover?.receivedByName || 'the counter'}.`
+    case 'nothing':
+      return `${whose} bake is done, and nothing from it was kept for this counter.`
+    default:
+      return 'No baking list for today or tomorrow yet. The bake appears here the moment the kitchen marks the list done.'
+  }
+}
+
+/**
+ * Count in what the kitchen handed over, the way a shop counts in its van.
+ *
+ * Pre-filled with what was made for this counter, so a normal morning is one
+ * tap. A line that does not match says so on the line, in the words that will
+ * be written down, and is booked as short or extra from the kitchen with the
+ * cashier's name — never as her waste.
+ */
+function HubBakeCard({ day, products, branchId, user }) {
+  const byId = new Map(products.map((p) => [p.id, p]))
+  const rows = Object.entries(day.share)
+    .map(([productId, made]) => ({ productId, made, product: byId.get(productId) }))
+    .sort((a, b) => byCode(a.product ?? {}, b.product ?? {}))
+
+  const [counted, setCounted] = useState(() =>
+    Object.fromEntries(rows.map((r) => [r.productId, r.made])),
+  )
+  const [busy, setBusy] = useState(false)
+  const changed = rows.filter((r) => counted[r.productId] !== r.made)
+
+  return (
+    <div className="card">
+      <div className="row between wrap">
+        <h2 style={{ margin: 0 }}>
+          {day.when === 'tomorrow' ? "Tomorrow's bake is ready" : "Today's bake is ready"}
+          <span className="muted"> · for {formatDate(day.businessDate)}</span>
+        </h2>
+      </div>
+      <p className="muted small">
+        Count what the kitchen handed over for this counter. Anything that does not match is written
+        down as short or extra from the kitchen, with your name — never as your waste.
+      </p>
+
+      <div className="bill" style={{ marginBottom: 14 }}>
+        <div className="bill-row bill-head">
+          <span>Code</span>
+          <span>Item</span>
+          <span>Counted</span>
+          <span className="bill-amount">Made</span>
+        </div>
+        {rows.map((r) => {
+          const diff = (counted[r.productId] ?? r.made) - r.made
+          const name = r.product?.name ?? r.productId
+          return (
+            <div className="bill-row" key={r.productId}>
+              <span className="bill-code">{r.product?.code ?? ''}</span>
+              <span>
+                <span className="bill-name">{name}</span>
+                {diff !== 0 && (
+                  <div className={`small ${diff < 0 ? 'bad' : 'muted'}`}>
+                    {diff < 0 ? `${-diff} short from the kitchen` : `${diff} extra from the kitchen`}
+                  </div>
+                )}
+              </span>
+              <Stepper
+                value={counted[r.productId]}
+                onChange={(v) => setCounted((c) => ({ ...c, [r.productId]: v }))}
+                label={`counted, ${name}`}
+                {...weighedProps(r.product)}
+              />
+              <span className="bill-amount">{r.made}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      <button
+        className="btn primary big block"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true)
+          recordHandover({
+            branchId,
+            businessDate: day.businessDate,
+            share: day.share,
+            counted,
+            products,
+            user,
+          })
+        }}
+      >
+        {changed.length === 0
+          ? 'Confirm all — everything came out'
+          : `Confirm — ${changed.length} line${changed.length > 1 ? 's' : ''} adjusted`}
+      </button>
+    </div>
   )
 }
 

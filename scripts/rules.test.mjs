@@ -1089,3 +1089,55 @@ test('asking for a correction sheet that does not exist yet is not an error', as
   // refuse it and bury the console in denials that look exactly like real ones.
   await assertSucceeds(getDoc(doc(as(CASHIER_MAIN), 'shelfAdjustments', 'ADJ-nothing-here')))
 })
+
+// --- the hub counter counting in its bake ------------------------------------
+
+const handoverFor = (branchId, receivedBy) => ({
+  ref: `H-13Sep-${branchId}`,
+  branchId,
+  businessDate: '2026-09-13',
+  items: [{ productId: 'bread-300', qtyMade: 30, qtyCounted: 27 }],
+  receivedBy,
+  receivedByName: 'Maya',
+})
+
+test('the hub cashier can count in the hub bake', async () => {
+  const db = as(CASHIER_MAIN)
+  await assertSucceeds(
+    setDoc(doc(db, 'bakeHandovers', 'H-20260913-MAIN'), handoverFor('MAIN', CASHIER_MAIN)),
+  )
+})
+
+test('a cashier cannot count in another outlet bake', async () => {
+  const db = as(CASHIER_B2)
+  await assertFails(
+    setDoc(doc(db, 'bakeHandovers', 'H-20260913-MAIN-x'), handoverFor('MAIN', CASHIER_B2)),
+  )
+})
+
+test('a count-in cannot be signed with someone else name', async () => {
+  const db = as(CASHIER_MAIN)
+  await assertFails(
+    setDoc(doc(db, 'bakeHandovers', 'H-20260913-MAIN-forged'), handoverFor('MAIN', OWNER)),
+  )
+})
+
+test('a count-in can never be rewritten or deleted', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'bakeHandovers', 'H-fixed'), handoverFor('MAIN', CASHIER_MAIN))
+  })
+  const db = as(CASHIER_MAIN)
+  // "Made 30, counted 27" must not quietly become "counted 30" once the three
+  // loaves have gone.
+  await assertFails(
+    setDoc(doc(db, 'bakeHandovers', 'H-fixed'), {
+      ...handoverFor('MAIN', CASHIER_MAIN),
+      items: [{ productId: 'bread-300', qtyMade: 30, qtyCounted: 30 }],
+    }),
+  )
+  await assertFails(deleteDoc(doc(as(OWNER), 'bakeHandovers', 'H-fixed')))
+})
+
+test('asking whether the bake has been counted in is not an error before it has', async () => {
+  await assertSucceeds(getDoc(doc(as(CASHIER_MAIN), 'bakeHandovers', 'H-not-yet')))
+})

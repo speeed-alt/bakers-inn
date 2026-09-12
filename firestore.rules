@@ -454,6 +454,28 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // --- The hub counter counting in its own bake --------------------------
+    //
+    // One per outlet per baking list, written once, by the person whose name is
+    // on it. No update: a count-in is a single act, and a record that could be
+    // rewritten afterwards would let the "made 50, counted 45" on it become
+    // "made 50, counted 50" once the five loaves had gone. Any difference was
+    // booked as a shelf correction in the same write, and those cannot be
+    // unsaid either — see shelfAdjustments above.
+    match /bakeHandovers/{handoverId} {
+      // Fetched by id before it exists, every day — see the note on closings.
+      allow get: if isOwner()
+                 || (active() && (resource == null || resource.data.branchId == myBranch()));
+      allow list: if isOwner();
+      allow list: if active() && resource.data.branchId == myBranch();
+
+      allow create: if staff()
+                    && canWriteBranch(request.resource.data.branchId)
+                    && request.resource.data.receivedBy == request.auth.uid;
+
+      allow update, delete: if false;
+    }
+
     // --- Faults reported by the tablets ------------------------------------
 
     match /clientErrors/{errorId} {

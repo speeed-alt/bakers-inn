@@ -48,6 +48,11 @@ export const PRACTICE_COLLECTIONS = new Set([
   'purchases',
   'stockMovements',
   'expenses',
+  // Both are read by id with the practice suffix already, so nothing leaks
+  // today. Listed so that any list query added later is split by mode too,
+  // rather than depending on every future reader remembering the suffix.
+  'shelfAdjustments',
+  'bakeHandovers',
 ])
 
 /** What this tablet has stored, or null. Never throws — storage can be gone. */
