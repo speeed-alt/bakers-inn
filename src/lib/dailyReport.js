@@ -1,5 +1,6 @@
 import { summariseDay } from './report.js'
 import { receivedAt } from './stock.js'
+import { byCode } from './order.js'
 
 // One outlet's day, closed off into a single record.
 //
@@ -112,7 +113,7 @@ export function buildDailyReport({
       row.unexplained = row.carriedIn + row.received - row.sold - row.wasted - row.returned - row.leftover
       return row
     })
-    .sort((a, b) => String(a.code).localeCompare(String(b.code)))
+    .sort(byCode)
 
   const variance = transfersIn.reduce(
     (acc, t) => {

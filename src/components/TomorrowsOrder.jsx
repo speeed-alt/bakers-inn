@@ -4,7 +4,7 @@ import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
 import { useAuth } from '../auth.jsx'
 import { formatDate, weekdayName } from '../lib/dates.js'
-import { byCategoryThenName } from '../lib/search.js'
+import { byCode } from '../lib/order.js'
 import { demandDoc, lastSameWeekdayDemand, saveDemand } from '../data/demands.js'
 import { branchReportsQuery } from '../data/reports.js'
 import { sameWeekdayReports, suggestOrder } from '../lib/suggest.js'
@@ -40,7 +40,7 @@ export default function TomorrowsOrder({ branchId, businessDate, bare = false, o
     }
   }, [branchId, businessDate])
 
-  const catalog = useMemo(() => [...(products.data ?? [])].sort(byCategoryThenName), [products.data])
+  const catalog = useMemo(() => [...(products.data ?? [])].sort(byCode), [products.data])
 
   // What the shop's own closing reports say this weekday usually needs.
   const suggestion = useMemo(

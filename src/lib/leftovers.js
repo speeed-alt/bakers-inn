@@ -4,6 +4,8 @@
 // what arrived and what sold, so it says what *should* be left and the cashier
 // only corrects the lines where reality disagrees.
 
+import { byCode } from './order.js'
+
 export const WASTE = 'waste'
 export const CARRY = 'carry'
 export const RETURN = 'return'
@@ -88,7 +90,7 @@ export function buildLeftovers({
         disposition: defaultDisposition(product),
       }
     })
-    .sort((a, b) => String(a.code).localeCompare(String(b.code)))
+    .sort(byCode)
 }
 
 /** Split the counted lines into what is binned, carried, and sent back. */

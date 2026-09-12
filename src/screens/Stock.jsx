@@ -26,6 +26,7 @@ import { findProducts } from '../lib/search.js'
 import { SHORT_REASONS } from '../config.js'
 import { Empty, Loading, Modal, Stepper } from '../components/ui.jsx'
 import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
+import { byCode } from '../lib/order.js'
 
 /**
  * The outlet's own two jobs: take in today's delivery, and order for tomorrow.
@@ -252,14 +253,6 @@ function OnTheShelf({ branchId, branchName, isMain, today }) {
       )}
     </div>
   )
-}
-
-/** Numeric where the codes are numbers, so 2 comes before 10 as on the sheet. */
-function byCode(a, b) {
-  const x = Number(a.code)
-  const y = Number(b.code)
-  if (Number.isFinite(x) && Number.isFinite(y) && x !== y) return x - y
-  return String(a.code ?? '').localeCompare(String(b.code ?? ''))
 }
 
 /**

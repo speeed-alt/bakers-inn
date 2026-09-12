@@ -14,8 +14,10 @@ const order = {
   },
 }
 
-test('extras are listed by name, so the dispatch screen reads in a stable order', () => {
-  assert.deepEqual(extrasList(order).map((e) => e.productName), ['Donut Small', 'Rusk'])
+test('extras are listed in code order, like every other list of items', () => {
+  // By name this read Donut Small (06) then Rusk (05). The owner asked for every
+  // list to follow the code sheet, so the dispatch screen does too.
+  assert.deepEqual(extrasList(order).map((e) => e.productName), ['Rusk', 'Donut Small'])
 })
 
 test('extras add up', () => {

@@ -17,7 +17,7 @@ import {
 } from '../data/production.js'
 import { demandsForDate } from '../data/demands.js'
 import { transfersFrom } from '../data/transfers.js'
-import { byCategoryThenName } from '../lib/search.js'
+import { byCode } from '../lib/order.js'
 import { Empty, Loading, Stepper } from '../components/ui.jsx'
 
 /**
@@ -439,7 +439,7 @@ function Extras({ order, today, user, products }) {
   // twice — otherwise the same bake would be counted in two places.
   const choices = products
     .filter((p) => p.active !== false && !onList.has(p.id))
-    .sort(byCategoryThenName)
+    .sort(byCode)
 
   async function add() {
     const product = choices.find((p) => p.id === productId)

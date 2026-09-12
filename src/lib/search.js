@@ -3,6 +3,8 @@
 // code win outright — a memorised code should never be beaten by a product that
 // happens to have those digits in its name.
 
+import { byCode } from './order.js'
+
 const RANK = {
   exactCode: 0,
   codePrefix: 1,
@@ -11,14 +13,10 @@ const RANK = {
   contains: 4,
 }
 
-export function byCategoryThenName(a, b) {
-  return (a.category ?? '').localeCompare(b.category ?? '') || a.name.localeCompare(b.name)
-}
-
 /** Ranked matches. An empty query lists everything, so the box doubles as the menu. */
 export function findProducts(products, queryText) {
   const q = String(queryText ?? '').trim().toLowerCase()
-  if (!q) return [...products].sort(byCategoryThenName)
+  if (!q) return [...products].sort(byCode)
 
   const hits = []
   for (const p of products) {
@@ -118,12 +116,7 @@ export function findChoices(products = [], queryText) {
 
   const q = String(queryText ?? '').trim().toLowerCase()
   if (!q) {
-    return all.sort(
-      (a, b) =>
-        (a.product.category ?? '').localeCompare(b.product.category ?? '') ||
-        String(a.product.name).localeCompare(String(b.product.name)) ||
-        a.index - b.index,
-    )
+    return all.sort((a, b) => byCode(a.product, b.product) || a.index - b.index)
   }
 
   const hits = []

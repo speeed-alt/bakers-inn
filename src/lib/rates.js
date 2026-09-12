@@ -18,6 +18,8 @@
 //      today charges yesterday's rather than refusing to sell — and the shop
 //      keeps trading while somebody is told about it.
 
+import { byCode } from './order.js'
+
 /** The price map out of a day's rate document. */
 export function ratesOf(rateDoc) {
   return rateDoc?.prices ?? {}
@@ -43,7 +45,7 @@ export function priceOf(product, prices = {}) {
 export function dailyRateProducts(products = []) {
   return products
     .filter((p) => p.dailyRate && p.active !== false)
-    .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
+    .sort(byCode)
 }
 
 /**

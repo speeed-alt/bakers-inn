@@ -12,6 +12,7 @@ import { committedOut } from './dispatch.js'
 import { buildLeftovers } from './leftovers.js'
 import { netAdjustments } from './adjustments.js'
 import { carryoverFrom } from './dailyReport.js'
+import { byCode } from './order.js'
 
 /**
  * What one outlet took in today.
@@ -289,7 +290,7 @@ export function byProduct(report) {
       worth: row.left * (row.price ?? 0),
       soldValue: row.sold * (row.price ?? 0),
     }))
-    .sort((a, b) => String(a.code).localeCompare(String(b.code)))
+    .sort(byCode)
 }
 
 /** Totals across every product, for the figures at the top of the report. */

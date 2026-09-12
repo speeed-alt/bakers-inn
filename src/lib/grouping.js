@@ -17,6 +17,8 @@
 // cakes went; it cannot say which. For same-price items in one category that is
 // usually a fair trade for a faster counter, but it is a trade.
 
+import { byCode } from './order.js'
+
 /** Two products belong together when the category and the price both match. */
 export function groupKey(product) {
   return `${product?.category ?? ''}::${product?.price ?? 0}`
@@ -51,9 +53,7 @@ export function mergeSuggestions(products = []) {
   return [...groups.values()]
     .filter((group) => group.members.length > 1)
     .map((group) => {
-      const members = [...group.members].sort((a, b) =>
-        String(a.code).localeCompare(String(b.code)),
-      )
+      const members = [...group.members].sort(byCode)
       return {
         ...group,
         members,

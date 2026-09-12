@@ -5,9 +5,8 @@
 // tested on its own, and so the same code runs in the scheduled job and in the
 // app when it needs to show what the compile would do.
 
-const byCodeThenName = (a, b) =>
-  String(a.code ?? '').localeCompare(String(b.code ?? '')) ||
-  String(a.productName ?? '').localeCompare(String(b.productName ?? ''))
+// In the order of the code sheet, numerically — see src/lib/order.js.
+import { byCode as byCodeThenName } from './order.js'
 
 const SUBMITTED = new Set(['submitted', 'locked'])
 
@@ -141,7 +140,7 @@ export function compileDemands({ branches = [], demands = [], fallbacks = {}, ex
 export function extrasList(order) {
   return Object.values(order?.extras ?? {})
     .filter((e) => (e?.qty ?? 0) > 0)
-    .sort((a, b) => (a.productName ?? '').localeCompare(b.productName ?? ''))
+    .sort(byCodeThenName)
 }
 
 export function extrasTotal(order) {

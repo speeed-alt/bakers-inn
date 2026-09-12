@@ -11,6 +11,7 @@ import { changeStaffPin, createStaff, updateStaff } from '../data/staff.js'
 import { isValidPin } from '../lib/pin.js'
 import { PAYMENT_METHODS } from '../config.js'
 import { Empty, Loading, Modal, Money } from '../components/ui.jsx'
+import { byCode } from '../lib/order.js'
 
 const TABS = ['Products', 'People', 'Outlets']
 
@@ -36,9 +37,7 @@ function Products() {
   const products = useSnapshot(() => collection(db, 'products'), [])
   const [editing, setEditing] = useState(null)
 
-  const list = [...(products.data ?? [])].sort(
-    (a, b) => (a.category ?? '').localeCompare(b.category ?? '') || a.name.localeCompare(b.name),
-  )
+  const list = [...(products.data ?? [])].sort(byCode)
 
   // An empty catalog and a catalog that has not arrived look identical, and the
   // wrong one of those invites somebody to start adding products that already
