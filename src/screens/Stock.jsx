@@ -4,7 +4,7 @@ import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
 import { useAuth } from '../auth.jsx'
 import { businessDateOf, formatDate, nextDate, previousDate } from '../lib/dates.js'
-import { receiveTransfer, transfersFrom } from '../data/transfers.js'
+import { receiveGoods, receiveTransfer, sendStock, transfersFrom } from '../data/transfers.js'
 import { pendingDeliveries, useArrivals } from '../data/arrivals.js'
 import { salesForDay } from '../data/sales.js'
 import { closingDoc } from '../data/closings.js'
@@ -20,10 +20,9 @@ import {
   recordAdjustment,
   recordAdjustments,
 } from '../data/adjustments.js'
-import { recordHandover, useHubBake } from '../data/handovers.js'
 import { weighedProps } from '../lib/quantity.js'
 import { findProducts } from '../lib/search.js'
-import { SHORT_REASONS } from '../config.js'
+import { SHORT_REASONS, WORKSHOP_NAME } from '../config.js'
 import { Empty, Loading, Modal, Stepper } from '../components/ui.jsx'
 import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
 import { byCode } from '../lib/order.js'
@@ -39,8 +38,10 @@ export default function Stock({ branchId, branchName, isMain }) {
   return (
     <div className="page">
       {!isMain && <ReceiveDelivery branchId={branchId} today={today} />}
-      {/* The hub has no van to wait for; it has the kitchen's bake. */}
-      {isMain && <HubBake branchId={branchId} today={today} />}
+      {/* Nothing is baked at a counter. The workshop makes everything and vans
+          it here; this outlet counts it in and sends the other shops what they
+          need from the shelf below. */}
+      {isMain && <GoodsIn branchId={branchId} today={today} />}
       <OnTheShelf branchId={branchId} branchName={branchName} isMain={isMain} today={today} />
       <TomorrowsOrder branchId={branchId} businessDate={nextDate(today)} />
     </div>
@@ -72,6 +73,8 @@ function OnTheShelf({ branchId, branchName, isMain, today }) {
   // count began. See `countBaseline` for why sales are frozen there and nothing
   // else is.
   const [counting, setCounting] = useState(null)
+  // The shelf line a crate is being sent from, or null.
+  const [sending, setSending] = useState(null)
 
   const products = useSnapshot(
     () => query(collection(db, 'products'), where('active', '==', true)),
@@ -87,6 +90,10 @@ function OnTheShelf({ branchId, branchName, isMain, today }) {
   const production = useSnapshot(() => productionDoc(today), [today])
   const outbound = useSnapshot(() => transfersFrom(branchId, today), [branchId, today])
   const corrections = useSnapshot(() => adjustmentDoc(branchId, today), [branchId, today])
+  // Where a crate can be sent. Read here rather than in the dialogue so the
+  // list is ready the moment it opens — an outlet picker that appears empty for
+  // a second is an outlet picker somebody taps twice.
+  const branches = useSnapshot(() => collection(db, 'branches'), [])
 
   const loading =
     products.loading || sales.loading || previous.loading || arrivals.loading ||
@@ -181,6 +188,15 @@ function OnTheShelf({ branchId, branchName, isMain, today }) {
                   <span className="muted">{line.sold}</span>
                   <span className="bill-amount">
                     {line.expected}
+                    {line.expected > 0 && (
+                      <button
+                        className="btn ghost small"
+                        style={{ marginLeft: 8 }}
+                        onClick={() => setSending(line)}
+                      >
+                        Send
+                      </button>
+                    )}
                     <button
                       className="btn ghost small"
                       style={{ marginLeft: 8 }}
@@ -237,6 +253,17 @@ function OnTheShelf({ branchId, branchName, isMain, today }) {
             ))}
           </div>
         </div>
+      )}
+
+      {sending && (
+        <SendStock
+          line={sending}
+          branches={(branches.data ?? []).filter((b) => b.id !== branchId)}
+          branchId={branchId}
+          today={today}
+          user={profile}
+          onClose={() => setSending(null)}
+        />
       )}
 
       {correcting && (
@@ -561,168 +588,212 @@ function ReceiveDelivery({ branchId, today }) {
 }
 
 /**
- * The hub counter's side of the kitchen: is its bake ready, and counting it in.
+ * Counting in what the workshop sent over.
  *
- * Always says where things stand rather than showing an empty space, for the
- * same reason the delivery card does — a blank here reads as "nothing is
- * coming", and a cashier who believes that stops asking the kitchen.
+ * The shop used to learn what it had from a baking list compiled out of three
+ * outlets' orders. There is no kitchen here now: a van arrives, somebody counts
+ * what is in it, and that is the whole of it. So this asks for exactly that —
+ * find the item, say how many — and writes an ordinary incoming note already
+ * marked received, which every other screen already knows how to read.
+ *
+ * Nothing is pre-filled, because there is nothing to pre-fill it from. What
+ * arrives is whatever the workshop put on the van.
  */
-function HubBake({ branchId, today }) {
+function GoodsIn({ branchId, today }) {
   const { profile } = useAuth()
-  const bake = useHubBake(branchId, today)
   const products = useSnapshot(
     () => query(collection(db, 'products'), where('active', '==', true)),
     [],
   )
-
-  if (bake.loading || products.loading) {
-    return (
-      <div className="card">
-        <h3>Bake</h3>
-        <Loading inline>Checking the kitchen…</Loading>
-      </div>
-    )
-  }
-
-  if (bake.error) {
-    return (
-      <div className="card">
-        <h3>Bake</h3>
-        <p className="muted small" style={{ margin: 0 }}>
-          The baking list could not be read on this till, so this is not a reliable answer. Ask the
-          kitchen before assuming nothing is ready.
-        </p>
-      </div>
-    )
-  }
-
-  if (bake.ready.length > 0) {
-    return bake.ready.map((day) => (
-      <HubBakeCard
-        key={day.businessDate}
-        day={day}
-        products={products.data ?? []}
-        branchId={branchId}
-        user={profile}
-      />
-    ))
-  }
-
-  return (
-    <div className="card">
-      <h3>Bake</h3>
-      <p className="muted small" style={{ margin: 0 }}>
-        {bakeLine(bake.days)}
-      </p>
-    </div>
-  )
-}
-
-/** One sentence on the most relevant day — tomorrow's bake if there is one. */
-function bakeLine(days) {
-  const [today, tomorrow] = days
-  const day = tomorrow.status !== 'none' ? tomorrow : today
-  const whose = day.when === 'tomorrow' ? "Tomorrow's" : "Today's"
-  switch (day.status) {
-    case 'baking':
-      return `The kitchen is still baking ${whose.toLowerCase()} list. It appears here the moment the baking list is marked done.`
-    case 'dispatching':
-      return `${whose} bake is done. It opens here once the vans for the other outlets have been sent — until then the kitchen can still move trays between shops.`
-    case 'counted':
-      return `${whose} bake was counted in by ${day.handover?.receivedByName || 'the counter'}.`
-    case 'nothing':
-      return `${whose} bake is done, and nothing from it was kept for this counter.`
-    default:
-      return 'No baking list for today or tomorrow yet. The bake appears here the moment the kitchen marks the list done.'
-  }
-}
-
-/**
- * Count in what the kitchen handed over, the way a shop counts in its van.
- *
- * Pre-filled with what was made for this counter, so a normal morning is one
- * tap. A line that does not match says so on the line, in the words that will
- * be written down, and is booked as short or extra from the kitchen with the
- * cashier's name — never as her waste.
- */
-function HubBakeCard({ day, products, branchId, user }) {
-  const byId = new Map(products.map((p) => [p.id, p]))
-  const rows = Object.entries(day.share)
-    .map(([productId, made]) => ({ productId, made, product: byId.get(productId) }))
-    .sort((a, b) => byCode(a.product ?? {}, b.product ?? {}))
-
-  const [counted, setCounted] = useState(() =>
-    Object.fromEntries(rows.map((r) => [r.productId, r.made])),
-  )
+  const [text, setText] = useState('')
+  const [lines, setLines] = useState([])
   const [busy, setBusy] = useState(false)
-  const changed = rows.filter((r) => counted[r.productId] !== r.made)
+  const [done, setDone] = useState(0)
+
+  const typed = text.trim()
+  const chosen = new Set(lines.map((l) => l.productId))
+  const matches = findProducts(products.data ?? [], text)
+    .filter((p) => !chosen.has(p.id))
+    .slice(0, 6)
+
+  function add(product) {
+    setLines((cur) => [
+      ...cur,
+      { productId: product.id, code: product.code ?? '', productName: product.name, qty: 1, product },
+    ])
+    setText('')
+  }
+
+  const total = lines.reduce((sum, l) => sum + l.qty, 0)
 
   return (
     <div className="card">
       <div className="row between wrap">
-        <h2 style={{ margin: 0 }}>
-          {day.when === 'tomorrow' ? "Tomorrow's bake is ready" : "Today's bake is ready"}
-          <span className="muted"> · for {formatDate(day.businessDate)}</span>
-        </h2>
+        <h3 style={{ margin: 0 }}>Goods in from {WORKSHOP_NAME}</h3>
+        {done > 0 && lines.length === 0 && (
+          <span className="muted small">{done} counted in so far today</span>
+        )}
       </div>
       <p className="muted small">
-        Count what the kitchen handed over for this counter. Anything that does not match is written
-        down as short or extra from the kitchen, with your name — never as your waste.
+        Count what came off the van and add it here. It goes on the shelf the moment you save, under
+        your name — nothing else puts stock on this shelf.
       </p>
 
-      <div className="bill" style={{ marginBottom: 14 }}>
-        <div className="bill-row bill-head">
-          <span>Code</span>
-          <span>Item</span>
-          <span>Counted</span>
-          <span className="bill-amount">Made</span>
-        </div>
-        {rows.map((r) => {
-          const diff = (counted[r.productId] ?? r.made) - r.made
-          const name = r.product?.name ?? r.productId
-          return (
-            <div className="bill-row" key={r.productId}>
-              <span className="bill-code">{r.product?.code ?? ''}</span>
-              <span>
-                <span className="bill-name">{name}</span>
-                {diff !== 0 && (
-                  <div className={`small ${diff < 0 ? 'bad' : 'muted'}`}>
-                    {diff < 0 ? `${-diff} short from the kitchen` : `${diff} extra from the kitchen`}
-                  </div>
-                )}
-              </span>
+      {lines.length > 0 && (
+        <div className="bill" style={{ marginBottom: 12 }}>
+          <div className="bill-row bill-head">
+            <span>Code</span>
+            <span>Item</span>
+            <span>Count</span>
+            <span className="bill-amount" />
+          </div>
+          {lines.map((line, i) => (
+            <div className="bill-row" key={line.productId}>
+              <span className="bill-code">{line.code}</span>
+              <span className="bill-name">{line.productName}</span>
               <Stepper
-                value={counted[r.productId]}
-                onChange={(v) => setCounted((c) => ({ ...c, [r.productId]: v }))}
-                label={`counted, ${name}`}
-                {...weighedProps(r.product)}
+                value={line.qty}
+                onChange={(v) =>
+                  setLines((cur) => cur.map((l, j) => (j === i ? { ...l, qty: v } : l)))
+                }
+                label={`count, ${line.productName}`}
+                {...weighedProps(line.product)}
               />
-              <span className="bill-amount">{r.made}</span>
+              <span className="bill-amount">
+                <button
+                  className="btn ghost small"
+                  onClick={() => setLines((cur) => cur.filter((_, j) => j !== i))}
+                >
+                  Remove
+                </button>
+              </span>
             </div>
-          )
-        })}
+          ))}
+        </div>
+      )}
+
+      <div className="field">
+        <input
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Find an item by code or name"
+          aria-label="Find an item that arrived"
+        />
+      </div>
+
+      {typed && (
+        <div className="bill" style={{ marginBottom: 12 }}>
+          {matches.map((p) => (
+            <button className="result" key={p.id} onClick={() => add(p)}>
+              <span className="result-code">{p.code}</span>
+              <span className="result-name">{p.name}</span>
+              <span className="result-price">add</span>
+            </button>
+          ))}
+          {matches.length === 0 && (
+            <div style={{ padding: '4px 2px' }}>
+              <Empty>Nothing matches "{typed}"</Empty>
+              <p className="muted small" style={{ margin: 0 }}>
+                If the workshop has sent something new, add it on the Items tab first.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      <button
+        className="btn primary big block"
+        disabled={busy || lines.length === 0}
+        onClick={() => {
+          setBusy(true)
+          receiveGoods({ branchId, businessDate: today, items: lines, user: profile })
+          setDone((n) => n + total)
+          setLines([])
+          setBusy(false)
+        }}
+      >
+        {lines.length === 0
+          ? 'Nothing counted yet'
+          : `Count in ${total} item${total === 1 ? '' : 's'} on ${lines.length} line${lines.length === 1 ? '' : 's'}`}
+      </button>
+    </div>
+  )
+}
+
+/**
+ * Send a crate of one item on to another outlet.
+ *
+ * It leaves this shelf the moment it is saved, because it has: the crate is on
+ * its way. It stays waiting to be counted in at the far end rather than being
+ * marked as arrived, which is the honest state while the other outlets have no
+ * till — the goods are neither here nor on their shelf, and the note says so.
+ */
+function SendStock({ line, branches, branchId, today, user, onClose }) {
+  const [toBranchId, setToBranchId] = useState(branches.length === 1 ? branches[0].id : null)
+  const [qty, setQty] = useState(1)
+  const [busy, setBusy] = useState(false)
+  const where = branches.find((b) => b.id === toBranchId)
+
+  return (
+    <Modal title={`Send ${line.productName}`} onClose={onClose}>
+      <p className="muted small">
+        There {line.expected === 1 ? 'is' : 'are'} <b>{line.expected}</b> on this shelf. What is sent
+        comes off it straight away, and waits to be counted in at the other end.
+      </p>
+
+      <div className="field">
+        <label>Where is it going?</label>
+        <div className="row wrap" style={{ gap: 8 }}>
+          {branches.map((b) => (
+            <button
+              key={b.id}
+              className={`chip ${toBranchId === b.id ? 'on' : ''}`}
+              onClick={() => setToBranchId(b.id)}
+            >
+              {b.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="field">
+        <label>How many?</label>
+        <Stepper
+          value={qty}
+          onChange={setQty}
+          label="how many to send"
+          min={1}
+          max={line.expected}
+          {...weighedProps(line)}
+        />
       </div>
 
       <button
         className="btn primary big block"
-        disabled={busy}
+        disabled={busy || !toBranchId || qty < 1}
         onClick={() => {
           setBusy(true)
-          recordHandover({
-            branchId,
-            businessDate: day.businessDate,
-            share: day.share,
-            counted,
-            products,
+          sendStock({
+            fromBranch: branchId,
+            toBranchId,
+            businessDate: today,
+            items: [
+              {
+                productId: line.productId,
+                code: line.code,
+                productName: line.productName,
+                qty,
+              },
+            ],
             user,
           })
+          onClose()
         }}
       >
-        {changed.length === 0
-          ? 'Confirm all — everything came out'
-          : `Confirm — ${changed.length} line${changed.length > 1 ? 's' : ''} adjusted`}
+        {toBranchId ? `Send ${qty} to ${where?.name ?? toBranchId}` : 'Pick where it is going'}
       </button>
-    </div>
+    </Modal>
   )
 }
 

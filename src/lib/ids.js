@@ -202,6 +202,40 @@ export function reportRef(businessDate, branchId) {
   return `R-${shortDate(businessDate)}-${branchId}`
 }
 
+/**
+ * Goods arriving from the workshop, and stock sent on to another outlet.
+ *
+ * Both can happen many times in a day — three vans before lunch, a crate to
+ * Gulberg at four — so unlike the one-per-day records these carry the time and
+ * the till's own token. That makes a retry after a flaky line land on the same
+ * document instead of counting the same crate twice, while two genuine arrivals
+ * a minute apart stay separate.
+ */
+export function goodsInDocId(businessDate, branchId, at = new Date(), install = installId(), practising = isPractising()) {
+  const tail = install ? `-${install}` : ''
+  return forMode(`IN-${compactDate(businessDate)}-${branchId}-${clockPart(at)}${tail}`, practising)
+}
+
+export function goodsInRef(businessDate, branchId, at = new Date()) {
+  return `IN-${shortDate(businessDate)}-${branchId}-${clockPart(at)}`
+}
+
+export function sendDocId(businessDate, toBranchId, at = new Date(), install = installId(), practising = isPractising()) {
+  const tail = install ? `-${install}` : ''
+  return forMode(`T-${compactDate(businessDate)}-${toBranchId}-${clockPart(at)}${tail}`, practising)
+}
+
+export function sendRef(businessDate, toBranchId, at = new Date()) {
+  return `T-${shortDate(businessDate)}-${toBranchId}-${clockPart(at)}`
+}
+
+/** Hours, minutes and seconds, for ids that can repeat within a day. */
+function clockPart(at) {
+  return [at.getHours(), at.getMinutes(), at.getSeconds()]
+    .map((n) => String(n).padStart(2, '0'))
+    .join('')
+}
+
 export function transferRef(businessDate, branchId, seq = 1) {
   const suffix = seq === 1 ? '' : `-${seq}`
   return `T-${shortDate(businessDate)}-${branchId}${suffix}`

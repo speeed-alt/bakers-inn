@@ -10,7 +10,6 @@ import { installUpdate, useUpdateWaiting } from './lib/updates.js'
 import { Loading } from './components/ui.jsx'
 import { goLive, isPractising } from './lib/practice.js'
 import { pendingDeliveries, useArrivals } from './data/arrivals.js'
-import { useHubBake } from './data/handovers.js'
 import { NotInPractice } from './components/PracticeCard.jsx'
 import Setup from './screens/Setup.jsx'
 import Login from './screens/Login.jsx'
@@ -18,9 +17,7 @@ import Sell from './screens/Sell.jsx'
 import CloseDay from './screens/CloseDay.jsx'
 import Catalog from './screens/Catalog.jsx'
 import Dashboard from './screens/Dashboard.jsx'
-import Bake from './screens/Bake.jsx'
 import Stock from './screens/Stock.jsx'
-import Dispatch from './screens/Dispatch.jsx'
 import Materials from './screens/Materials.jsx'
 import StockReport from './screens/StockReport.jsx'
 import MoneyScreen from './screens/Money.jsx'
@@ -64,15 +61,24 @@ const NAV = {
   cashier: [
     { to: '/sell', label: 'Sell' },
     { to: '/stock', label: 'Stock' },
+    // The counter adds items as they arrive from the workshop, so the catalogue
+    // is no longer the owner's alone. Called Items here: "catalogue" is the
+    // owner's word for it, and the tab is two taps from a queue.
+    { to: '/catalog', label: 'Items' },
     { to: '/close', label: 'Close day' },
   ],
+  // The kitchen used to have its own two screens. Nothing is baked at a counter
+  // any more — the workshop makes it and the main outlet counts it in — so a
+  // specialist now works the counter like anyone else.
   specialist: [
-    { to: '/bake', label: 'Bake' },
-    { to: '/dispatch', label: 'Dispatch' },
+    { to: '/sell', label: 'Sell' },
+    { to: '/stock', label: 'Stock' },
+    { to: '/catalog', label: 'Items' },
+    { to: '/close', label: 'Close day' },
   ],
 }
 
-const HOME = { owner: '/dashboard', cashier: '/sell', specialist: '/bake' }
+const HOME = { owner: '/dashboard', cashier: '/sell', specialist: '/sell' }
 
 // Who may open what. The security rules are the real gate — this only stops a
 // screen loading that would show nothing but denied reads, which reads as a
@@ -81,10 +87,8 @@ const ALLOWED = {
   '/sell': ['owner', 'cashier'],
   '/stock': ['owner', 'cashier'],
   '/close': ['owner', 'cashier'],
-  '/bake': ['owner', 'specialist'],
-  '/dispatch': ['owner', 'specialist'],
   '/dashboard': ['owner'],
-  '/catalog': ['owner'],
+  '/catalog': ['owner', 'cashier', 'specialist'],
   '/materials': ['owner'],
   '/stock-report': ['owner'],
   '/money': ['owner'],
@@ -225,13 +229,7 @@ export default function App() {
   const arrivals = useArrivals(watching)
   const waiting = pendingDeliveries(arrivals.data)
 
-  // And the hub's own bake, which never comes on a van and so never raised the
-  // notice above: the kitchen finished tomorrow's bread and the hub's cashier
-  // was the one person in the business not told. Cashier at the hub only — the
-  // kitchen already knows its own bake is done. See src/lib/handover.js.
-  const hubWatching = profile?.role === 'cashier' && branch.data?.isMain ? branchId : null
-  const bakeWaiting = useHubBake(hubWatching).ready
-  const toCountIn = waiting.length + bakeWaiting.length
+  const toCountIn = waiting.length
 
   if (loading) return stalled ? <StartupTrouble /> : <Loading />
   if (!branchId) return <Setup onDone={setBranchId} />
@@ -355,17 +353,6 @@ export default function App() {
         </div>
       )}
 
-      {bakeWaiting.length > 0 && (
-        <div className="strip block no-print">
-          <b>
-            {bakeWaiting.some((d) => d.when === 'tomorrow')
-              ? "Tomorrow's bake is ready."
-              : "Today's bake is ready."}
-          </b>{' '}
-          Count what the kitchen handed over on the Stock tab before it goes on the shelf.
-        </div>
-      )}
-
       {practising && (
         <div className="strip block no-print">
           <span style={{ fontWeight: 600 }}>PRACTICE — nothing here is real.</span>{' '}
@@ -458,14 +445,6 @@ export default function App() {
             }
           />
           <Route
-            path="/bake"
-            element={
-              <Only path="/bake" role={profile.role}>
-                <Bake />
-              </Only>
-            }
-          />
-          <Route
             path="/stock"
             element={
               <Only path="/stock" role={profile.role}>
@@ -498,14 +477,6 @@ export default function App() {
             element={
               <Only path="/money" role={profile.role}>
                 {practising ? <NotInPractice what="The money screen" /> : <MoneyScreen />}
-              </Only>
-            }
-          />
-          <Route
-            path="/dispatch"
-            element={
-              <Only path="/dispatch" role={profile.role}>
-                <Dispatch branchId={branchId} />
               </Only>
             }
           />

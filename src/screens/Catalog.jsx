@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { collection } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { useSnapshot } from '../lib/hooks.js'
+import { useAuth } from '../auth.jsx'
 import { formatMoney, parseMoney } from '../lib/money.js'
 import { DEFAULT_WEIGHT_UNIT } from '../lib/quantity.js'
 import { mergeSuggestions, planMerge } from '../lib/grouping.js'
@@ -15,12 +16,19 @@ import { byCode } from '../lib/order.js'
 
 const TABS = ['Products', 'People', 'Outlets']
 
+// The counter builds the catalogue now, so this screen is no longer the owners
+// alone. People and outlets stay his: the rules refuse those writes to anyone
+// else, and a tab that can only end in a refusal is worse than no tab.
+const STAFF_TABS = ['Products']
+
 export default function Catalog() {
+  const { profile } = useAuth()
+  const tabs = profile?.role === 'owner' ? TABS : STAFF_TABS
   const [tab, setTab] = useState('Products')
   return (
     <div className="page">
       <div className="row wrap" style={{ marginBottom: 16 }}>
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button key={t} className={`chip ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>
             {t}
           </button>

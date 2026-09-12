@@ -82,7 +82,17 @@ service cloud.firestore {
 
     match /products/{productId} {
       allow read: if signedIn();
-      allow create, update: if isOwner();
+
+      // Staff, not only the owner.
+      //
+      // The shop adds items at the counter as they arrive from the workshop —
+      // the owner asked for that on 2026-09-12 — and an item nobody can add
+      // until he is standing there is an item sold off a scrap of paper. The
+      // cost is real and worth stating: a cashier can now change a price, and
+      // every sale after that is rung at it. Nothing is deleted, a price change
+      // reaches the owner's screens immediately, and past sales keep the price
+      // they were actually rung at.
+      allow create, update: if staff();
       allow delete: if false;
     }
 
@@ -297,6 +307,27 @@ service cloud.firestore {
       // standing in. Closing Gulberg's day on Gulberg's tablet, his return was
       // refused, and the close wizard sends the return as part of the same act
       // as counting the drawer.
+      // Goods arriving from the workshop, counted at the counter. Written
+      // already received, because that is what it is — nobody at the workshop
+      // signs in to dispatch it, and stock that exists in the room but not in
+      // the system is the thing this whole screen is for.
+      allow create: if staff()
+                    && request.resource.data.direction == 'in'
+                    && canWriteBranch(request.resource.data.toBranchId)
+                    && request.resource.data.status == 'received'
+                    && request.resource.data.receivedBy == request.auth.uid
+                    && request.resource.data.businessDate is string;
+
+      // Stock sent on to another outlet from the Stock screen, one item at a
+      // time. Dispatched the moment it is written — the crate has left — and
+      // waiting to be counted in at the far end.
+      allow create: if staff()
+                    && request.resource.data.direction == 'out'
+                    && canWriteBranch(request.resource.data.fromBranch)
+                    && request.resource.data.status == 'dispatched'
+                    && request.resource.data.dispatchedBy == request.auth.uid
+                    && request.resource.data.businessDate is string;
+
       allow create: if staff()
                     && request.resource.data.direction == 'return'
                     && canWriteBranch(request.resource.data.fromBranch)

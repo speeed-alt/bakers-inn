@@ -1,9 +1,16 @@
 import { collection, doc, query, setDoc, Timestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '../firebase.js'
 import { fireAndForget } from './errors.js'
-import { transferDocId, transferRef } from '../lib/ids.js'
+import {
+  goodsInDocId,
+  goodsInRef,
+  sendDocId,
+  sendRef,
+  transferDocId,
+  transferRef,
+} from '../lib/ids.js'
 import { businessDateOf } from '../lib/dates.js'
-import { HUB_BRANCH_ID } from '../config.js'
+import { HUB_BRANCH_ID, WORKSHOP_ID } from '../config.js'
 import { practiceStamp } from '../lib/practice.js'
 import { dispatchedItems, receivedItems } from '../lib/dispatch.js'
 
@@ -164,4 +171,97 @@ export function sendReturn({ fromBranch, businessDate, items, user, toBranch = H
 
   fireAndForget(setDoc(transferDoc(id), record, { merge: true }), `return ${record.ref}`)
   return record
+}
+
+/**
+ * Goods arriving from the workshop, counted at the counter.
+ *
+ * Written as an ordinary incoming note that is already `received`, because that
+ * is exactly what it is: somebody stood at the counter, counted the crates, and
+ * the stock is here. There is no dispatch step to wait for — nobody at the
+ * workshop signs in — so a note in any other state would be stock that exists in
+ * the room and not in the system.
+ *
+ * That also means every screen already handles it. `receivedAt` counts incoming
+ * notes marked received on the day they were taken in, so the shelf, the till's
+ * warning, the close and the owner's report all see the goods without a line of
+ * new arithmetic.
+ */
+export function receiveGoods({ branchId, businessDate, items = [], user, at = new Date() }) {
+  const lines = items
+    .filter((item) => (item.qty ?? 0) > 0)
+    .map((item) => ({
+      productId: item.productId,
+      code: item.code ?? '',
+      productName: item.productName ?? '',
+      // Both figures, as on any other note. Nobody sent these — the workshop
+      // writes no paperwork — so what was counted is also what was "sent", and
+      // the pair keeps the shape every other screen reads.
+      qtySent: item.qty,
+      qtyReceived: item.qty,
+    }))
+  if (lines.length === 0) return 0
+
+  fireAndForget(
+    setDoc(transferDoc(goodsInDocId(businessDate, branchId, at)), {
+      ...practiceStamp(),
+      ref: goodsInRef(businessDate, branchId, at),
+      businessDate,
+      // The day the goods were actually taken in, which is what the shelf counts
+      // by — see the long note on `receivedOn` in receiveTransfer.
+      receivedOn: businessDate,
+      fromBranch: WORKSHOP_ID,
+      toBranchId: branchId,
+      direction: 'in',
+      status: 'received',
+      items: lines,
+      receivedBy: user?.id ?? '',
+      receivedByName: user?.name ?? '',
+      receivedAt: Timestamp.fromDate(at),
+    }),
+    `goods in at ${branchId}`,
+  )
+  return lines.length
+}
+
+/**
+ * Stock sent on to another outlet, one item at a time from the Stock screen.
+ *
+ * Dispatched the moment it is written: the crate has left this counter, so it
+ * leaves this counter's shelf. It stays waiting to be counted in at the far end,
+ * which is the honest state while the other two outlets have no till — the
+ * goods are neither here nor on their shelf, and the note says so rather than
+ * pretending somebody confirmed them.
+ */
+export function sendStock({ fromBranch, toBranchId, businessDate, items = [], user, at = new Date() }) {
+  const lines = items
+    .filter((item) => (item.qty ?? 0) > 0)
+    .map((item) => ({
+      productId: item.productId,
+      code: item.code ?? '',
+      productName: item.productName ?? '',
+      // Nobody ordered it — this is the counter deciding what to send — so the
+      // demanded figure is zero and the sent figure is the whole of the story.
+      qtyDemanded: 0,
+      qtySent: item.qty,
+    }))
+  if (lines.length === 0) return 0
+
+  fireAndForget(
+    setDoc(transferDoc(sendDocId(businessDate, toBranchId, at)), {
+      ...practiceStamp(),
+      ref: sendRef(businessDate, toBranchId, at),
+      businessDate,
+      fromBranch,
+      toBranchId,
+      direction: 'out',
+      status: 'dispatched',
+      items: lines,
+      dispatchedBy: user?.id ?? '',
+      dispatchedByName: user?.name ?? '',
+      dispatchedAt: Timestamp.fromDate(at),
+    }),
+    `stock sent from ${fromBranch} to ${toBranchId}`,
+  )
+  return lines.length
 }

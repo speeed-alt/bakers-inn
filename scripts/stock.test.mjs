@@ -276,10 +276,22 @@ test('stock that only moved between outlets is not counted as more to sell', () 
   // twelve rusks, not twenty-four. The row is the group's whole story, so both
   // ends of that journey are in it, and adding them both would tell the owner
   // his bakery had more to sell than it ever made.
+  //
+  // The chain starts at the workshop now. Stock used to appear at the hub out
+  // of the baking list, so this began mid-journey with twelve rusks at Susan
+  // Road that had never arrived anywhere. Nothing makes stock but a counted
+  // arrival, and a crate leaving an outlet now comes off its shelf whichever
+  // direction it is going — so without the first link the twelve would be sent
+  // from a shelf that never held them, and the report would net to nothing.
   const report = stockReport({
     products,
     branches,
     transfers: [
+      {
+        fromBranch: 'WORKSHOP', toBranchId: 'MAIN', businessDate: '2026-08-12',
+        receivedOn: '2026-08-12', direction: 'in', status: 'received',
+        items: [{ productId: 'rusk', qtySent: 12, qtyReceived: 12 }],
+      },
       {
         fromBranch: 'MAIN', toBranchId: 'B2', businessDate: '2026-08-12',
         receivedOn: '2026-08-12', status: 'received',

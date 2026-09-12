@@ -166,10 +166,19 @@ test('nobody can delete a sale — not even the owner', async () => {
   await assertFails(deleteDoc(doc(as(OWNER), 'sales', 'existing')))
 })
 
-test('only the owner may change the catalog', async () => {
-  await assertFails(setDoc(doc(as(CASHIER_MAIN), 'products', 'p2'), { name: 'X', price: 100, active: true }))
-  await assertFails(setDoc(doc(as(SPECIALIST), 'products', 'p2'), { name: 'X', price: 100, active: true }))
-  await assertSucceeds(setDoc(doc(as(OWNER), 'products', 'p2'), { name: 'X', price: 100, active: true }))
+test('staff may add and change items, because the counter builds the catalogue', async () => {
+  // This was the owner alone until 2026-09-12. The goods arrive from the
+  // workshop and are counted in at the counter, so an item nobody can add until
+  // he is standing there is an item sold off a scrap of paper. The cost is that
+  // a cashier can change a price — visible on his screens immediately, and past
+  // sales keep the price they were rung at.
+  await assertSucceeds(setDoc(doc(as(CASHIER_MAIN), 'products', 'p2'), { name: 'X', price: 100, active: true }))
+  await assertSucceeds(setDoc(doc(as(SPECIALIST), 'products', 'p3'), { name: 'Y', price: 100, active: true }))
+  await assertSucceeds(setDoc(doc(as(OWNER), 'products', 'p4'), { name: 'Z', price: 100, active: true }))
+})
+
+test('a turned-off account still cannot touch the catalogue', async () => {
+  await assertFails(setDoc(doc(as('u-gone'), 'products', 'p5'), { name: 'X', price: 100, active: true }))
 })
 
 test('a product can never be deleted, only archived', async () => {
@@ -1140,4 +1149,65 @@ test('a count-in can never be rewritten or deleted', async () => {
 
 test('asking whether the bake has been counted in is not an error before it has', async () => {
   await assertSucceeds(getDoc(doc(as(CASHIER_MAIN), 'bakeHandovers', 'H-not-yet')))
+})
+
+// --- goods in from the workshop, and stock sent on ---------------------------
+
+const goodsIn = (branchId, receivedBy) => ({
+  ref: `IN-12Sep-${branchId}-0930`,
+  businessDate: '2026-09-12',
+  receivedOn: '2026-09-12',
+  fromBranch: 'WORKSHOP',
+  toBranchId: branchId,
+  direction: 'in',
+  status: 'received',
+  items: [{ productId: 'bread', qtySent: 40, qtyReceived: 40 }],
+  receivedBy,
+  receivedByName: 'Maya',
+})
+
+test('a counter can count in goods from the workshop', async () => {
+  await assertSucceeds(setDoc(doc(as(CASHIER_MAIN), 'transfers', 'IN-own'), goodsIn('MAIN', CASHIER_MAIN)))
+})
+
+test('a counter cannot count goods in for another outlet', async () => {
+  await assertFails(setDoc(doc(as(CASHIER_MAIN), 'transfers', 'IN-other'), goodsIn('B2', CASHIER_MAIN)))
+})
+
+test('a count-in must be signed by whoever is doing it', async () => {
+  await assertFails(setDoc(doc(as(CASHIER_MAIN), 'transfers', 'IN-forged'), goodsIn('MAIN', OWNER)))
+})
+
+const sendOut = (fromBranch, dispatchedBy, over = {}) => ({
+  ref: 'T-12Sep-B2-1015',
+  businessDate: '2026-09-12',
+  fromBranch,
+  toBranchId: 'B2',
+  direction: 'out',
+  status: 'dispatched',
+  items: [{ productId: 'bread', qtyDemanded: 0, qtySent: 10 }],
+  dispatchedBy,
+  dispatchedByName: 'Maya',
+  ...over,
+})
+
+test('a counter can send stock on to another outlet', async () => {
+  await assertSucceeds(setDoc(doc(as(CASHIER_MAIN), 'transfers', 'OUT-own'), sendOut('MAIN', CASHIER_MAIN)))
+})
+
+test('a counter cannot send stock out of an outlet it does not work at', async () => {
+  await assertFails(setDoc(doc(as(CASHIER_B2), 'transfers', 'OUT-other'), sendOut('MAIN', CASHIER_B2)))
+})
+
+test('stock cannot be sent under another persons name', async () => {
+  await assertFails(setDoc(doc(as(CASHIER_MAIN), 'transfers', 'OUT-forged'), sendOut('MAIN', OWNER)))
+})
+
+test('a note cannot be written as already arrived at the far end', async () => {
+  // The crate is on its way and nobody there has counted it. Writing it as
+  // received would put stock on a shelf no person has seen — which is exactly
+  // what the outlets without a till must not have.
+  await assertFails(
+    setDoc(doc(as(CASHIER_MAIN), 'transfers', 'OUT-arrived'), sendOut('MAIN', CASHIER_MAIN, { status: 'received' })),
+  )
 })

@@ -129,3 +129,13 @@ export const UTILITY_CATEGORIES = [
 ]
 
 export const PRODUCT_CATEGORIES = ['Bread', 'Bakery', 'Cakes', 'Savoury', 'Other']
+
+// Where the goods are made.
+//
+// Nothing is baked at a counter: the workshop makes everything and vans it to
+// the main outlet, which sends what the other shops need on from there. The
+// workshop is not an outlet — nobody sells there and nobody signs in — so it is
+// a name on the incoming note rather than a row in `branches`, and stock only
+// starts existing when somebody at a counter counts it in.
+export const WORKSHOP_ID = 'WORKSHOP'
+export const WORKSHOP_NAME = 'the workshop'

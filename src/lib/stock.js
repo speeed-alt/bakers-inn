@@ -86,7 +86,13 @@ export function sentBackFrom({ branchId, transfers = [], businessDate = null }) 
   const gone = {}
   for (const transfer of transfers) {
     if (transfer.fromBranch !== branchId) continue
-    if (transfer.direction !== 'return') continue
+    // Anything that has left, not only leftovers going back to the hub. This
+    // used to be returns alone, because the hub's own stock was worked out from
+    // the baking list — made, less what went on the notes — so deliveries out
+    // were already netted off and subtracting them here would have taken them
+    // off twice. There is no baking list any more: goods are counted in from
+    // the workshop as they arrive, so a crate sent to another outlet only
+    // leaves this shelf if it is subtracted here.
     if (transfer.status !== 'dispatched' && transfer.status !== 'received') continue
     if (businessDate && transfer.businessDate !== businessDate) continue
     for (const item of transfer.items ?? []) {
