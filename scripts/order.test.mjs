@@ -42,11 +42,24 @@ test('something that is not a code at all does not break the sort', () => {
   assert.equal([...items].sort(byCode).at(-1).name, 'n')
 })
 
-test('the owner\'s price list comes out 1 to 20, however it arrives', () => {
+test('the owner\'s price list comes out 1 to 22, however it arrives', () => {
   const shuffled = CATALOGUE.map((row) => ({ id: row.id, ...documentFor(row) })).reverse()
+  const sorted = shuffled.sort(byCode)
+  // Several items share a code now, so the list is longer than the sheet —
+  // what matters is that it never goes backwards, and that it starts and ends
+  // where the sheet does.
+  assert.deepEqual([...new Set(codes(sorted))], Array.from({ length: 22 }, (_, i) => String(i + 1)))
+  const numbers = sorted.map((p) => Number(p.code))
+  assert.deepEqual(numbers, [...numbers].sort((a, b) => a - b))
+})
+
+test('items sharing a code keep the order they are written on the sheet', () => {
+  // Alphabetically this tier would read Cadbury Caramel, Chocolate Fudge,
+  // Nutella, Red Velvet — which is not the order the counter reads.
+  const tier = CATALOGUE.filter((row) => row.code === '2').map((row) => ({ id: row.id, ...documentFor(row) }))
   assert.deepEqual(
-    codes(shuffled.sort(byCode)),
-    Array.from({ length: 20 }, (_, i) => String(i + 1)),
+    [...tier].reverse().sort(byCode).map((p) => p.name),
+    ['Chocolate Fudge', 'Cadbury Caramel', 'Nutella', 'Red Velvet'],
   )
 })
 

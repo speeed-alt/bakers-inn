@@ -52,7 +52,6 @@ function Products() {
 
   return (
     <>
-      <MergeByPrice products={list} />
 
       <div className="card">
         <div className="row between">

@@ -1,42 +1,73 @@
 // The price list, checked for the mistakes a typed-up price list actually makes.
 //
 // None of this is clever. It is the set of things that are invisible in a table
-// of sixty names and cost real money at the counter: two rows claiming the same
-// code, a weighed item priced as if it were counted, the same biscuit written
-// down twice at two different prices.
+// of sixty-eight names and cost real money at the counter: two products sharing
+// an id, a weighed item priced as if it were counted, a tier whose names do not
+// all carry the same price.
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { CATALOGUE, documentFor } from './catalogue.mjs'
+import { CATALOGUE, TIERS, documentFor } from './catalogue.mjs'
 import { PRODUCT_CATEGORIES } from '../src/config.js'
 import { DEFAULT_WEIGHT_UNIT } from '../src/lib/quantity.js'
-import { exactCodeMatch, findProducts } from '../src/lib/search.js'
-import { lineNameFor, variantsOf } from '../src/lib/grouping.js'
+import { findChoices } from '../src/lib/search.js'
+import { byCode } from '../src/lib/order.js'
 
-test('the codes are the serial numbers on the owner’s sheet, 1 to 20', () => {
-  // The whole point of the exercise: the printed sheet on the counter and the
-  // till agree, with no translation in anybody's head.
+// Shuffled on purpose. Firestore hands the catalogue over in document-id
+// order, not in the order of the owner's sheet, and a fixture built in sheet
+// order hides every ordering fault in the code under test — as it did: the till
+// listed Cadbury Caramel above Chocolate Fudge under code 2 while this file was
+// green.
+const products = () => {
+  const rows = CATALOGUE.map((row) => ({ id: row.id, ...documentFor(row) }))
+  return rows.sort((a, b) => a.id.localeCompare(b.id))
+}
+
+test('every name on the sheet is its own product', () => {
+  // The whole point of the split: stock is per item, so the item is the
+  // product. 68 names, not 22 price tiers.
+  assert.equal(CATALOGUE.length, TIERS.reduce((n, t) => n + t.names.length, 0))
+  assert.equal(CATALOGUE.length, 68)
+})
+
+test('the codes are the serial numbers on the owner’s sheet, 1 to 22', () => {
   assert.deepEqual(
-    CATALOGUE.map((row) => row.code),
-    Array.from({ length: 20 }, (_, i) => String(i + 1)),
+    [...new Set(CATALOGUE.map((row) => row.code))],
+    Array.from({ length: 22 }, (_, i) => String(i + 1)),
   )
 })
 
-test('no two products answer to the same code', () => {
-  const seen = new Set()
-  for (const row of CATALOGUE) {
-    assert.ok(!seen.has(row.code), `code ${row.code} is used twice`)
-    seen.add(row.code)
+test('a code is shared by its tier, and every name in it costs the same', () => {
+  // What makes typing unchanged: 2 still means "the cakes at 2,000".
+  for (const tier of TIERS) {
+    const rows = CATALOGUE.filter((row) => row.code === tier.code)
+    assert.equal(rows.length, tier.names.length, `code ${tier.code}`)
+    for (const row of rows) {
+      assert.equal(row.price, tier.price, `${row.name} is not at its tier price`)
+      assert.equal(row.category, tier.category, `${row.name} is in the wrong category`)
+    }
   }
 })
 
 test('no two products share a document id', () => {
-  // A collision here does not fail — it silently overwrites, and one tier of
-  // the price list quietly becomes another.
+  // A collision does not fail — it silently overwrites, and one item of the
+  // price list quietly becomes another. Names repeat across tiers on purpose,
+  // so the id has to carry the tier: the Oreo cake and the Oreo bun are two
+  // different things that share a word.
   const seen = new Set()
   for (const row of CATALOGUE) {
     assert.ok(!seen.has(row.id), `id ${row.id} is used twice`)
     seen.add(row.id)
+  }
+  assert.notEqual(
+    CATALOGUE.find((r) => r.code === '3' && r.name === 'Oreo').id,
+    CATALOGUE.find((r) => r.code === '14' && r.name === 'Oreo').id,
+  )
+})
+
+test('no name is repeated inside one code', () => {
+  for (const tier of TIERS) {
+    assert.equal(new Set(tier.names).size, tier.names.length, `code ${tier.code} repeats a name`)
   }
 })
 
@@ -53,15 +84,17 @@ test('every category is one the app knows', () => {
   }
 })
 
-test('the biscuits are the only thing weighed, and priced by the portion', () => {
+test('the biscuits are the only things weighed, and priced by the portion', () => {
   const weighed = CATALOGUE.filter((row) => row.weighed)
-  assert.equal(weighed.length, 1)
-  assert.equal(weighed[0].id, 'biscuits')
+  assert.equal(weighed.length, 6)
+  assert.ok(weighed.every((row) => row.code === '19'))
   // 350 a portion is the 1,400 a kilo the sheet says. Stored as 1,400 it would
   // charge a kilo price for a quarter kilo, on a slip that looks entirely
-  // normal — which is exactly what the live catalogue was doing.
-  assert.equal(weighed[0].price, 350)
+  // normal — which is exactly what the live catalogue was doing in August.
+  assert.ok(weighed.every((row) => row.price === 350))
   assert.equal(documentFor(weighed[0]).unit, DEFAULT_WEIGHT_UNIT)
+  // And they are the only thing that keeps overnight.
+  assert.deepEqual([...new Set(CATALOGUE.filter((r) => r.keeps).map((r) => r.code))], ['19'])
 })
 
 test('a counted product carries no weight unit', () => {
@@ -70,97 +103,50 @@ test('a counted product carries no weight unit', () => {
   }
 })
 
-test('no name is repeated inside its own group', () => {
-  for (const row of CATALOGUE) {
-    assert.equal(
-      new Set(row.variants).size,
-      row.variants.length,
-      `${row.name} lists the same variant twice`,
-    )
-  }
-})
-
-test('a lone item gets no variant picker', () => {
-  // A picker with one choice is a keystroke that asks a question with one
-  // answer. `documentFor` drops it rather than the caller having to remember.
-  const samosa = CATALOGUE.find((row) => row.id === 'savoury-50')
-  assert.deepEqual(documentFor(samosa).variants, [])
-  const cakes = CATALOGUE.find((row) => row.id === 'cakes-2200')
-  assert.deepEqual(documentFor(cakes).variants, ['3Milk Cake', 'Lotus'])
-})
-
-test('the names that appear under more than one code are only the intended ones', () => {
-  // This is the test that matters. The owner's sheet listed the six loose
-  // biscuit names twice — once on row 5 at 1,400 and again on row 19 at 1,400 —
-  // and the two mean completely different things: 1,400 for one cookie, or
-  // 1,400 for a kilo of them. Written into the catalogue as printed, the shop
-  // would have had two codes for one biscuit and no way to see it from the till.
-  //
-  // Four names genuinely do belong to more than one tier, because an Oreo cake
-  // at 1,800 and an Oreo bun at 200 are different things that share a word.
-  // Listing them here is what lets the check be strict about everything else.
-  const seen = new Map()
-  for (const row of CATALOGUE) {
-    for (const variant of row.variants) {
-      seen.set(variant, [...(seen.get(variant) ?? []), row.code])
-    }
-  }
-  const shared = [...seen.entries()]
-    .filter(([, codes]) => codes.length > 1)
-    .map(([name, codes]) => `${name}: ${codes.join(',')}`)
-    .sort()
-
-  assert.deepEqual(shared, [
-    'Candy: 3,13,19',
-    'Lotus: 1,11',
-    'Oreo: 3,14',
-    'Red Velvet: 2,13',
-  ])
-})
-
-test('a merged product still has a name of its own for the stock sheet', () => {
-  // The baking list and the closing count read this, not the variants. An empty
-  // one leaves a blank row on a sheet somebody has to fill in by hand.
-  for (const row of CATALOGUE) {
-    assert.ok(row.name.trim().length > 0, `${row.code} has no name`)
-  }
+test('nothing carries a list of names underneath it any more', () => {
+  // A leftover variant list would have the till offer a choice under a product
+  // that is now a single item.
+  for (const row of CATALOGUE) assert.deepEqual(documentFor(row).variants, [])
 })
 
 // ---------------------------------------------------------------------------
-// The serial numbers have to work as till codes, not just as row labels.
+// It has to work at the counter exactly as the printed sheet says.
 
-test('typing a serial number finds that tier and nothing else', () => {
-  const products = CATALOGUE.map((row) => ({ id: row.id, ...documentFor(row) }))
-
-  // The worry with unpadded codes: does `1` pull in 12 through 19? It cannot,
-  // because the entry box commits on Enter and an exact code outranks every
-  // other kind of match — but that is worth pinning down rather than assuming.
-  assert.equal(exactCodeMatch(products, '1').name, 'Premium Cake')
-  assert.equal(exactCodeMatch(products, '12').name, 'Big Bread & Tikka Sandwich')
-  assert.equal(exactCodeMatch(products, '19').name, 'Biscuits')
-  assert.equal(exactCodeMatch(products, '21'), null)
-
-  // And the exact match is first in the list the cashier sees, ahead of the
-  // eight other codes that begin with a 1.
-  assert.equal(findProducts(products, '1')[0].name, 'Premium Cake')
+test('typing a code lists that tier’s items, in the order they are written', () => {
+  const hits = findChoices(products(), '3')
+  // The tier first, in the owner's order. "3Milk Cake" matches the digit by
+  // name and follows behind, which is the ranking working, not a fault: a
+  // memorised code must never be beaten by a name containing its digits.
+  assert.deepEqual(hits.slice(0, 4).map((c) => c.name), ['Kit Kat', 'Ferrero', 'Oreo', 'Candy'])
+  assert.ok(hits.slice(0, 4).every((c) => c.product.code === '3'))
+  assert.equal(hits[4].name, '3Milk Cake')
+  // Each one a product in its own right, which is what gives it its own stock.
+  assert.equal(new Set(hits.slice(0, 4).map((c) => c.product.id)).size, 4)
 })
 
-test('every tier with more than one name offers the cashier a choice', () => {
-  // The whole bargain of merging: one code to type, then which cake. If this
-  // list came back empty the receipt would say "Fudge & Velvet Cake" instead of
-  // Nutella, and the merge would have cost the shop its product names.
-  for (const row of CATALOGUE) {
-    const picks = variantsOf({ ...documentFor(row) })
-    assert.equal(picks.length, row.variants.length > 1 ? row.variants.length : 0, row.name)
-  }
-  assert.deepEqual(variantsOf(documentFor(CATALOGUE[1])), [
-    'Chocolate Fudge', 'Cadbury Caramel', 'Nutella', 'Red Velvet',
-  ])
+test('the name the customer says still finds the item', () => {
+  assert.equal(findChoices(products(), 'nut')[0].name, 'Nutella')
+  assert.equal(findChoices(products(), 'khajoor')[0].product.code, '19')
 })
 
-test('the name that reaches the receipt is the one the customer asked for', () => {
-  const cake = documentFor(CATALOGUE[1])
-  assert.equal(lineNameFor(cake, 'Nutella'), 'Nutella')
-  // Nothing picked — a single-name product — falls back to the product itself.
-  assert.equal(lineNameFor(documentFor(CATALOGUE[19]), null), 'Chicken Samosa')
+test('an exact code beats a name that happens to contain the digits', () => {
+  assert.equal(findChoices(products(), '1')[0].product.code, '1')
+})
+
+test('the full list reads in code order, and by the sheet within a code', () => {
+  const sorted = [...products()].sort(byCode)
+  assert.deepEqual(sorted.slice(0, 2).map((p) => p.name), ['3Milk Cake', 'Lotus'])
+  assert.deepEqual(
+    sorted.filter((p) => p.code === '2').map((p) => p.name),
+    ['Chocolate Fudge', 'Cadbury Caramel', 'Nutella', 'Red Velvet'],
+  )
+  assert.equal(sorted.at(-1).name, 'Sweet Candy')
+  // Codes never go backwards down the list.
+  const codes = sorted.map((p) => Number(p.code))
+  assert.deepEqual(codes, [...codes].sort((a, b) => a - b))
+})
+
+test('the two counter additions are numbered on from the sheet, not at 35 and 54', () => {
+  assert.equal(CATALOGUE.find((r) => r.name === 'Soda').code, '21')
+  assert.equal(CATALOGUE.find((r) => r.name === 'Sweet Candy').code, '22')
 })

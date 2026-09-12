@@ -32,6 +32,14 @@ export function byCode(a, b) {
   if (y === '' && x !== '') return -1
   return (
     x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' }) ||
+    // Several products share a code — the four cakes at 2,000 are four items
+    // with their own stock — so the tie is broken by the position on the
+    // owner's sheet, and they read in the order he wrote them rather than
+    // alphabetically. Lines copied onto a note or a report carry no `seq`, and
+    // fall through to the name as before.
+    seqOf(a) - seqOf(b) ||
     nameOf(a).localeCompare(nameOf(b))
   )
 }
+
+const seqOf = (item) => (Number.isFinite(Number(item?.seq)) ? Number(item.seq) : 0)

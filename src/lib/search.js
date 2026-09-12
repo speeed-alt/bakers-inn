@@ -34,7 +34,8 @@ export function findProducts(products, queryText) {
     hits.push({ p, rank })
   }
 
-  return hits.sort((a, b) => a.rank - b.rank || a.p.name.localeCompare(b.p.name)).map((h) => h.p)
+  // Ties by the sheet, not the alphabet — the same order as every other list.
+  return hits.sort((a, b) => a.rank - b.rank || byCode(a.p, b.p)).map((h) => h.p)
 }
 
 /** The item whose code was typed exactly, if any. */
@@ -125,6 +126,15 @@ export function findChoices(products = [], queryText) {
     if (rank !== null) hits.push({ choice, rank })
   }
   return hits
-    .sort((a, b) => a.rank - b.rank || a.choice.order - b.choice.order || a.choice.index - b.choice.index)
+    .sort(
+      (a, b) =>
+        a.rank - b.rank ||
+        // Several products share a code now, and the order they arrive in from
+        // Firestore is by document id — which put Cadbury Caramel above
+        // Chocolate Fudge under code 2, alphabetically rather than the way the
+        // sheet on the counter reads. byCode carries the position on that sheet.
+        byCode(a.choice.product, b.choice.product) ||
+        a.choice.index - b.choice.index,
+    )
     .map((hit) => hit.choice)
 }
