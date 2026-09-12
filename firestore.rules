@@ -319,14 +319,20 @@ service cloud.firestore {
                     && request.resource.data.businessDate is string;
 
       // Stock sent on to another outlet from the Stock screen, one item at a
-      // time. Dispatched the moment it is written — the crate has left — and
-      // waiting to be counted in at the far end.
+      // time. Either dispatched, waiting to be counted in at the far end, or —
+      // while only Susan Road has a till — written already received, so the
+      // other shop's figures move at once. Received means signed by the sender
+      // and dated: the person who sent it is the only one who saw it go, and a
+      // note claiming somebody else took it in would be a record nobody made.
       allow create: if staff()
                     && request.resource.data.direction == 'out'
                     && canWriteBranch(request.resource.data.fromBranch)
-                    && request.resource.data.status == 'dispatched'
                     && request.resource.data.dispatchedBy == request.auth.uid
-                    && request.resource.data.businessDate is string;
+                    && request.resource.data.businessDate is string
+                    && (request.resource.data.status == 'dispatched'
+                        || (request.resource.data.status == 'received'
+                            && request.resource.data.receivedBy == request.auth.uid
+                            && request.resource.data.receivedOn is string));
 
       allow create: if staff()
                     && request.resource.data.direction == 'return'

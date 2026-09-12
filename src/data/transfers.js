@@ -10,7 +10,7 @@ import {
   transferRef,
 } from '../lib/ids.js'
 import { businessDateOf } from '../lib/dates.js'
-import { HUB_BRANCH_ID, WORKSHOP_ID } from '../config.js'
+import { HUB_BRANCH_ID, SENT_STOCK_ARRIVES_INSTANTLY, WORKSHOP_ID } from '../config.js'
 import { practiceStamp } from '../lib/practice.js'
 import { dispatchedItems, receivedItems } from '../lib/dispatch.js'
 
@@ -227,13 +227,27 @@ export function receiveGoods({ branchId, businessDate, items = [], user, at = ne
 /**
  * Stock sent on to another outlet, one item at a time from the Stock screen.
  *
- * Dispatched the moment it is written: the crate has left this counter, so it
- * leaves this counter's shelf. It stays waiting to be counted in at the far end,
- * which is the honest state while the other two outlets have no till — the
- * goods are neither here nor on their shelf, and the note says so rather than
- * pretending somebody confirmed them.
+ * It leaves this counter's shelf the moment it is written. Where it lands
+ * depends on SENT_STOCK_ARRIVES_INSTANTLY in config.js:
+ *
+ *   - while only Susan Road has a till, it is written already received, dated
+ *     today and signed by the person who sent it — the record is kept at the
+ *     counter that sent it, because there is nobody at the other end to keep
+ *     it, and the other shop's figures move at once;
+ *   - once the other outlets have tills, it is written dispatched and waits to
+ *     be counted in there, which is what catches a crate that arrives short.
+ *
+ * `instant` is a parameter only so the tests can ask for either.
  */
-export function sendStock({ fromBranch, toBranchId, businessDate, items = [], user, at = new Date() }) {
+export function sendStock({
+  fromBranch,
+  toBranchId,
+  businessDate,
+  items = [],
+  user,
+  at = new Date(),
+  instant = SENT_STOCK_ARRIVES_INSTANTLY,
+}) {
   const lines = items
     .filter((item) => (item.qty ?? 0) > 0)
     .map((item) => ({
@@ -244,6 +258,8 @@ export function sendStock({ fromBranch, toBranchId, businessDate, items = [], us
       // demanded figure is zero and the sent figure is the whole of the story.
       qtyDemanded: 0,
       qtySent: item.qty,
+      // Taken as arrived in full when nobody can count it at the other end.
+      ...(instant ? { qtyReceived: item.qty } : {}),
     }))
   if (lines.length === 0) return 0
 
@@ -255,11 +271,21 @@ export function sendStock({ fromBranch, toBranchId, businessDate, items = [], us
       fromBranch,
       toBranchId,
       direction: 'out',
-      status: 'dispatched',
+      status: instant ? 'received' : 'dispatched',
       items: lines,
       dispatchedBy: user?.id ?? '',
       dispatchedByName: user?.name ?? '',
       dispatchedAt: Timestamp.fromDate(at),
+      ...(instant
+        ? {
+            // Counted on today's figures at the other shop, signed by the person
+            // who sent it — the only person who saw it go.
+            receivedOn: businessDate,
+            receivedBy: user?.id ?? '',
+            receivedByName: user?.name ?? '',
+            receivedAt: Timestamp.fromDate(at),
+          }
+        : {}),
     }),
     `stock sent from ${fromBranch} to ${toBranchId}`,
   )

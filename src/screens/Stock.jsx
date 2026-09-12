@@ -22,7 +22,7 @@ import {
 } from '../data/adjustments.js'
 import { weighedProps } from '../lib/quantity.js'
 import { findProducts } from '../lib/search.js'
-import { SHORT_REASONS, WORKSHOP_NAME } from '../config.js'
+import { SENT_STOCK_ARRIVES_INSTANTLY, SHORT_REASONS, WORKSHOP_NAME } from '../config.js'
 import { Empty, Loading, Modal, Stepper } from '../components/ui.jsx'
 import TomorrowsOrder from '../components/TomorrowsOrder.jsx'
 import { byCode } from '../lib/order.js'
@@ -724,10 +724,10 @@ function GoodsIn({ branchId, today }) {
 /**
  * Send a crate of one item on to another outlet.
  *
- * It leaves this shelf the moment it is saved, because it has: the crate is on
- * its way. It stays waiting to be counted in at the far end rather than being
- * marked as arrived, which is the honest state while the other outlets have no
- * till — the goods are neither here nor on their shelf, and the note says so.
+ * It leaves this shelf the moment it is saved. While only Susan Road has a till
+ * it lands on the other shop's shelf at the same moment, recorded under the
+ * sender's name; once the other outlets have tills it waits for them to count it
+ * in. See SENT_STOCK_ARRIVES_INSTANTLY in config.js.
  */
 function SendStock({ line, branches, branchId, today, user, onClose }) {
   const [toBranchId, setToBranchId] = useState(branches.length === 1 ? branches[0].id : null)
@@ -739,7 +739,10 @@ function SendStock({ line, branches, branchId, today, user, onClose }) {
     <Modal title={`Send ${line.productName}`} onClose={onClose}>
       <p className="muted small">
         There {line.expected === 1 ? 'is' : 'are'} <b>{line.expected}</b> on this shelf. What is sent
-        comes off it straight away, and waits to be counted in at the other end.
+        comes off it straight away
+        {SENT_STOCK_ARRIVES_INSTANTLY
+          ? ', and goes on the other shop\u2019s stock at the same moment, under your name.'
+          : ', and waits to be counted in at the other end.'}
       </p>
 
       <div className="field">

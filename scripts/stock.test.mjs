@@ -579,3 +579,26 @@ test('one shop overselling is not cancelled out by another sitting on stock', ()
   // And with it named, the top line reconciles: had − sold + unaccounted = left.
   assert.equal(totals.available - totals.sold + totals.unaccounted, totals.left)
 })
+
+test('stock sent from Susan Road lands on the other shop at the same moment', () => {
+  // Only Susan Road runs the system, so a crate sent to Gulberg is written
+  // already received there. Twelve off one shelf is twelve on the other, the
+  // same day, with nobody at Gulberg needing to do anything.
+  const items = [{ id: 'loaf', code: '1', name: 'Loaf', price: 120 }]
+  const transfers = [
+    {
+      fromBranch: 'WORKSHOP', toBranchId: 'MAIN', businessDate: '2026-09-12',
+      receivedOn: '2026-09-12', direction: 'in', status: 'received',
+      items: [{ productId: 'loaf', qtySent: 30, qtyReceived: 30 }],
+    },
+    {
+      fromBranch: 'MAIN', toBranchId: 'B2', businessDate: '2026-09-12',
+      receivedOn: '2026-09-12', direction: 'out', status: 'received',
+      items: [{ productId: 'loaf', qtyDemanded: 0, qtySent: 12, qtyReceived: 12 }],
+    },
+  ]
+  const at = (id, isMain) =>
+    stockAt({ products: items, branch: { id, name: id, isMain }, transfers, sales: [], businessDate: '2026-09-12' })
+  assert.equal(at('MAIN', true).lines[0].expected, 18)
+  assert.equal(at('B2', false).lines[0].expected, 12)
+})

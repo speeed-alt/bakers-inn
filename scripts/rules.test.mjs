@@ -1203,11 +1203,37 @@ test('stock cannot be sent under another persons name', async () => {
   await assertFails(setDoc(doc(as(CASHIER_MAIN), 'transfers', 'OUT-forged'), sendOut('MAIN', OWNER)))
 })
 
-test('a note cannot be written as already arrived at the far end', async () => {
-  // The crate is on its way and nobody there has counted it. Writing it as
-  // received would put stock on a shelf no person has seen — which is exactly
-  // what the outlets without a till must not have.
+test('stock sent from the counter can land on the other shelf at once', async () => {
+  // Only Susan Road has a till, so the record is kept at the counter that sent
+  // it: the note is written already received, signed and dated by the sender.
+  await assertSucceeds(
+    setDoc(
+      doc(as(CASHIER_MAIN), 'transfers', 'OUT-arrived'),
+      sendOut('MAIN', CASHIER_MAIN, {
+        status: 'received',
+        receivedOn: '2026-09-12',
+        receivedBy: CASHIER_MAIN,
+        receivedByName: 'Maya',
+      }),
+    ),
+  )
+})
+
+test('an instant delivery cannot claim somebody else took it in', async () => {
   await assertFails(
-    setDoc(doc(as(CASHIER_MAIN), 'transfers', 'OUT-arrived'), sendOut('MAIN', CASHIER_MAIN, { status: 'received' })),
+    setDoc(
+      doc(as(CASHIER_MAIN), 'transfers', 'OUT-claimed'),
+      sendOut('MAIN', CASHIER_MAIN, { status: 'received', receivedOn: '2026-09-12', receivedBy: CASHIER_B2 }),
+    ),
+  )
+})
+
+test('an instant delivery must say which day it landed', async () => {
+  // Without a date it would count on no day's figures at all.
+  await assertFails(
+    setDoc(
+      doc(as(CASHIER_MAIN), 'transfers', 'OUT-undated'),
+      sendOut('MAIN', CASHIER_MAIN, { status: 'received', receivedBy: CASHIER_MAIN }),
+    ),
   )
 })

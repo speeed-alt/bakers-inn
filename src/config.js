@@ -139,3 +139,17 @@ export const PRODUCT_CATEGORIES = ['Bread', 'Bakery', 'Cakes', 'Savoury', 'Other
 // starts existing when somebody at a counter counts it in.
 export const WORKSHOP_ID = 'WORKSHOP'
 export const WORKSHOP_NAME = 'the workshop'
+
+// Does stock sent to another outlet land on its shelf the moment it is sent?
+//
+// Yes, for now, because only Susan Road runs the system. Gulberg and Gulistan
+// Colony have no till, so nobody there can count a delivery in, and the record
+// of what was sent is kept at the counter that sent it. Waiting for a
+// confirmation that cannot come would leave every crate in limbo — off Susan
+// Road's shelf and on nobody else's — and the owner's figures for those shops
+// would never move.
+//
+// **Set this to false on the day the other outlets get their own tills.** From
+// then a crate waits to be counted in at the far end, which is what catches a
+// short delivery.
+export const SENT_STOCK_ARRIVES_INSTANTLY = true
