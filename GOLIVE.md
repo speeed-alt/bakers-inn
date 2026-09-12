@@ -40,7 +40,7 @@ can be done from a keyboard here.
 
 | | What | Who | Rough |
 |---|---|---|---|
-| 1 | Clear the trial data now sitting in the live database | dev | 15 min |
+| 1 | Clear the trial data from the live database — **done 12 Sep**, redo before opening if anyone rings a sale | dev | 5 min |
 | 2 | The data session — prices, people, floats, accounts | owner + dev | 2–3 hrs |
 | 3 | Everyone picks their own PIN, and the owner's is rotated | owner | 40 min |
 | 4 | Set up each till at its counter | dev | 30 min each |
@@ -55,37 +55,41 @@ Two decisions are needed from the owner along the way: **which printer**, and
 
 ## 1 · [dev] Clear the trial data · 15 min · *destructive*
 
-**The live database is not empty.** Testing over the past fortnight has left
-real-looking records in `bakers-inn-pk`:
+**Done on 12 Sep, at the owner's request, and checked afterwards.** Sales rung
+live before anyone turned practice on — so carrying no `demo` flag — had built
+up in `bakers-inn-pk`. All of it went:
 
-    sales             9   (five from 17 Aug flagged demo, four from 19 Aug NOT flagged)
-    closings          3   (two reopened, one flagged demo)
-    demands           2   (one locked for 20 Aug)
-    productionOrders  1   (PO-20260820, marked done)
-    dailyReports      2   (17 and 19 Aug)
-    purchases         1
-    expenses          1
-    products         45   (44 seeded plus one added while testing)
+    sales             21   (23 Aug – 7 Sep, Rs 83,400 that never happened)
+    closings           4
+    dailyReports       3
+    demands            6   (including one for 13 Sep made that morning)
+    productionOrders   3
+    transfers          1   (a draft note)
+    rawMaterials       9   counters reset to 0 (definitions kept)
 
-The four sales from 19 Aug and both closings from 19 Aug carry **no `demo`
-flag**, so `demo-day.mjs --clear` will not find them — it queries
-`where('demo', '==', true)` and nothing else. They have to go by hand, or the
-owner's very first dashboard shows **Rs 4,900** of takings that never happened
-and a bake that never came out of an oven.
+Afterwards the database held only `branches` (3), `products` (the 20 price
+tiers live, the old 44 archived), `rawMaterials` (all at 0) and `users` (6).
 
-The script does at least say so: it prints what is left with no flag to remove
-it by, and exits non-zero if anything is. Read that list rather than the
-"Removed N records" line above it.
+**Do it again right before opening if anyone rings a sale in between** —
+anything rung without practice on is a real sale as far as the owner's
+dashboard, the baking suggestions and the P&L are concerned.
+
+Use `scripts/reset-trading.mjs`, not `demo-day.mjs --clear`. The old one only
+removes records flagged `demo`, which is exactly what accidental live sales are
+not. The new one clears every trading collection whatever its flags, and a test
+checks its list against `firestore.rules` so a new collection cannot be missed.
+The admin key is at `C:\Users\SPEEED\.firebase-keys\bakers-inn-pk-admin.json`:
 
 ```bash
-SEED_PROJECT=bakers-inn-pk GOOGLE_APPLICATION_CREDENTIALS=…/key.json \
-  node scripts/demo-day.mjs --clear
+SEED_PROJECT=bakers-inn-pk GOOGLE_APPLICATION_CREDENTIALS=C:/Users/SPEEED/.firebase-keys/bakers-inn-pk-admin.json node scripts/reset-trading.mjs
 ```
 
-Then delete what is left by hand and confirm every trading collection reads
-zero: `sales`, `closings`, `demands`, `productionOrders`, `transfers`,
-`dailyReports`, `purchases`, `expenses`, `stockMovements`, `dailyRates`.
-Check `products` is back to the real count and archive the stray one.
+That is a dry run and prints what it would delete. Read the counts, then add
+`--write --i-mean-it bakers-inn-pk`. There is no undo.
+
+**Close or refresh every open till first.** A till that was offline keeps
+unsent sales queued, and will upload them after the reset as though they had
+just happened.
 
 **Do not go past this step until every trading collection is empty.**
 
